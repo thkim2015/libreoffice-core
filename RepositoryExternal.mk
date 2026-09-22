@@ -1389,6 +1389,8 @@ define gb_LinkTarget__use_cairo
 $(call gb_LinkTarget_use_package,$(1),cairo)
 $(call gb_LinkTarget_use_package,$(1),pixman)
 $(call gb_LinkTarget_use_external,$(1),freetype_headers)
+# cairo-ft-font needs FreeType; a static (EMSCRIPTEN) link must list it explicitly
+$(if $(filter EMSCRIPTEN,$(OS)),$(call gb_LinkTarget_use_external,$(1),freetype))
 $(call gb_LinkTarget_set_include,$(1),\
 	-I$(gb_UnpackedTarball_workdir)/cairo \
 	-I$(gb_UnpackedTarball_workdir)/cairo/src \
