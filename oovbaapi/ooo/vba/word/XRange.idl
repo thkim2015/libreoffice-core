@@ -50,6 +50,8 @@ interface XRange
     void InsertParagraph();
     void InsertParagraphBefore();
     void InsertParagraphAfter();
+    void InsertBefore( [in] string Text );
+    void InsertAfter( [in] string Text );
     any PageSetup();
     boolean InRange( [in] XRange Range );
     any Revisions( [in] any index );

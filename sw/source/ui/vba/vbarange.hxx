@@ -95,6 +95,8 @@ public:
     virtual void SAL_CALL InsertParagraph() override;
     virtual void SAL_CALL InsertParagraphBefore() override;
     virtual void SAL_CALL InsertParagraphAfter() override;
+    virtual void SAL_CALL InsertBefore( const OUString& rText ) override;
+    virtual void SAL_CALL InsertAfter( const OUString& rText ) override;
     virtual ::sal_Int32 SAL_CALL getLanguageID() override;
     virtual void SAL_CALL setLanguageID( ::sal_Int32 _languageid ) override;
     virtual css::uno::Any SAL_CALL PageSetup() override;

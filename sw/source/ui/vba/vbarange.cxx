@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 #include "vbarange.hxx"
+
+#include <algorithm>
 #include <utility>
 #include <vbahelper/vbahelper.hxx>
 #include <basic/sberrors.hxx>
@@ -259,6 +261,31 @@ SwVbaRange::InsertParagraphAfter()
 {
     uno::Reference< text::XTextRange > xTextRange = mxTextCursor->getEnd();
     mxText->insertControlCharacter( xTextRange, text::ControlCharacter::PARAGRAPH_BREAK, true );
+}
+
+// Word: the range is extended to include the inserted text.
+void SAL_CALL
+SwVbaRange::InsertBefore( const OUString& rText )
+{
+    uno::Reference< text::XTextRange > xEnd = mxTextCursor->getEnd();
+    uno::Reference< text::XTextCursor > xHead = mxText->createTextCursorByRange( mxTextCursor->getStart() );
+    mxText->insertString( xHead, rText, false );
+    // the insertion pushed the head cursor behind the new text; move back over it
+    xHead->collapseToEnd();
+    xHead->goLeft( static_cast< sal_Int16 >( std::min< sal_Int32 >( rText.getLength(), SAL_MAX_INT16 ) ), false );
+    mxTextCursor->gotoRange( xHead, false );
+    mxTextCursor->gotoRange( xEnd, true );
+}
+
+void SAL_CALL
+SwVbaRange::InsertAfter( const OUString& rText )
+{
+    uno::Reference< text::XTextRange > xStart = mxTextCursor->getStart();
+    uno::Reference< text::XTextCursor > xTail = mxText->createTextCursorByRange( mxTextCursor->getEnd() );
+    mxText->insertString( xTail, rText, false );
+    xTail->collapseToEnd();
+    mxTextCursor->gotoRange( xStart, false );
+    mxTextCursor->gotoRange( xTail, true );
 }
 
 uno::Reference< word::XParagraphFormat > SAL_CALL
