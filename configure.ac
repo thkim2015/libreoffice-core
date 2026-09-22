@@ -1667,7 +1667,7 @@ libo_FUZZ_ARG_ENABLE(extensions,
 AC_ARG_ENABLE(scripting,
     AS_HELP_STRING([--disable-scripting],
         [Disable BASIC, Java, Python and .NET. Work in progress, use only if you are hacking on it.]),
-,test "${enable_scripting+set}" = set || enable_scripting=yes)
+[enable_scripting_given=$enableval],test "${enable_scripting+set}" = set || enable_scripting=yes)
 
 # This is mainly for Android and iOS, but could potentially be used in some
 # special case otherwise, too, so factored out as a separate setting
@@ -3481,7 +3481,8 @@ if test "$enable_wasm_strip" = "yes"; then
     enable_pdfimport=no
     enable_randr=no
     enable_report_builder=no
-    enable_scripting=no
+    # keep scripting when explicitly requested (e.g. WASM with BASIC/VBA macros)
+    test "$enable_scripting_given" = yes || enable_scripting=no
     enable_sdremote=no
     enable_sdremote_bluetooth=no
     enable_skia=no
