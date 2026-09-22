@@ -2523,7 +2523,7 @@ SfxVoidItem MatchGroup SID_BASICIDE_MATCHGROUP
 ]
 
 SfxVoidItem MergeDocuments SID_DOCUMENT_MERGE
-(SfxStringItem URL SID_FILE_NAME,SfxInt16Item Version SID_VERSION)
+(SfxStringItem URL SID_FILE_NAME,SfxInt16Item Version SID_VERSION, SfxBoolItem NoAcceptDialog SID_NO_ACCEPT_DIALOG)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
