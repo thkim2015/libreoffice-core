@@ -17,6 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#include <emscripten/em_js.h>
+// Web embedders (e.g. zetajs apps) may provide globalThis.zetaBasicUi to show Basic message boxes
+// themselves: modal VCL dialogs cannot run a nested event loop in the browser and return at once.
+EM_JS_DEPS(zetaBasicUi, "$UTF8ToString,$stringToNewUTF8");
+#endif
 #include <config_features.h>
 
 #include <tools/date.hxx>
@@ -4086,6 +4093,24 @@ void SbRtl_MsgBox(StarBASIC *, SbxArray & rPar, bool)
     OUString aTitle = GetOptionalOUStringParamOrDefault(rPar, 3, Application::GetDisplayName());
 
     sal_Int16 nDialogType = nType & (SbMB::ICONSTOP | SbMB::ICONQUESTION | SbMB::ICONINFORMATION);
+
+#ifdef EMSCRIPTEN
+    {
+        const int nWebRet = EM_ASM_INT({
+            var ui = globalThis.zetaBasicUi;
+            if (!ui || typeof ui.msgBox !== 'function') return -1;
+            try {
+                var r = ui.msgBox(UTF8ToString($0), UTF8ToString($1), $2);
+                return typeof r === 'number' ? r : -1;
+            } catch (e) { return -1; }
+        }, aMsg.toUtf8().getStr(), aTitle.toUtf8().getStr(), static_cast<int>(nType));
+        if (nWebRet >= 0)
+        {
+            rPar.Get(0)->PutInteger(static_cast<sal_Int16>(nWebRet));
+            return;
+        }
+    }
+#endif
 
     SolarMutexGuard aSolarGuard;
     weld::Widget* pParent = Application::GetDefDialogParent();

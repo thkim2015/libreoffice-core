@@ -17,6 +17,13 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#include <emscripten/em_js.h>
+// Web embedders (e.g. zetajs apps) may provide globalThis.zetaBasicUi to show Basic message boxes
+// themselves: modal VCL dialogs cannot run a nested event loop in the browser and return at once.
+EM_JS_DEPS(zetaBasicUiInput, "$UTF8ToString,$stringToNewUTF8");
+#endif
 #include <basic/sberrors.hxx>
 #include <tools/lineend.hxx>
 #include <tools/mapunit.hxx>
@@ -141,6 +148,22 @@ void SbRtl_InputBox(StarBASIC *, SbxArray & rPar, bool)
             nX = rPar.Get(4)->GetLong();
             nY = rPar.Get(5)->GetLong();
         }
+#ifdef EMSCRIPTEN
+        char* pWebText = static_cast<char*>(EM_ASM_PTR({
+            var ui = globalThis.zetaBasicUi;
+            if (!ui || typeof ui.inputBox !== 'function') return 0;
+            try {
+                var r = ui.inputBox(UTF8ToString($0), UTF8ToString($1), UTF8ToString($2));
+                return typeof r === 'string' ? stringToNewUTF8(r) : 0;
+            } catch (e) { return 0; }
+        }, aPrompt.toUtf8().getStr(), aTitle.toUtf8().getStr(), aDefault.toUtf8().getStr()));
+        if (pWebText)
+        {
+            rPar.Get(0)->PutString(OUString::fromUtf8(pWebText));
+            free(pWebText);
+            return;
+        }
+#endif
         SvRTLInputBox aDlg(Application::GetDefDialogParent(), aPrompt, aTitle, aDefault, nX, nY);
         aDlg.run();
         rPar.Get(0)->PutString(aDlg.GetText());

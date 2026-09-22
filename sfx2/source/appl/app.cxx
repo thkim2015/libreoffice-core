@@ -366,12 +366,34 @@ extern "C" void basicide_macro_organizer(void*, void*, sal_Int16);
 
 #endif
 
+#if HAVE_FEATURE_SCRIPTING && defined(EMSCRIPTEN)
+#include <emscripten.h>
+#include <emscripten/em_js.h>
+EM_JS_DEPS(zetaBasicUiError, "$UTF8ToString");
+#endif
+
 IMPL_STATIC_LINK( SfxApplication, GlobalBasicErrorHdl_Impl, StarBASIC*, pStarBasic, bool )
 {
 #if !HAVE_FEATURE_SCRIPTING
     (void) pStarBasic;
     return false;
 #else
+
+#ifdef EMSCRIPTEN
+    {
+        // Let a web embedder show the error (see globalThis.zetaBasicUi in basic's MsgBox)
+        OUString aError;
+        if (!ErrorStringFactory::CreateString(StarBASIC::GetErrorCode(), aError))
+            aError = StarBASIC::GetErrorMsg();
+        const int nHandled = EM_ASM_INT({
+            var ui = globalThis.zetaBasicUi;
+            if (!ui || typeof ui.error !== 'function') return 0;
+            try { ui.error(UTF8ToString($0), $1, $2); return 1; } catch (e) { return 0; }
+        }, aError.toUtf8().getStr(), static_cast<int>(StarBASIC::GetLine()), static_cast<int>(sal_uInt32(StarBASIC::GetErrorCode().GetCode())));
+        if (nHandled)
+            return true;
+    }
+#endif
 
     if (comphelper::LibreOfficeKit::isActive())
     {
