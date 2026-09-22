@@ -3264,7 +3264,8 @@ void SwBaseShell::InsertTable( SfxRequest& _rRequest )
                 }
             }
             // Use Default Style if no autoformat is provided
-            else
+            // (the table style list can be empty, e.g. in the WASM build: don't read past its end)
+            else if (rTableTable.size() > 0)
             {
                 aAutoNameIn = SvxResId(RID_SVXSTR_TBLAFMT_DEFAULT_STYLE);
                 pTAFormatIn.reset(new SwTableAutoFormat(rTableTable[0]));
