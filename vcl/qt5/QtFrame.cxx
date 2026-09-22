@@ -1079,7 +1079,15 @@ void QtFrame::UpdateSettings(AllSettings& rSettings)
 
         // Menu bar font
         if (std::optional<vcl::Font> oFont = toVclFont(pMenuBar->font(), aLocale))
+        {
+#ifdef EMSCRIPTEN
+            // Window::ImplUpdateGlobalSettings sizes the UI fonts from the menu font
+            if (const char* pSize = std::getenv("ZETA_UI_FONT_POINTS"))
+                if (const int nSize = std::atoi(pSize); nSize > 0)
+                    oFont->SetFontHeight(nSize);
+#endif
             style.SetMenuFont(*oFont);
+        }
 
         // Icon theme
         const bool bPreferDarkTheme = GetUseDarkMode();
