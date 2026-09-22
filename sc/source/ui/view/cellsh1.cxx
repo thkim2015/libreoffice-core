@@ -104,6 +104,11 @@
 #include <gridwin.hxx>
 #include <searchresults.hxx>
 #include <Sparkline.hxx>
+#include <SparklineGroup.hxx>
+#include <SparklineAttributes.hxx>
+#include <svl/intitem.hxx>
+#include <svl/eitem.hxx>
+#include <docmodel/color/ComplexColor.hxx>
 #include <strings.hrc>
 
 #include <com/sun/star/ui/dialogs/XExecutableDialog.hpp>
@@ -1178,6 +1183,46 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
         case SID_INSERT_SPARKLINE:
         case SID_EDIT_SPARKLINE_GROUP:
         {
+            // With DataRange + LocationRange arguments, insert the sparklines directly (no dialog),
+            // so that UNO/scripting clients can create them.
+            const SfxStringItem* pDataRangeItem = nullptr;
+            const SfxStringItem* pLocationItem = nullptr;
+            if (nSlot == SID_INSERT_SPARKLINE && pReqArgs
+                && (pDataRangeItem = pReqArgs->GetItem<SfxStringItem>(FN_PARAM_1, false))
+                && (pLocationItem = pReqArgs->GetItem<SfxStringItem>(FN_PARAM_2, false)))
+            {
+                ScViewData& rViewData = GetViewData();
+                ScDocument& rDoc = rViewData.GetDocument();
+                const ScAddress::Details aDetails(rDoc.GetAddressConvention(), 0, 0);
+                const SCTAB nTab = rViewData.CurrentTabForData();
+                ScRange aDataRange(ScAddress(0, 0, nTab));
+                ScRange aLocationRange(ScAddress(0, 0, nTab));
+                bool bDone = (aDataRange.ParseAny(pDataRangeItem->GetValue(), rDoc, aDetails) & ScRefFlags::VALID)
+                          && (aLocationRange.ParseAny(pLocationItem->GetValue(), rDoc, aDetails) & ScRefFlags::VALID);
+                if (bDone)
+                {
+                    sc::SparklineAttributes aAttributes;
+                    if (const SfxInt16Item* pTypeItem = pReqArgs->GetItem<SfxInt16Item>(FN_PARAM_3, false))
+                    {
+                        switch (pTypeItem->GetValue())
+                        {
+                            case 1: aAttributes.setType(sc::SparklineType::Column); break;
+                            case 2: aAttributes.setType(sc::SparklineType::Stacked); break;
+                            default: aAttributes.setType(sc::SparklineType::Line); break;
+                        }
+                    }
+                    if (const SfxUInt32Item* pColorItem = pReqArgs->GetItem<SfxUInt32Item>(FN_PARAM_4, false))
+                        aAttributes.setColorSeries(model::ComplexColor::createRGB(Color(ColorTransparency, pColorItem->GetValue())));
+                    if (const SfxBoolItem* pMarkersItem = pReqArgs->GetItem<SfxBoolItem>(FN_PARAM_5, false))
+                        aAttributes.setMarkers(pMarkersItem->GetValue());
+                    auto pGroup = std::make_shared<sc::SparklineGroup>(aAttributes);
+                    bDone = rViewData.GetDocShell()->GetDocFunc().InsertSparklines(aDataRange, aLocationRange, pGroup);
+                }
+                rReq.SetReturnValue(SfxBoolItem(nSlot, bDone));
+                rReq.Done();
+                break;
+            }
+
             sal_uInt16 nId  = sc::SparklineDialogWrapper::GetChildWindowId();
             SfxViewFrame& rViewFrame = pTabViewShell->GetViewFrame();
             SfxChildWindow* pWindow = rViewFrame.GetChildWindow(nId);

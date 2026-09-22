@@ -2369,7 +2369,7 @@ SfxVoidItem SolverDialog SID_OPENDLG_OPTSOLVER
 ]
 
 SfxVoidItem InsertSparkline SID_INSERT_SPARKLINE
-()
+(SfxStringItem DataRange FN_PARAM_1,SfxStringItem LocationRange FN_PARAM_2,SfxInt16Item Type FN_PARAM_3,SfxUInt32Item ColorSeries FN_PARAM_4,SfxBoolItem Markers FN_PARAM_5)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
