@@ -179,11 +179,33 @@ VbaFontBase::getColorIndex()
     return uno::Any( nIndex );
 }
 
+namespace {
+// VBA passes True/False, but also integers: -1/0 and the Word constant wdToggle (9999998),
+// which flips the current state. A plain "aValue >>= bool" treats any integer as False.
+bool lcl_vbaBoolOrToggle( const uno::Any& aValue, const uno::Any& aCurrent )
+{
+    bool bValue = false;
+    if( aValue >>= bValue )
+        return bValue;
+    sal_Int32 nValue = 0;
+    if( aValue >>= nValue )
+    {
+        if( nValue == 9999998 ) // wdToggle
+        {
+            bool bCurrent = false;
+            aCurrent >>= bCurrent;
+            return !bCurrent;
+        }
+        return nValue != 0;
+    }
+    return false;
+}
+}
+
 void SAL_CALL
 VbaFontBase::setBold( const uno::Any& aValue )
 {
-    bool bValue = false;
-    aValue >>= bValue;
+    bool bValue = lcl_vbaBoolOrToggle( aValue, getBold() );
     double fBoldValue = awt::FontWeight::NORMAL;
     if( bValue )
         fBoldValue = awt::FontWeight::BOLD;
@@ -202,8 +224,7 @@ VbaFontBase::getBold()
 void SAL_CALL
 VbaFontBase::setStrikethrough( const uno::Any& aValue )
 {
-    bool bValue = false;
-    aValue >>= bValue;
+    bool bValue = lcl_vbaBoolOrToggle( aValue, getStrikethrough() );
     short nValue = awt::FontStrikeout::NONE;
     if( bValue )
         nValue = awt::FontStrikeout::SINGLE;
@@ -234,8 +255,7 @@ VbaFontBase::getShadow()
 void  SAL_CALL
 VbaFontBase::setItalic( const uno::Any& aValue )
 {
-    bool bValue = false;
-    aValue >>= bValue;
+    bool bValue = lcl_vbaBoolOrToggle( aValue, getItalic() );
     awt::FontSlant nValue = awt::FontSlant_NONE;
     if( bValue )
         nValue = awt::FontSlant_ITALIC;
