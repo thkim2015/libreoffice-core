@@ -23,6 +23,8 @@
 #include <QtCustomStyle.hxx>
 #include <QtDragAndDrop.hxx>
 #include <QtFrame.hxx>
+
+#include <cstdlib>
 #include <QtFrame.moc>
 #include <QtInstance.hxx>
 #include <QtMainWindow.hxx>
@@ -1059,6 +1061,12 @@ void QtFrame::UpdateSettings(AllSettings& rSettings)
         // Default fonts
         if (std::optional<vcl::Font> oFont = toVclFont(QApplication::font(), aLocale))
         {
+#ifdef EMSCRIPTEN
+            // Embedding page may pick the UI font size (e.g. 11pt like Office's sheet headers)
+            if (const char* pSize = std::getenv("ZETA_UI_FONT_POINTS"))
+                if (const int nSize = std::atoi(pSize); nSize > 0)
+                    oFont->SetFontHeight(nSize);
+#endif
             style.BatchSetFonts(*oFont, *oFont);
             oFont->SetWeight(WEIGHT_BOLD);
             style.SetTitleFont(*oFont);
