@@ -91,7 +91,11 @@ ScCornerButton::~ScCornerButton()
 void ScCornerButton::Paint(vcl::RenderContext& rRenderContext, const tools::Rectangle& rRect)
 {
     const StyleSettings& rStyleSettings = rRenderContext.GetSettings().GetStyleSettings();
+#ifdef EMSCRIPTEN
+    SetBackground(Color(0xF8F9FA)); // weboffice: Excel 365 corner
+#else
     SetBackground(rStyleSettings.GetFaceColor());
+#endif
 
     Size aSize(GetOutputSizePixel());
     tools::Long nPosX = aSize.Width() - 1;
@@ -103,7 +107,11 @@ void ScCornerButton::Paint(vcl::RenderContext& rRenderContext, const tools::Rect
     tools::Long nDarkX = bLayoutRTL ? 0 : nPosX;
 
     //  both buttons have the same look now - only dark right/bottom lines
+#ifdef EMSCRIPTEN
+    rRenderContext.SetLineColor(Color(0xC4C7C5));
+#else
     rRenderContext.SetLineColor(rStyleSettings.GetShadowColor());
+#endif
     rRenderContext.DrawLine(Point(0, nPosY), Point(nPosX, nPosY));
     rRenderContext.DrawLine(Point(nDarkX, 0), Point(nDarkX, nPosY));
 }

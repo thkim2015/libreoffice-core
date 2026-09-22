@@ -92,7 +92,10 @@ ScHeaderControl::ScHeaderControl( vcl::Window* pParent, SelectionEngine* pSelect
     mnDefaultFontHeight = aNormFont.GetFontHeight();
 
     aBoldFont = aNormFont;
+#ifndef EMSCRIPTEN
     aBoldFont.SetWeight( WEIGHT_BOLD );
+#endif
+    // EMSCRIPTEN (weboffice): selected headers keep the normal weight like Excel 365
     aAutoFilterFont = aNormFont;
 
     SetFont(aBoldFont);
@@ -244,8 +247,15 @@ void ScHeaderControl::Paint( vcl::RenderContext& rRenderContext, const tools::Re
     bool bDark = rStyleSettings.GetFaceColor().IsDark();
     // Use the same distinction for bDark as in Window::DrawSelectionBackground
 
+#ifdef EMSCRIPTEN
+    // weboffice: Excel 365 look (white headers, grey text, light blue selection)
+    const Color aExcelFace(0xFFFFFF), aExcelLine(0xC4C7C5), aExcelSel(0xD3E3FD);
+    Color aTextColor(0x444746);
+    Color aSelTextColor(0x041E49);
+#else
     Color aTextColor = rStyleSettings.GetButtonTextColor();
     Color aSelTextColor = rStyleSettings.GetHighlightTextColor();
+#endif
     Color aAFilterTextColor = rStyleSettings.GetButtonTextColor();
     aAFilterTextColor.Merge(COL_LIGHTBLUE, bDark ? 150 : 10); // color of filtered row numbers
     aNormFont.SetColor( aTextColor );
@@ -263,6 +273,12 @@ void ScHeaderControl::Paint( vcl::RenderContext& rRenderContext, const tools::Re
     ScModule* mod = ScModule::get();
     Color aSelLineColor = mod->GetColorConfig().GetColorValue(svtools::CALCCELLFOCUS).nColor;
     aSelLineColor.Merge( COL_BLACK, 0xe0 );        // darken just a little bit
+#ifdef EMSCRIPTEN
+    aSelLineColor = aExcelLine;
+    const Color aShadowColor = aExcelLine;
+#else
+    const Color aShadowColor = rStyleSettings.GetShadowColor();
+#endif
 
     bool bLayoutRTL = IsLayoutRTL();
     tools::Long nLayoutSign = bLayoutRTL ? -1 : 1;
@@ -356,6 +372,9 @@ void ScHeaderControl::Paint( vcl::RenderContext& rRenderContext, const tools::Re
             aFaceColor.IncreaseLuminance(20);
         else
             aFaceColor.DecreaseLuminance(20);
+#ifdef EMSCRIPTEN
+        aFaceColor = aExcelFace;
+#endif
         rRenderContext.SetFillColor(aFaceColor);
         if ( bVertical )
             aFillRect = tools::Rectangle( 0, nInitScrPos, nBarSize-1, nLineEnd );
@@ -405,12 +424,15 @@ void ScHeaderControl::Paint( vcl::RenderContext& rRenderContext, const tools::Re
 #ifdef MACOSX
                 aColor.Merge( rStyleSettings.GetFaceColor(), 80 );
 #endif
+#ifdef EMSCRIPTEN
+                aColor = aExcelSel;
+#endif
                 rRenderContext.SetFillColor( aColor );
                 rRenderContext.DrawRect( aFillRect );
             }
         }
 
-        rRenderContext.SetLineColor( rStyleSettings.GetShadowColor() );
+        rRenderContext.SetLineColor( aShadowColor );
         if (bVertical)
         {
             rRenderContext.DrawLine( Point( 0, nPStart ), Point( 0, nLineEnd ) ); //left
@@ -486,10 +508,10 @@ void ScHeaderControl::Paint( vcl::RenderContext& rRenderContext, const tools::Re
         {
             case HeaderPaintPass::SelectionBottom:
                 // same as non-selected for high contrast
-                rRenderContext.SetLineColor( bHighContrast ? rStyleSettings.GetShadowColor() : aSelLineColor );
+                rRenderContext.SetLineColor( bHighContrast ? aShadowColor : aSelLineColor );
                 break;
             case HeaderPaintPass::Bottom:
-                rRenderContext.SetLineColor( rStyleSettings.GetShadowColor() );
+                rRenderContext.SetLineColor( aShadowColor );
                 break;
             case HeaderPaintPass::Text:
                 // DrawSelectionBackground is used only for high contrast on light background
