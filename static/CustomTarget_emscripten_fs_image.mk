@@ -1773,8 +1773,46 @@ endif # !ENABLE_WASM_STRIP_CHART
 $(foreach theme,$(WITH_THEMES), \
     $(eval gb_emscripten_fs_image_files += $(INSTROOT)/$(LIBO_SHARE_FOLDER)/config/images_$(theme).zip))
 
+# Bundled fonts are 50MB of the 92MB filesystem image, which every browser has to
+# download. Ship only what a Word/Excel/PowerPoint document actually needs here:
+# the metric-compatible replacements for Arial, Times New Roman, Courier New,
+# Arial Narrow, Calibri and Cambria, plus DejaVu for UI/symbol/math fallback.
+# Everything else (CJK, Hebrew, Arabic, Lao, Georgian, Armenian, Linux Libertine)
+# is left to the fonts installed on the machine.
+zeta_fs_image_fonts := \
+    Caladea-Bold.ttf \
+    Caladea-BoldItalic.ttf \
+    Caladea-Italic.ttf \
+    Caladea-Regular.ttf \
+    Carlito-Bold.ttf \
+    Carlito-BoldItalic.ttf \
+    Carlito-Italic.ttf \
+    Carlito-Regular.ttf \
+    DejaVuMathTeXGyre.ttf \
+    DejaVuSans-Bold.ttf \
+    DejaVuSans.ttf \
+    DejaVuSansMono-Bold.ttf \
+    DejaVuSansMono.ttf \
+    LiberationMono-Bold.ttf \
+    LiberationMono-BoldItalic.ttf \
+    LiberationMono-Italic.ttf \
+    LiberationMono-Regular.ttf \
+    LiberationSans-Bold.ttf \
+    LiberationSans-BoldItalic.ttf \
+    LiberationSans-Italic.ttf \
+    LiberationSans-Regular.ttf \
+    LiberationSansNarrow-Bold.ttf \
+    LiberationSansNarrow-BoldItalic.ttf \
+    LiberationSansNarrow-Italic.ttf \
+    LiberationSansNarrow-Regular.ttf \
+    LiberationSerif-Bold.ttf \
+    LiberationSerif-BoldItalic.ttf \
+    LiberationSerif-Italic.ttf \
+    LiberationSerif-Regular.ttf \
+
 ifeq ($(WITH_FONTS),TRUE)
-gb_emscripten_fs_image_autoinstall += $(gb_AutoInstall_targetdir)/ooo_fonts
+gb_emscripten_fs_image_files += $(foreach font,$(zeta_fs_image_fonts), \
+    $(INSTROOT)/$(LIBO_SHARE_FOLDER)/fonts/truetype/$(font))
 endif
 
 gb_emscripten_fs_image_filelists += $(call gb_Package_get_target,liblangtag_data)
