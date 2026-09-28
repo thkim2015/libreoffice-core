@@ -126,7 +126,14 @@ QtFrame::QtFrame(QtFrame* pParent, SalFrameStyleFlags nStyle)
 
     if (aWinFlags == Qt::Window)
     {
-        m_pTopLevel = new QtMainWindow(*this, aWinFlags);
+        // zetaOffice: every document window lives inside one browser canvas, so the
+        // decorations Qt paints for a second top-level window (title bar, close box)
+        // only get in the way. ZETA_FRAMELESS_WINDOWS drops them; the web app draws
+        // its own chrome and arranges the windows itself.
+        Qt::WindowFlags aTopFlags = aWinFlags;
+        if (std::getenv("ZETA_FRAMELESS_WINDOWS"))
+            aTopFlags |= Qt::FramelessWindowHint;
+        m_pTopLevel = new QtMainWindow(*this, aTopFlags);
         m_pQWidget = new QtWidget(*this);
         m_pTopLevel->setCentralWidget(m_pQWidget);
         m_pTopLevel->setFocusProxy(m_pQWidget);
