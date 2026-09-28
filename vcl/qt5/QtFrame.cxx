@@ -130,9 +130,13 @@ QtFrame::QtFrame(QtFrame* pParent, SalFrameStyleFlags nStyle)
         // decorations Qt paints for a second top-level window (title bar, close box)
         // only get in the way. ZETA_FRAMELESS_WINDOWS drops them; the web app draws
         // its own chrome and arranges the windows itself.
+        // The first document window keeps its flags: Qt WASM already shows it without
+        // decorations, and changing its flags disturbs keyboard focus (seen in tests).
+        static int nTopLevelWindows = 0;
         Qt::WindowFlags aTopFlags = aWinFlags;
-        if (std::getenv("ZETA_FRAMELESS_WINDOWS"))
+        if (nTopLevelWindows > 0 && std::getenv("ZETA_FRAMELESS_WINDOWS"))
             aTopFlags |= Qt::FramelessWindowHint;
+        ++nTopLevelWindows;
         m_pTopLevel = new QtMainWindow(*this, aTopFlags);
         m_pQWidget = new QtWidget(*this);
         m_pTopLevel->setCentralWidget(m_pQWidget);
