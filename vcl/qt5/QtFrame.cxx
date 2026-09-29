@@ -1032,6 +1032,10 @@ void QtFrame::UpdateSettings(AllSettings& rSettings)
             toColor(QToolTip::palette().color(QPalette::Active, QPalette::ToolTipBase)));
         style.SetHelpTextColor(
             toColor(QToolTip::palette().color(QPalette::Active, QPalette::ToolTipText)));
+#ifdef EMSCRIPTEN
+        // Soft dark gray tooltip text like Office (same as the sheet header text)
+        style.SetHelpTextColor(Color(0x44, 0x47, 0x46));
+#endif
 
         // Menu
         std::unique_ptr<QMenuBar> pMenuBar = std::make_unique<QMenuBar>();
