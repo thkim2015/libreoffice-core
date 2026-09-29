@@ -1035,6 +1035,23 @@ void QtFrame::UpdateSettings(AllSettings& rSettings)
 #ifdef EMSCRIPTEN
         // Soft dark gray tooltip text like Office (same as the sheet header text)
         style.SetHelpTextColor(Color(0x44, 0x47, 0x46));
+        // Frame tooltips are native QToolTips (QtWidget::handleEvent). Qt's default
+        // tooltip text is large and pure black, which reads as bold in the browser:
+        // use a smaller regular UI font and Office-like colors instead.
+        {
+            QFont aTipFont = QApplication::font();
+            aTipFont.setWeight(QFont::Normal);
+            int nTipPoints = 9;
+            if (const char* pSize = std::getenv("ZETA_UI_FONT_POINTS"))
+                if (const int nSize = std::atoi(pSize); nSize > 2)
+                    nTipPoints = nSize - 2;
+            aTipFont.setPointSize(nTipPoints);
+            QToolTip::setFont(aTipFont);
+            QPalette aTipPalette = QToolTip::palette();
+            aTipPalette.setColor(QPalette::ToolTipBase, QColor(0xFF, 0xFF, 0xFF));
+            aTipPalette.setColor(QPalette::ToolTipText, QColor(0x44, 0x47, 0x46));
+            QToolTip::setPalette(aTipPalette);
+        }
 #endif
 
         // Menu
