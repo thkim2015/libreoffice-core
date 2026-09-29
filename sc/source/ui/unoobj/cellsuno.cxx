@@ -72,6 +72,8 @@
 #include <autoform.hxx>
 #include <cellvalue.hxx>
 #include <cellmergeoption.hxx>
+#include <comphelper/sequence.hxx>
+#include <tabprotection.hxx>
 #include <cellsuno.hxx>
 #include <cursuno.hxx>
 #include <textuno.hxx>
@@ -789,6 +791,7 @@ static const SfxItemPropertySet* lcl_GetSheetPropertySet()
         { SC_UNO_NAMEDRANGES, SC_WID_UNO_NAMES, cppu::UnoType<sheet::XNamedRanges>::get(), 0, 0 },
         { SC_UNO_SOLVERSETTINGS, SC_WID_UNO_SOLVERSETTINGS, cppu::UnoType<sheet::XSolverSettings>::get(), 0, 0 },
         { SC_UNONAME_TOTALBELOW, SC_WID_UNO_TOTALBELOW, cppu::UnoType<bool>::get(), 0, 0 },
+        { u"ZetaEditRanges"_ustr, SC_WID_UNO_ZETAEDITRANGES, cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
     };
     static SfxItemPropertySet aSheetPropertySet( aSheetPropertyMap_Impl );
     return &aSheetPropertySet;
@@ -7939,6 +7942,46 @@ void ScTableSheetObj::SetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
                 rDoc.ClearPrintRanges( nTab ); // if this flag is true, there are no PrintRanges, so Clear clears only the flag.
         }
     }
+    else if ( pEntry->nWID == SC_WID_UNO_ZETAEDITRANGES )
+    {
+        // Excel 'Allow Edit Ranges' (enhanced protection) for the embedding app
+        uno::Sequence<OUString> aItems;
+        if ( aValue >>= aItems )
+        {
+            std::vector<ScEnhancedProtection> aProts;
+            for (const OUString& rItem : aItems)
+            {
+                std::vector<OUString> aF;
+                sal_Int32 nIdx = 0;
+                do
+                    aF.push_back(rItem.getToken(0, '\t', nIdx));
+                while (nIdx >= 0);
+                aF.resize(9);
+                ScEnhancedProtection aProt;
+                aProt.maTitle = aF[0];
+                ScRangeListRef xList(new ScRangeList);
+                xList->Parse(aF[1], rDoc, formula::FormulaGrammar::CONV_XL_OOX, nTab, ' ');
+                if (xList->empty())
+                    continue;
+                aProt.maRangeList = xList;
+                aProt.maPasswordHash.maAlgorithmName = aF[2];
+                aProt.maPasswordHash.maHashValue = aF[3];
+                aProt.maPasswordHash.maSaltValue = aF[4];
+                aProt.maPasswordHash.mnSpinCount = aF[5].toUInt32();
+                aProt.mbUnlocked = aF[6] == "1";
+                aProt.mnPasswordVerifier = aF[7].toUInt32(16);
+                aProt.maSecurityDescriptorXML = aF[8];
+                aProts.push_back(std::move(aProt));
+            }
+            const ScTableProtection* pOld = rDoc.GetTabProtection(nTab);
+            std::unique_ptr<ScTableProtection> pNew(pOld ? new ScTableProtection(*pOld) : new ScTableProtection);
+            if (!pOld)
+                pNew->setProtected(false);
+            pNew->setEnhancedProtection(std::move(aProts));
+            rDoc.SetTabProtection(nTab, pNew.get());
+            pDocSh->SetDocumentModified();
+        }
+    }
     else if ( pEntry->nWID == SC_WID_UNO_TABCOLOR )
     {
         Color aColor = COL_AUTO;
@@ -8101,6 +8144,24 @@ void ScTableSheetObj::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
     else if ( pEntry->nWID == SC_WID_UNO_TABCOLOR )
     {
         rAny <<= rDoc.GetTabBgColor(nTab);
+    }
+    else if ( pEntry->nWID == SC_WID_UNO_ZETAEDITRANGES )
+    {
+        std::vector<OUString> aItems;
+        if (const ScTableProtection* pProt = rDoc.GetTabProtection(nTab))
+        {
+            for (const ScEnhancedProtection& rProt : pProt->getEnhancedProtection())
+            {
+                OUString aRanges;
+                if (rProt.maRangeList.is())
+                    rProt.maRangeList->Format(aRanges, ScRefFlags::VALID, rDoc, formula::FormulaGrammar::CONV_XL_OOX, ' ');
+                aItems.push_back(rProt.maTitle + "\t" + aRanges + "\t" + rProt.maPasswordHash.maAlgorithmName + "\t"
+                    + rProt.maPasswordHash.maHashValue + "\t" + rProt.maPasswordHash.maSaltValue + "\t"
+                    + OUString::number(rProt.maPasswordHash.mnSpinCount) + "\t" + (rProt.mbUnlocked ? u"1" : u"0") + "\t"
+                    + OUString::number(rProt.mnPasswordVerifier, 16) + "\t" + rProt.maSecurityDescriptorXML);
+            }
+        }
+        rAny <<= comphelper::containerToSequence(aItems);
     }
     else if ( pEntry->nWID == SC_WID_UNO_CODENAME )
     {

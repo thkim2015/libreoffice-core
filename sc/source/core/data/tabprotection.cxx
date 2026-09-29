@@ -459,7 +459,7 @@ bool ScTableProtectionImpl::isBlockEditable( const ScRange& rRange ) const
         auto lIsEditable = [rRange](const ScEnhancedProtection& rEnhancedProtection) {
             return !rEnhancedProtection.hasSecurityDescriptor()
                 && rEnhancedProtection.maRangeList.is() && rEnhancedProtection.maRangeList->Contains( rRange)
-                && !rEnhancedProtection.hasPassword(); // Range is editable if no password is assigned.
+                && rEnhancedProtection.isOpenForEdit(); // Range is editable if no password is assigned.
         };
         if (std::any_of(maEnhancedProtection.begin(), maEnhancedProtection.end(), std::move(lIsEditable)))
             return true;
@@ -479,7 +479,7 @@ bool ScTableProtectionImpl::isBlockEditable( const ScRange& rRange ) const
             if (aList.size() == 1 && aList[0] == rRange)
             {
                 // Range is editable if no password is assigned.
-                if (!rEnhancedProtection.hasPassword())
+                if (rEnhancedProtection.isOpenForEdit())
                     return true;
             }
         }
@@ -496,7 +496,7 @@ bool ScTableProtectionImpl::isBlockEditable( const ScRange& rRange ) const
         if (!rEnhancedProtection.hasSecurityDescriptor() && rEnhancedProtection.maRangeList.is())
         {
             // Ranges are editable if no password is assigned.
-            if (!rEnhancedProtection.hasPassword())
+            if (rEnhancedProtection.isOpenForEdit())
             {
                 const ScRangeList& rRanges = *rEnhancedProtection.maRangeList;
                 size_t nRanges = rRanges.size();

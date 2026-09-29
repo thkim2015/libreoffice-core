@@ -141,6 +141,9 @@ struct ScEnhancedProtection
     ::std::vector< sal_uInt8 >  maSecurityDescriptor;       // imported as raw BIFF data
     OUString                    maSecurityDescriptorXML;    // imported from OOXML
     ScOoxPasswordHash           maPasswordHash;
+    /** The range password was entered in this session (not saved): edit like a
+        range without password. Set by the embedding app, see ZetaEditRanges. */
+    bool                        mbUnlocked = false;
 
     ScEnhancedProtection() : mnAreserved(0), mnPasswordVerifier(0) {}
 
@@ -153,6 +156,9 @@ struct ScEnhancedProtection
     {
         return mnPasswordVerifier != 0 || maPasswordHash.hasPassword();
     }
+
+    /** Editable without asking: no password, or unlocked in this session. */
+    bool isOpenForEdit() const { return mbUnlocked || !hasPassword(); }
 };
 
 /** sheet protection state container
