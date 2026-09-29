@@ -1085,8 +1085,21 @@ void QtFrame::UpdateSettings(AllSettings& rSettings)
         }
 
         // Tooltip font
+#ifdef EMSCRIPTEN
+        // Qt's tooltip font looks large and heavy in the browser; use the regular
+        // UI font (same size as the rest of the UI) like Office screen tips
+        if (std::optional<vcl::Font> oFont = toVclFont(QApplication::font(), aLocale))
+        {
+            if (const char* pSize = std::getenv("ZETA_UI_FONT_POINTS"))
+                if (const int nSize = std::atoi(pSize); nSize > 0)
+                    oFont->SetFontHeight(nSize);
+            oFont->SetWeight(WEIGHT_NORMAL);
+            style.SetHelpFont(*oFont);
+        }
+#else
         if (std::optional<vcl::Font> oFont = toVclFont(QToolTip::font(), aLocale))
             style.SetHelpFont(*oFont);
+#endif
 
         // Menu bar font
         if (std::optional<vcl::Font> oFont = toVclFont(pMenuBar->font(), aLocale))
