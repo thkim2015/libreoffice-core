@@ -69,12 +69,17 @@
 #include <comphelper/processfactory.hxx>
 #include <comphelper/profilezone.hxx>
 #include <comphelper/servicehelper.hxx>
+#include <comphelper/sequence.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/typeprovider.hxx>
 #include <tools/UnitConversion.hxx>
 #include <comphelper/dumpxmltostring.hxx>
 #include <fmtanchr.hxx>
 #include <names.hxx>
+#ifdef EMSCRIPTEN
+#include <pagefrm.hxx>
+#include <com/sun/star/awt/Rectangle.hpp>
+#endif
 
 using namespace ::com::sun::star;
 using namespace ::com::sun::star::uno;
@@ -825,6 +830,37 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         aRet <<= bShow;
         return aRet;
     }
+#ifdef EMSCRIPTEN
+    // zetaOffice(웹 셸) 잉크 오버레이: 화면 점을 문서 점으로 바꾸려면 보이는 영역과 편집 창 자리, 쪽 자리가 필요하다.
+    // 모두 읽기 전용, 문서 좌표는 1/100mm(도형 PolyPolygon과 같은 좌표계), 편집 창은 프레임 창 기준 픽셀.
+    auto toMm100 = [](const tools::Rectangle& r) {
+        return css::awt::Rectangle(convertTwipToMm100(r.Left()), convertTwipToMm100(r.Top()),
+                                   convertTwipToMm100(r.GetWidth()), convertTwipToMm100(r.GetHeight()));
+    };
+    if (rPropertyName == "ZetaVisibleArea")
+    {
+        aRet <<= toMm100(m_pView->GetVisArea());
+        return aRet;
+    }
+    if (rPropertyName == "ZetaEditWinOnScreen")
+    {
+        SwEditWin& rWin = m_pView->GetEditWin();
+        vcl::Window& rFrameWin = m_pView->GetViewFrame().GetWindow();
+        const Point aOrigin = Point(rWin.OutputToAbsoluteScreenPixel(Point())) - Point(rFrameWin.OutputToAbsoluteScreenPixel(Point()));
+        const Size aSize = rWin.GetOutputSizePixel();
+        aRet <<= css::awt::Rectangle(aOrigin.X(), aOrigin.Y(), aSize.Width(), aSize.Height());
+        return aRet;
+    }
+    if (rPropertyName == "ZetaPageRects")
+    {
+        std::vector<css::awt::Rectangle> aRects;
+        const SwRootFrame* pRoot = m_pView->GetWrtShell().GetLayout();
+        for (const SwFrame* pPage = pRoot ? pRoot->Lower() : nullptr; pPage; pPage = pPage->GetNext())
+            aRects.push_back(toMm100(pPage->getFrameArea().SVRect()));
+        aRet <<= comphelper::containerToSequence(aRects);
+        return aRet;
+    }
+#endif
 
     const SfxItemPropertyMapEntry* pEntry = m_pPropSet->getPropertyMap().getByName( rPropertyName );
     if (!pEntry)
