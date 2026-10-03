@@ -880,7 +880,9 @@ void SwTextFormatter::CalcAscent( SwTextFormatInfo &rInf, SwLinePortion *pPor )
         {
             // tdf#129808: For Word layout compatibility, adjust ascent for fonts
             // advertising support for certain CJK code pages.
-            sal_uInt16 nAdjustedHeight = (nHeight * 127) / 100;
+            // weboffice: Word uses 130% (measured with Malgun Gothic, Noto Sans KR and Gulim at 11pt:
+            // line pitch / (ascent + descent) = 1.299..1.303), not 127%.
+            sal_uInt16 nAdjustedHeight = (nHeight * 130) / 100;
             sal_uInt16 nAdjustedAscent = nAdjustedHeight - (nHeight - nAscent);
             return std::make_tuple(nAdjustedHeight, nAdjustedAscent);
         }
