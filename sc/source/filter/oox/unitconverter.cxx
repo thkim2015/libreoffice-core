@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <algorithm>
 #include <unitconverter.hxx>
 
 #include <com/sun/star/awt/DeviceInfo.hpp>
@@ -133,6 +134,10 @@ void UnitConverter::finalizeImport()
     for( sal_Unicode cChar = '0'; cChar <= '9'; ++cChar )
         nDigitWidth = ::std::max(nDigitWidth, o3tl::convert(xFont->getCharWidth(cChar),
                                                             o3tl::Length::twip, o3tl::Length::emu));
+    // weboffice: Excel measures the maximum digit width in whole pixels at 96 dpi
+    // (Calibri 11pt = 7 px, Malgun Gothic 11pt = 8 px); column widths are multiples of it.
+    if( nDigitWidth > 0 )
+        nDigitWidth = std::max< sal_Int64 >( 1, ( nDigitWidth + 9525 / 2 ) / 9525 ) * 9525;
     if( nDigitWidth > 0 )
         maCoeffs[ Unit::Digit ] = nDigitWidth;
     // get width of space character

@@ -22,6 +22,7 @@
 #include <worksheethelper.hxx>
 
 #include <algorithm>
+#include <cmath>
 #include <com/sun/star/awt/Point.hpp>
 #include <com/sun/star/awt/Size.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
@@ -748,7 +749,13 @@ void WorksheetGlobals::setBaseColumnWidth( sal_Int32 nWidth )
     if( !mbHasDefWidth && (nWidth > 0) )
     {
         // #i3006# add 5 pixels padding to the width
-        maDefColModel.mfWidth = nWidth + getUnitConverter().scaleValue( 5, Unit::ScreenX, Unit::Digit );
+        // weboffice: Excel then rounds the default width up to a multiple of 8 pixels
+        // (Calibri 11pt: 8 * 7 + 5 = 61 -> 64 px, Malgun Gothic 11pt: 8 * 8 + 5 = 69 -> 72 px).
+        const double fDigitPx = getUnitConverter().scaleValue( 1, Unit::Digit, Unit::Emu ) / 9525.0;
+        if( fDigitPx > 0 )
+            maDefColModel.mfWidth = std::ceil( ( nWidth * fDigitPx + 5 ) / 8 ) * 8 / fDigitPx;
+        else
+            maDefColModel.mfWidth = nWidth + getUnitConverter().scaleValue( 5, Unit::ScreenX, Unit::Digit );
     }
 }
 

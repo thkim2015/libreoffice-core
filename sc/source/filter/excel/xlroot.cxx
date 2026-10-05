@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <xlroot.hxx>
@@ -223,6 +224,9 @@ void XclRoot::SetCharWidth( const XclFontData& rFontData )
         // UnitConverter::finalizeImport()
         for (sal_Unicode cChar = '0'; cChar <= '9'; ++cChar)
             mrData.mnCharWidth = std::max( pPrinter->GetTextWidth( OUString(cChar)), mrData.mnCharWidth);
+        // weboffice: whole pixels at 96 dpi, matching the import (oox UnitConverter)
+        if( mrData.mnCharWidth > 0 )
+            mrData.mnCharWidth = std::max< tools::Long >( 1, ( mrData.mnCharWidth + 7 ) / 15 ) * 15;
 
         // Set the width of space ' ' character.
         mrData.mnSpaceWidth = pPrinter->GetTextWidth(OUString(' '));
