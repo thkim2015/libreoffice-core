@@ -4415,9 +4415,12 @@ void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double
             case svString :
             {
                 // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
-                const double fVal = ConvertStringToValue( PopString().getString() );
+                fVal = ConvertStringToValue( PopString().getString() );
                 if ( nGlobalError == FormulaError::NONE )
+                {
                     values.push_back(fVal);
+                    fSum += fVal;
+                }
             }
             break;
             default :
