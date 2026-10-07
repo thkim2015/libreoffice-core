@@ -19,6 +19,7 @@
 
 #include <xetable.hxx>
 #include <formula/tokenarray.hxx>
+#include <rtl/character.hxx>
 #include <addincol.hxx>
 #include <global.hxx>
 
@@ -942,6 +943,35 @@ void XclExpFormulaCell::Save( XclExpStream& rStrm )
         mxStringRec->Save( rStrm );
 }
 
+// weboffice: whether an unresolved name kept by Calc (ocBad, e.g. "err:502" or "c") is something Excel
+// can parse as a defined name; if not, Excel refuses to load the whole file.
+static bool lcl_IsExcelNameSyntax( std::u16string_view aName )
+{
+    if (aName.empty())
+        return false;
+    const sal_Unicode c0 = aName[0];
+    if (!(rtl::isAsciiAlpha(c0) || c0 == '_' || c0 == '\\' || c0 > 127))
+        return false;
+    for (sal_Unicode c : aName)
+        if (!(rtl::isAsciiAlphanumeric(c) || c == '_' || c == '.' || c == '\\' || c > 127))
+            return false;
+    // "C" and "R" (R1C1 notation) and cell addresses like "AB12" are not names
+    if (aName.size() == 1 && (c0 == 'C' || c0 == 'c' || c0 == 'R' || c0 == 'r'))
+        return false;
+    size_t i = 0;
+    while (i < aName.size() && i < 3 && rtl::isAsciiAlpha(aName[i]))
+        ++i;
+    if (i > 0 && i < aName.size())
+    {
+        size_t j = i;
+        while (j < aName.size() && rtl::isAsciiDigit(aName[j]))
+            ++j;
+        if (j == aName.size())
+            return false;
+    }
+    return true;
+}
+
 // weboffice: true when a function in the formula has fewer or more arguments than Excel allows
 // (Calc accepts e.g. ABS() or ROUND(x); Excel cannot load a file containing such a formula).
 static bool lcl_HasExcelInvalidParamCount( const ScTokenArray& rCode, const XclExpRoot& rRoot )
@@ -975,6 +1005,9 @@ static bool lcl_HasExcelInvalidParamCount( const ScTokenArray& rCode, const XclE
                 return true;
             continue;
         }
+        if (pToken->GetOpCode() == ocBad && pToken->GetType() == formula::svString
+            && !lcl_IsExcelNameSyntax( static_cast<const formula::FormulaStringToken*>(pToken)->GetString().getString() ))
+            return true;
         sal_Int32 nParams;
         if (pToken->GetType() == formula::svByte)
             nParams = static_cast<const formula::FormulaByteToken*>(pToken)->GetByte();
