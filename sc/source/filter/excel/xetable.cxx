@@ -975,14 +975,24 @@ static bool lcl_HasExcelInvalidParamCount( const ScTokenArray& rCode, const XclE
                 return true;
             continue;
         }
-        if (pToken->GetType() != formula::svByte)
+        sal_Int32 nParams;
+        if (pToken->GetType() == formula::svByte)
+            nParams = static_cast<const formula::FormulaByteToken*>(pToken)->GetByte();
+        else if (pToken->GetType() == formula::svJump)
+            // IF, CHOOSE, IFERROR, IFNA: the jump count is the argument count
+            nParams = static_cast<const formula::FormulaJumpToken*>(pToken)->GetJump()[0];
+        else
             continue;
         // also the newer functions written as _xlfn.NAME (mnXclFunc EXTERNCALL, e.g. AGGREGATE)
         const XclFunctionInfo* pInfo = aFuncProv.GetFuncInfoFromOpCode( pToken->GetOpCode() );
-        if (!pInfo || pToken->GetOpCode() == ocExternal || pToken->GetOpCode() == ocMacro)
+        if (!pInfo || pToken->GetOpCode() == ocExternal || pToken->GetOpCode() == ocMacro
+            || pToken->GetOpCode() == ocLet || pToken->GetOpCode() == ocLambda)
             continue;
-        const sal_uInt8 nParams = static_cast<const formula::FormulaByteToken*>(pToken)->GetByte();
-        if (nParams < pInfo->mnMinParamCount || nParams > pInfo->mnMaxParamCount)
+        // the export entries of EXTERNCALL functions count the hidden function-name argument too
+        const sal_Int32 nExtra = (pInfo->mnXclFunc == EXC_FUNCID_EXTERNCALL) ? 1 : 0;
+        // MX (30) is the old BIFF limit of variable argument lists; OOXML allows 255
+        const sal_Int32 nMax = (pInfo->mnMaxParamCount >= EXC_FUNC_MAXPARAM) ? 255 : pInfo->mnMaxParamCount - nExtra;
+        if (nParams < pInfo->mnMinParamCount - nExtra || nParams > nMax)
             return true;
     }
     return false;
