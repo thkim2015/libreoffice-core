@@ -20,6 +20,7 @@
 #pragma once
 
 #include <tokenarray.hxx>
+#include <formula/errorcodes.hxx>
 #include <refdata.hxx>
 #include <sal/log.hxx>
 
@@ -230,6 +231,8 @@ public:
         inline void                 operator >>( TokenStack& rStack );
         inline TokenId              Store();
         TokenId                     Store( const double& rDouble );
+        // weboffice: error constant (#VALUE!, #REF!, ...) inside a BIFF formula
+        TokenId                     StoreError( FormulaError eError );
 
                                     // only for Range-Names
         TokenId                     Store( const sal_uInt16 nIndex );

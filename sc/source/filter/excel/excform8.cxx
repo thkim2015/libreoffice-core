@@ -380,22 +380,8 @@ ConvErr ExcelToSc8::Convert( std::unique_ptr<ScTokenArray>& rpTokArray, XclImpSt
             {
                 sal_uInt8 nByte = aIn.ReaduInt8();
 
-                DefTokenId          eOc;
-                switch( nByte )
-                {
-                    case EXC_ERR_NULL:
-                    case EXC_ERR_DIV0:
-                    case EXC_ERR_VALUE:
-                    case EXC_ERR_REF:
-                    case EXC_ERR_NAME:
-                    case EXC_ERR_NUM:   eOc = ocStop;       break;
-                    case EXC_ERR_NA:    eOc = ocNotAvail;   break;
-                    default:            eOc = ocNoName;
-                }
-                aPool << eOc;
-                if( eOc != ocStop )
-                    aPool << ocOpen << ocClose;
-                aPool >> aStack;
+                // weboffice: keep the error constant (was ocStop, which cut the formula short)
+                aStack << aPool.StoreError( XclTools::GetScErrorCode( nByte ) );
 
                 break;
             }
@@ -1311,22 +1297,8 @@ void ExcelToSc8::ConvertExternName( std::unique_ptr<ScTokenArray>& rpArray, XclI
             case 0x1C: // Error Value
             {
                 nByte = rStrm.ReaduInt8();
-                DefTokenId eOc;
-                switch( nByte )
-                {
-                    case EXC_ERR_NULL:
-                    case EXC_ERR_DIV0:
-                    case EXC_ERR_VALUE:
-                    case EXC_ERR_REF:
-                    case EXC_ERR_NAME:
-                    case EXC_ERR_NUM:   eOc = ocStop;       break;
-                    case EXC_ERR_NA:    eOc = ocNotAvail;   break;
-                    default:            eOc = ocNoName;
-                }
-                aPool << eOc;
-                if( eOc != ocStop )
-                    aPool << ocOpen << ocClose;
-                aPool >> aStack;
+                // weboffice: keep the error constant (was ocStop, which cut the formula short)
+                aStack << aPool.StoreError( XclTools::GetScErrorCode( nByte ) );
             }
             break;
             case 0x3A:

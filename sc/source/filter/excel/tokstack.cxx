@@ -159,16 +159,12 @@ bool TokenPool::GetElement( const sal_uInt16 nId, ScTokenArray* pScToken )
             }
             break;
         case T_Err:
-            return true;
-/* TODO: in case we had FormulaTokenArray::AddError() */
-#if 0
-            if (n < nP_Err)
+            if (n < pP_Err.m_writemark)
             {
-                pScToken->AddError(pP_Err[n]);
+                pScToken->AddError(static_cast<FormulaError>(pP_Err[n]));
                 return true;
             }
             break;
-#endif
         case T_RefC:
             if (auto p = ppP_RefTr.getIfInRange(n))
             {
@@ -331,6 +327,23 @@ TokenId TokenPool::Store( const double& rDouble )
 
     pP_Dbl[ pP_Dbl.m_writemark ] = rDouble;
     pP_Dbl.m_writemark++;
+
+    return static_cast<const TokenId>(maElements.size()); // return old value + 1!
+}
+
+TokenId TokenPool::StoreError( FormulaError eError )
+{
+    if (!CanAddElement())
+        return static_cast<const TokenId>(maElements.size() + 1);
+
+    if( pP_Err.m_writemark >= pP_Err.m_capacity )
+        if (!pP_Err.Grow())
+            return static_cast<const TokenId>(maElements.size() + 1);
+
+    maElements.emplace_back(pP_Err.m_writemark, T_Err, 1);
+
+    pP_Err[ pP_Err.m_writemark ] = static_cast<sal_uInt16>(eError);
+    pP_Err.m_writemark++;
 
     return static_cast<const TokenId>(maElements.size()); // return old value + 1!
 }
