@@ -1234,17 +1234,8 @@ public:
             }
             break;
             case mdds::mtm::element_boolean:
-            {
-                typedef MatrixImplType::boolean_block_type block_type;
-
-                block_type::const_iterator it = block_type::begin(*node.data);
-                block_type::const_iterator itEnd = block_type::end(*node.data);
-                for (; it != itEnd; ++it)
-                {
-                    maOp(maRes.maAccumulator, *it);
-                }
-                maRes.mnCount += node.size;
-            }
+                // weboffice: like Excel, TRUE/FALSE inside an array are ignored by SUM, COUNT,
+                // AVERAGE, PRODUCT and also the A variants (SUM({1;TRUE}) is 1, AVERAGEA({1;"x";TRUE}) is 0.5)
             break;
             case mdds::mtm::element_string:
                 if (mbTextAsZero)
