@@ -978,8 +978,18 @@ static bool lcl_HasExcelInvalidParamCount( const ScTokenArray& rCode, const XclE
 {
     static const XclFunctionProvider aFuncProv( rRoot );
     formula::FormulaTokenArrayPlainIterator aIter( rCode );
-    for (const formula::FormulaToken* pToken = aIter.FirstRPN(); pToken; pToken = aIter.NextRPN())
+    const formula::FormulaToken* pPrev1 = nullptr; // operand pushed last
+    const formula::FormulaToken* pPrev2 = nullptr;
+    for (const formula::FormulaToken* pToken = aIter.FirstRPN(); pToken; pPrev2 = pPrev1, pPrev1 = pToken, pToken = aIter.NextRPN())
     {
+        // a range operator with a number or text operand ("err:502") is not Excel syntax
+        if (pToken->GetOpCode() == ocRange)
+        {
+            for (const formula::FormulaToken* pOp : { pPrev1, pPrev2 })
+                if (pOp && (pOp->GetType() == formula::svDouble || pOp->GetType() == formula::svString)
+                    && pOp->GetOpCode() == ocPush)
+                    return true;
+        }
         if (pToken->GetType() == formula::svExternal && pToken->GetOpCode() == ocExternal)
         {
             // add-in function (ACCRINTM, ...): limits from the add-in's argument descriptions
