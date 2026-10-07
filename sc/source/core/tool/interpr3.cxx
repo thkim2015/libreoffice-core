@@ -3521,48 +3521,8 @@ void ScInterpreter::ScQuartile( bool bInclusive )
 
 void ScInterpreter::ScModalValue()
 {
-    sal_uInt8 nParamCount = GetByte();
-    if ( !MustHaveParamCountMin( nParamCount, 1 ) )
-        return;
-    std::vector<double> aSortArray;
-    GetSortArray( nParamCount, aSortArray, nullptr, false, false );
-    SCSIZE nSize = aSortArray.size();
-    if (nGlobalError != FormulaError::NONE)
-        PushError( nGlobalError );
-    else if (nSize == 0)
-        PushNA(); // weboffice: #N/A like Excel
-    else
-    {
-        SCSIZE nMaxIndex = 0, nMax = 1, nCount = 1;
-        double nOldVal = aSortArray[0];
-        SCSIZE i;
-        for ( i = 1; i < nSize; i++)
-        {
-            if (aSortArray[i] == nOldVal)
-                nCount++;
-            else
-            {
-                nOldVal = aSortArray[i];
-                if (nCount > nMax)
-                {
-                    nMax = nCount;
-                    nMaxIndex = i-1;
-                }
-                nCount = 1;
-            }
-        }
-        if (nCount > nMax)
-        {
-            nMax = nCount;
-            nMaxIndex = i-1;
-        }
-        if (nMax == 1 && nCount == 1)
-            PushNA(); // weboffice: no value repeats -> #N/A like Excel
-        else if (nMax == 1)
-            PushDouble(nOldVal);
-        else
-            PushDouble(aSortArray[nMaxIndex]);
-    }
+    // weboffice: like Excel, MODE is MODE.SNGL (ties: the value that comes first in the data)
+    ScModalValue_MS( true );
 }
 
 void ScInterpreter::ScModalValue_MS( bool bSingle )
@@ -3575,8 +3535,10 @@ void ScInterpreter::ScModalValue_MS( bool bSingle )
     std::vector< double > aSortArray( aArray );
     QuickSort( aSortArray, nullptr );
     SCSIZE nSize = aSortArray.size();
-    if ( nSize == 0 || nGlobalError != FormulaError::NONE )
-        PushNoValue();
+    if ( nGlobalError != FormulaError::NONE )
+        PushError( nGlobalError );
+    else if ( nSize == 0 )
+        PushNA(); // weboffice: #N/A like Excel
     else
     {
         SCSIZE nMax = 1, nCount = 1;
@@ -3612,7 +3574,7 @@ void ScInterpreter::ScModalValue_MS( bool bSingle )
             aResultArray.emplace_back( nOldVal );
         }
         if ( nMax == 1 && nCount == 1 )
-            PushNoValue();
+            PushNA(); // weboffice: no value repeats -> #N/A like Excel
         else if ( nMax == 1 )
             PushDouble( nOldVal ); // there is only 1 result, no reordering needed
         else
