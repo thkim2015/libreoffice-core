@@ -1353,7 +1353,9 @@ public:
                 }
             break;
             case mdds::mtm::element_boolean:
-                mnCount += node.size;
+                // weboffice: COUNT ignores TRUE/FALSE inside an array like Excel; COUNTA counts them
+                if (mbCountString)
+                    mnCount += node.size;
             break;
             case mdds::mtm::element_string:
                 if (mbCountString)
