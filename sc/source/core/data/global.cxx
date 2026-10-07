@@ -319,12 +319,16 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
         case FormulaError::NoRef:
             pErrNumber = STR_NO_REF_TABLE;
             break;
+        // weboffice: Excel shows a missing add-in or macro function as #NAME?
         case FormulaError::NoAddin:
-            pErrNumber = STR_NO_ADDIN;
-            break;
         case FormulaError::NoMacro:
-            pErrNumber = STR_NO_MACRO;
-            break;
+            return ScCompiler::GetNativeSymbol(ocErrName);
+        // weboffice: calling a cell like a function (=D6()) is #REF! in Excel
+        case FormulaError::NotAFunction:
+            return ScCompiler::GetNativeSymbol(ocErrRef);
+        // weboffice: Excel's error for nested arrays
+        case FormulaError::NestedArray:
+            return u"#CALC!"_ustr;
         case FormulaError::NotAvailable:
             return ScCompiler::GetNativeSymbol(ocErrNA);
         case FormulaError::NoName:
@@ -352,7 +356,8 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
         case FormulaError::UnknownToken:
             return ScCompiler::GetNativeSymbol(ocErrValue);
         default:
-            return ScResId(STR_ERROR_STR) + OUString::number( static_cast<int>(nErr) );
+            // weboffice: no "Err:nnn" in Excel; any other Calc-only error is shown as #VALUE!
+            return ScCompiler::GetNativeSymbol(ocErrValue);
     }
     return ScResId(pErrNumber);
 }
