@@ -19,6 +19,8 @@
 
 #include <xetable.hxx>
 #include <formula/tokenarray.hxx>
+#include <addincol.hxx>
+#include <global.hxx>
 
 #include <map>
 #include <numeric>
@@ -948,10 +950,36 @@ static bool lcl_HasExcelInvalidParamCount( const ScTokenArray& rCode, const XclE
     formula::FormulaTokenArrayPlainIterator aIter( rCode );
     for (const formula::FormulaToken* pToken = aIter.FirstRPN(); pToken; pToken = aIter.NextRPN())
     {
+        if (pToken->GetType() == formula::svExternal && pToken->GetOpCode() == ocExternal)
+        {
+            // add-in function (ACCRINTM, ...): limits from the add-in's argument descriptions
+            const auto* pExt = static_cast<const formula::FormulaExternalToken*>(pToken);
+            const ScUnoAddInFuncData* pData = ScGlobal::GetAddInCollection()->GetFuncData( pExt->GetExternal(), true );
+            if (!pData)
+                continue;
+            sal_Int32 nMin = 0, nMax = 0;
+            for (sal_Int32 i = 0; i < pData->GetArgumentCount(); ++i)
+            {
+                const ScAddInArgDesc& rArg = pData->GetArguments()[i];
+                if (rArg.eType == SC_ADDINARG_CALLER)
+                    continue;
+                if (rArg.eType == SC_ADDINARG_VARARGS)
+                    nMax = 255;
+                else if (nMax < 255)
+                    ++nMax;
+                if (!rArg.bOptional && rArg.eType != SC_ADDINARG_VARARGS)
+                    ++nMin;
+            }
+            const sal_Int32 nParams = pExt->GetByte();
+            if (nParams < nMin || nParams > nMax)
+                return true;
+            continue;
+        }
         if (pToken->GetType() != formula::svByte)
             continue;
+        // also the newer functions written as _xlfn.NAME (mnXclFunc EXTERNCALL, e.g. AGGREGATE)
         const XclFunctionInfo* pInfo = aFuncProv.GetFuncInfoFromOpCode( pToken->GetOpCode() );
-        if (!pInfo || pInfo->mnXclFunc == EXC_FUNCID_EXTERNCALL)
+        if (!pInfo || pToken->GetOpCode() == ocExternal || pToken->GetOpCode() == ocMacro)
             continue;
         const sal_uInt8 nParams = static_cast<const formula::FormulaByteToken*>(pToken)->GetByte();
         if (nParams < pInfo->mnMinParamCount || nParams > pInfo->mnMaxParamCount)
