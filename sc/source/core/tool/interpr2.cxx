@@ -643,10 +643,17 @@ void ScInterpreter::ScGetDate()
     if (IsMissing())
         SetError( FormulaError::ParameterExpected);    // Year must be given.
     sal_Int16 nYear  = GetInt16();
-    if (nGlobalError != FormulaError::NONE || nYear < 0)
+    if (nGlobalError != FormulaError::NONE)
         PushIllegalArgument();
+    else if (nYear < 0)
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
     else
+    {
+        // weboffice: like Excel, a year 0..1899 is counted from 1900 (no two-digit year window)
+        if (nYear < 1900)
+            nYear += 1900;
         PushDouble(GetDateSerial(nYear, nMonth, nDay, false));
+    }
 }
 
 void ScInterpreter::ScGetTime()
@@ -1246,11 +1253,11 @@ void ScInterpreter::ScFloor_MS()
     else if ( fVal * fDec > 0 )
         PushDouble(::rtl::math::approxFloor( fVal / fDec ) * fDec );
     else if ( fDec == 0 )
-        PushIllegalArgument();
+        PushError( FormulaError::DivisionByZero ); // weboffice: #DIV/0! like Excel
     else if ( fVal < 0.0 )
         PushDouble(::rtl::math::approxCeil( fVal / -fDec ) * -fDec );
     else
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
 }
 
 void ScInterpreter::ScFloor_Precise()
@@ -1300,7 +1307,10 @@ void ScInterpreter::ScArcTan2()
     {
         double fVal2 = GetDouble();
         double fVal1 = GetDouble();
-        PushDouble(atan2(fVal2, fVal1));
+        if (fVal1 == 0.0 && fVal2 == 0.0)
+            PushError( FormulaError::DivisionByZero ); // weboffice: #DIV/0! like Excel
+        else
+            PushDouble(atan2(fVal2, fVal1));
     }
 }
 

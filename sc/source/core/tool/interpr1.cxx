@@ -3798,7 +3798,7 @@ void ScInterpreter::ScCode()
 //2do: make it full range unicode?
     OUString aStr = GetString().getString();
     if (aStr.isEmpty())
-        PushInt(0);
+        PushNoValue(); // weboffice: #VALUE! like Excel
     else
     {
         //"classic" ByteString conversion flags
