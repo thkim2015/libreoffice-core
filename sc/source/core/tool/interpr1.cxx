@@ -2112,7 +2112,7 @@ void ScInterpreter::ScArcCosHyp()
 {
     double fVal = GetDouble();
     if (fVal < 1.0)
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
     else
         PushDouble( ::rtl::math::acosh( fVal));
 }
@@ -2121,7 +2121,7 @@ void ScInterpreter::ScArcTanHyp()
 {
     double fVal = GetDouble();
     if (fabs(fVal) >= 1.0)
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
     else
         PushDouble(::atanh(fVal));
 }
@@ -2166,7 +2166,7 @@ void ScInterpreter::ScSqrt()
     if (fVal >= 0.0)
         PushDouble(sqrt(fVal));
     else
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
 }
 
 void ScInterpreter::ScIsEmpty()
@@ -4051,14 +4051,11 @@ void ScInterpreter::ScMin( bool bTextAsZero )
             break;
             case svString :
             {
-                Pop();
-                if ( bTextAsZero )
-                {
-                    if ( nMin > 0.0 )
-                        nMin = 0.0;
-                }
-                else
-                    SetError(FormulaError::IllegalParameter);
+                // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
+                nVal = ConvertStringToValue( PopString().getString() );
+                if ( nGlobalError == FormulaError::NONE && nMin > nVal )
+                    nMin = nVal;
+                nFuncFmtType = SvNumFormatType::NUMBER;
             }
             break;
             default :
@@ -4208,14 +4205,11 @@ void ScInterpreter::ScMax( bool bTextAsZero )
             break;
             case svString :
             {
-                Pop();
-                if ( bTextAsZero )
-                {
-                    if ( nMax < 0.0 )
-                        nMax = 0.0;
-                }
-                else
-                    SetError(FormulaError::IllegalParameter);
+                // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
+                nVal = ConvertStringToValue( PopString().getString() );
+                if ( nGlobalError == FormulaError::NONE && nMax < nVal )
+                    nMax = nVal;
+                nFuncFmtType = SvNumFormatType::NUMBER;
             }
             break;
             default :
@@ -4420,13 +4414,10 @@ void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double
             break;
             case svString :
             {
-                Pop();
-                if ( bTextAsZero )
-                {
-                    values.push_back(0.0);
-                }
-                else
-                    SetError(FormulaError::IllegalParameter);
+                // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
+                const double fVal = ConvertStringToValue( PopString().getString() );
+                if ( nGlobalError == FormulaError::NONE )
+                    values.push_back(fVal);
             }
             break;
             default :
@@ -7647,9 +7638,7 @@ void ScInterpreter::ScLookup()
     rEntry.bDoQuery = true;
     rEntry.eOp = SC_LESS_EQUAL;
     rEntry.nField = nCol1;
-    ScQueryEntry::Item& rItem = rEntry.GetQueryItem();
-    if (rItem.meType == ScQueryEntry::ByString)
-        aParam.eSearchType = DetectSearchType(rItem.maString.getString(), mrDoc);
+    // weboffice: Excel applies wildcards only to an exact-match lookup (LOOKUP never is)
 
     ScQueryCellIteratorDirect aCellIter(mrDoc, mrContext, nTab1, aParam, false, false);
     SCCOL nC;
@@ -7890,7 +7879,9 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     svl::SharedString aParamStr;
     if (rItem.meType == ScQueryEntry::ByString)
     {
-        aParam.eSearchType = DetectSearchType(rItem.maString.getString(), mrDoc);
+        // weboffice: Excel applies wildcards only to an exact-match lookup
+        if (!bSorted)
+            aParam.eSearchType = DetectSearchType(rItem.maString.getString(), mrDoc);
         aParamStr = rItem.maString;
     }
 
@@ -12886,7 +12877,11 @@ void ScInterpreter::ScCurrency()
         }
     }
     else
-        fDec = 2.0;
+    {
+        // weboffice: like Excel, the default is the decimals of the locale currency (KRW 0, USD 2)
+        fDec = mrContext.NFGetFormatPrecision( mrContext.NFGetStandardFormat(
+                                    SvNumFormatType::CURRENCY, ScGlobal::eLnge) );
+    }
     double fVal = GetDouble();
     double fFac;
     if ( fDec != 0.0 )
@@ -14325,7 +14320,9 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
     {
         rItem.meType   = ScQueryEntry::ByString;
         rItem.maString = vsa.sSearchStr;
-        if ( vsa.nSearchOpCode == ocMatch )
+        if ( vsa.nSearchOpCode == ocMatch && rEntry.eOp != SC_EQUAL )
+            rParam.eSearchType = utl::SearchParam::SearchType::Normal; // weboffice: Excel applies wildcards only to an exact-match lookup
+        else if ( vsa.nSearchOpCode == ocMatch )
         {
             if ( mrDoc.IsInVBAMode() )
                 rParam.eSearchType = utl::SearchParam::SearchType::Wildcard;

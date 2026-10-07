@@ -541,7 +541,7 @@ void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                 }
                 else
                 {
-                    Pop();
+                    const OUString aStrArg = PopString().getString();
                     switch ( eFunc )
                     {
                         case ifAVERAGE:
@@ -549,17 +549,30 @@ void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         case ifSUMSQ:
                         case ifPRODUCT:
                         {
-                            if ( bTextAsZero )
-                            {
-                                nCount++;
-                                if ( eFunc == ifPRODUCT )
-                                    fRes = 0.0;
-                            }
-                            else
+                            // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
+                            // ("1" -> 1, "abc" -> #VALUE!), also in the A variants.
+                            const FormulaError nErr = nGlobalError;
+                            nGlobalError = FormulaError::NONE;
+                            fVal = ConvertStringToValue( aStrArg );
+                            if ( nGlobalError != FormulaError::NONE )
                             {
                                 while (nParamCount-- > 0)
                                     PopError();
                                 SetError( FormulaError::NoValue );
+                            }
+                            else
+                            {
+                                nGlobalError = nErr;
+                                nCount++;
+                                switch( eFunc )
+                                {
+                                    case ifAVERAGE:
+                                    case ifSUM:     fRes += fVal; break;
+                                    case ifSUMSQ:   fRes += fVal * fVal; break;
+                                    case ifPRODUCT: fRes *= fVal; break;
+                                    default: ;
+                                }
+                                nFuncFmtType = SvNumFormatType::NUMBER;
                             }
                         }
                         break;

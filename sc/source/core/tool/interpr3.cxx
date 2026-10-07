@@ -1166,7 +1166,7 @@ void ScInterpreter::ScFact()
 {
     double nVal = GetDouble();
     if (nVal < 0.0)
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
     else
         PushDouble(Fakultaet(nVal));
 }
@@ -1178,7 +1178,7 @@ void ScInterpreter::ScCombin()
         double k = ::rtl::math::approxFloor(GetDouble());
         double n = ::rtl::math::approxFloor(GetDouble());
         if (k < 0.0 || n < 0.0 || k > n)
-            PushIllegalArgument();
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
         else
             PushDouble(BinomCoeff(n, k));
     }
@@ -1191,7 +1191,7 @@ void ScInterpreter::ScCombinA()
         double k = ::rtl::math::approxFloor(GetDouble());
         double n = ::rtl::math::approxFloor(GetDouble());
         if (k < 0.0 || n < 0.0 || k > n)
-            PushIllegalArgument();
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
         else
             PushDouble(BinomCoeff(n + k - 1, k));
     }
@@ -3465,7 +3465,7 @@ void ScInterpreter::ScPercentile( bool bInclusive )
     double alpha = GetDouble();
     if ( bInclusive ? ( alpha < 0.0 || alpha > 1.0 ) : ( alpha <= 0.0 || alpha >= 1.0 ) )
     {
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
         return;
     }
     std::vector<double> aArray;
@@ -3488,7 +3488,7 @@ void ScInterpreter::ScQuartile( bool bInclusive )
     double fFlag = ::rtl::math::approxFloor(GetDouble());
     if ( bInclusive ? ( fFlag < 0.0 || fFlag > 4.0 ) : ( fFlag <= 0.0 || fFlag >= 4.0 ) )
     {
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
         return;
     }
     std::vector<double> aArray;
@@ -4126,6 +4126,14 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
                         }
                     }
                 }
+            }
+            break;
+            case svString :
+            {
+                // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
+                const double fVal = ConvertStringToValue( PopString().getString() );
+                if ( nGlobalError == FormulaError::NONE )
+                    rArray.push_back( fVal );
             }
             break;
             default :

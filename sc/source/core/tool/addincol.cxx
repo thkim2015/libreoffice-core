@@ -1537,7 +1537,7 @@ void ScUnoAddInCall::ExecuteCallWithArgs(uno::Sequence<uno::Any>& rCallArgs)
     {
         if ( rWrapped.TargetException.getValueType().equals(
                 cppu::UnoType<lang::IllegalArgumentException>::get()) )
-            nErrCode = FormulaError::IllegalArgument;
+            nErrCode = FormulaError::IllegalFPOperation; // weboffice: #NUM! like Excel
         else if ( rWrapped.TargetException.getValueType().equals(
                 cppu::UnoType<sheet::NoConvergenceException>::get()) )
             nErrCode = FormulaError::NoConvergence;

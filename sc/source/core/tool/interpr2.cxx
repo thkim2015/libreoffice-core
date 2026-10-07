@@ -1315,7 +1315,7 @@ void ScInterpreter::ScLog()
     if (fVal > 0.0 && fBase > 0.0 && fBase != 1.0)
         PushDouble(log(fVal) / log(fBase));
     else
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
 }
 
 void ScInterpreter::ScLn()
@@ -1324,7 +1324,7 @@ void ScInterpreter::ScLn()
     if (fVal > 0.0)
         PushDouble(log(fVal));
     else
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
 }
 
 void ScInterpreter::ScLog10()
@@ -1333,7 +1333,7 @@ void ScInterpreter::ScLog10()
     if (fVal > 0.0)
         PushDouble(log10(fVal));
     else
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
 }
 
 void ScInterpreter::ScNPV()

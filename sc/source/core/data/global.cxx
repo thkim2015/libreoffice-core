@@ -339,6 +339,18 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
             return ScCompiler::GetNativeSymbol(ocErrNum);
         case FormulaError::Spill:
             return ScCompiler::GetNativeSymbol(ocErrSpill);
+        // weboffice: Excel has no "Err:nnn"; show the Excel error these are saved as in .xlsx
+        case FormulaError::NoConvergence:
+            return ScCompiler::GetNativeSymbol(ocErrNum);
+        case FormulaError::IllegalArgument:
+        case FormulaError::IllegalParameter:
+        case FormulaError::PairExpected:
+        case FormulaError::OperatorExpected:
+        case FormulaError::VariableExpected:
+        case FormulaError::ParameterExpected:
+        case FormulaError::CircularReference:
+        case FormulaError::UnknownToken:
+            return ScCompiler::GetNativeSymbol(ocErrValue);
         default:
             return ScResId(STR_ERROR_STR) + OUString::number( static_cast<int>(nErr) );
     }

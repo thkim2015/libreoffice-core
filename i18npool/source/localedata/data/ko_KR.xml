@@ -92,22 +92,22 @@
       <FormatCode>0.00%</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey1" default="false" type="medium" usage="CURRENCY" formatindex="12">
-      <FormatCode>[$￦-412]#,##0;-[$￦-412]#,##0</FormatCode>
+      <FormatCode>[$₩-412]#,##0;-[$₩-412]#,##0</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey2" default="false" type="medium" usage="CURRENCY" formatindex="13">
-      <FormatCode>[$￦-412]#,##0.00;-[$￦-412]#,##0.00</FormatCode>
+      <FormatCode>[$₩-412]#,##0.00;-[$₩-412]#,##0.00</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey3" default="true" type="medium" usage="CURRENCY" formatindex="14">
-      <FormatCode>[$￦-412]#,##0;[RED]-[$￦-412]#,##0</FormatCode>
+      <FormatCode>[$₩-412]#,##0;[RED]-[$₩-412]#,##0</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey4" default="false" type="medium" usage="CURRENCY" formatindex="15">
-      <FormatCode>[$￦-412]#,##0.00;[RED]-[$￦-412]#,##0.00</FormatCode>
+      <FormatCode>[$₩-412]#,##0.00;[RED]-[$₩-412]#,##0.00</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey5" default="false" type="medium" usage="CURRENCY" formatindex="16">
       <FormatCode>#,##0.00 CCC</FormatCode>
     </FormatElement>
     <FormatElement msgid="CurrencyFormatskey6" default="false" type="medium" usage="CURRENCY" formatindex="17">
-      <FormatCode>[$￦-412]#,##0.--;[RED]-[$￦-412]#,##0.--</FormatCode>
+      <FormatCode>[$₩-412]#,##0.--;[RED]-[$₩-412]#,##0.--</FormatCode>
     </FormatElement>
     <FormatElement msgid="DateFormatskey1" default="false" type="medium" usage="DATE" formatindex="18">
       <FormatCode>YY"년" M"월" D"일"</FormatCode>
@@ -700,7 +700,7 @@
   <LC_CURRENCY>
     <Currency default="true" usedInCompatibleFormatCodes="true">
       <CurrencyID>KRW</CurrencyID>
-      <CurrencySymbol>￦</CurrencySymbol>
+      <CurrencySymbol>₩</CurrencySymbol>
       <BankSymbol>KRW</BankSymbol>
       <CurrencyName>대한민국 원</CurrencyName>
       <DecimalPlaces>0</DecimalPlaces>
@@ -729,12 +729,12 @@
   <LC_MISC>
     <ForbiddenCharacters>
       <ForbiddenLineBeginCharacters>!%),.:;?]}¢￠'"′″℃&gt;〉＞》」』】〕！％），．：；？］｝｡｣､･ ﾞﾟ、。’”°</ForbiddenLineBeginCharacters>
-      <ForbiddenLineEndCharacters>$(¥£[\{￡￥'"&lt;＜《「『【〔＄（［｛₩￦｢‘“〈</ForbiddenLineEndCharacters>
+      <ForbiddenLineEndCharacters>$(¥£[\{￡￥'"&lt;＜《「『【〔＄（［｛₩₩｢‘“〈</ForbiddenLineEndCharacters>
       <LineBreakHangingCharacters>!,.:;?、。！，．：；？</LineBreakHangingCharacters>
     </ForbiddenCharacters>
     <ReservedWords>
-      <trueWord>참</trueWord>
-      <falseWord>거짓</falseWord>
+      <trueWord>TRUE</trueWord>
+      <falseWord>FALSE</falseWord>
       <quarter1Word>1</quarter1Word>
       <quarter2Word>2</quarter2Word>
       <quarter3Word>3</quarter3Word>
