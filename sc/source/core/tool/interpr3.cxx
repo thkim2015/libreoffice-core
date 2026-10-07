@@ -3396,6 +3396,11 @@ void ScInterpreter::ScMedian()
         return;
     std::vector<double> aArray;
     GetNumberSequenceArray( nParamCount, aArray, false );
+    if (aArray.empty() && nGlobalError == FormulaError::NONE)
+    {
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+        return;
+    }
     PushDouble( GetMedian( aArray));
 }
 
@@ -3470,7 +3475,12 @@ void ScInterpreter::ScPercentile( bool bInclusive )
     }
     std::vector<double> aArray;
     GetNumberSequenceArray( 1, aArray, false );
-    if ( aArray.empty() || nGlobalError != FormulaError::NONE )
+    if ( aArray.empty() && nGlobalError == FormulaError::NONE )
+    {
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+        return;
+    }
+    if ( nGlobalError != FormulaError::NONE )
     {
         PushNoValue();
         return;
@@ -3493,7 +3503,12 @@ void ScInterpreter::ScQuartile( bool bInclusive )
     }
     std::vector<double> aArray;
     GetNumberSequenceArray( 1, aArray, false );
-    if ( aArray.empty() || nGlobalError != FormulaError::NONE )
+    if ( aArray.empty() && nGlobalError == FormulaError::NONE )
+    {
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+        return;
+    }
+    if ( nGlobalError != FormulaError::NONE )
     {
         PushNoValue();
         return;
@@ -3512,8 +3527,10 @@ void ScInterpreter::ScModalValue()
     std::vector<double> aSortArray;
     GetSortArray( nParamCount, aSortArray, nullptr, false, false );
     SCSIZE nSize = aSortArray.size();
-    if (nSize == 0 || nGlobalError != FormulaError::NONE)
-        PushNoValue();
+    if (nGlobalError != FormulaError::NONE)
+        PushError( nGlobalError );
+    else if (nSize == 0)
+        PushNA(); // weboffice: #N/A like Excel
     else
     {
         SCSIZE nMaxIndex = 0, nMax = 1, nCount = 1;
@@ -3540,7 +3557,7 @@ void ScInterpreter::ScModalValue()
             nMaxIndex = i-1;
         }
         if (nMax == 1 && nCount == 1)
-            PushNoValue();
+            PushNA(); // weboffice: no value repeats -> #N/A like Excel
         else if (nMax == 1)
             PushDouble(nOldVal);
         else
@@ -3663,8 +3680,10 @@ void ScInterpreter::CalculateSmallLarge(bool bSmall)
     std::vector<double> aSortArray;
     GetNumberSequenceArray(1, aSortArray, false );
     const SCSIZE nSize = aSortArray.size();
-    if (nSize == 0 || nGlobalError != FormulaError::NONE)
-        PushNoValue();
+    if (nGlobalError != FormulaError::NONE)
+        PushError( nGlobalError );
+    else if (nSize == 0)
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
     else if (nRankArraySize == 1)
     {
         const SCSIZE k = aRankArray[0];
@@ -3673,7 +3692,7 @@ void ScInterpreter::CalculateSmallLarge(bool bSmall)
             if (!std::isfinite(aArray[0]))
                 PushDouble(aArray[0]);  // propagates error
             else
-                PushNoValue();
+                PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         }
         else
         {

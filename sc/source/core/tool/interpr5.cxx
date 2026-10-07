@@ -2403,13 +2403,31 @@ void ScInterpreter::CalculateSumX2MY2SumX2DY2(bool _bSumX2DY2)
     SCSIZE nR1, nR2;
     pMat2->GetDimensions(nC2, nR2);
     pMat1->GetDimensions(nC1, nR1);
-    if (nC1 != nC2 || nR1 != nR2)
+    if (nC1 * nR1 != nC2 * nR2)
     {
-        PushNoValue();
+        PushNA(); // weboffice: #N/A like Excel
         return;
     }
     double fVal;
     KahanSum fSum = 0.0;
+    if (nC1 != nC2 || nR1 != nR2)
+    {
+        // weboffice: same number of values in another shape -> pair them in order like Excel
+        const SCSIZE nCount = nC1 * nR1;
+        for (SCSIZE k = 0; k < nCount; ++k)
+            if (pMat1->IsValue(k) && pMat2->IsValue(k))
+            {
+                fVal = pMat1->GetDouble(k);
+                fSum += fVal * fVal;
+                fVal = pMat2->GetDouble(k);
+                if ( _bSumX2DY2 )
+                    fSum += fVal * fVal;
+                else
+                    fSum -= fVal * fVal;
+            }
+        PushDouble(fSum.get());
+        return;
+    }
     for (i = 0; i < nC1; i++)
         for (j = 0; j < nR1; j++)
             if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
@@ -2448,7 +2466,7 @@ void ScInterpreter::ScSumXMY2()
     pMat1->GetDimensions(nC1, nR1);
     if (nC1 != nC2 || nR1 != nR2)
     {
-        PushNoValue();
+        PushNA(); // weboffice: #N/A like Excel
         return;
     } // if (nC1 != nC2 || nR1 != nR2)
     ScMatrixRef pResMat = lcl_MatrixCalculation( *pMat1, *pMat2, this, MatrixSub);

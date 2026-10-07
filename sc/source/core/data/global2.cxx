@@ -391,7 +391,9 @@ double ScGlobal::ConvertStringToValue( const OUString& rStr, const ScCalcConfig&
                 }
 
                 sal_uInt32 nFIndex = 0;
-                if (!rContext.NFIsNumberFormat(rStr, nFIndex, fValue))
+                // weboffice: like Excel, the text "TRUE"/"FALSE" is not a number (#VALUE!)
+                if (!rContext.NFIsNumberFormat(rStr, nFIndex, fValue)
+                    || rContext.NFGetType(nFIndex) == SvNumFormatType::LOGICAL)
                 {
                     rError = nStringNoValueError;
                     fValue = 0.0;

@@ -7831,9 +7831,14 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
         return;
     }
 
-    if ( fIndex < 0.0 || (bHLookup ? (pMat ? (fIndex >= nR) : (fIndex+nRow1 > nRow2)) : (pMat ? (fIndex >= nC) : (fIndex+nCol1 > nCol2)) ) )
+    if ( fIndex < 0.0 )
     {
         PushIllegalArgument();
+        return;
+    }
+    if ( bHLookup ? (pMat ? (fIndex >= nR) : (fIndex+nRow1 > nRow2)) : (pMat ? (fIndex >= nC) : (fIndex+nCol1 > nCol2)) )
+    {
+        PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
         return;
     }
 
