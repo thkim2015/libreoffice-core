@@ -2859,7 +2859,7 @@ void ScInterpreter::ScDde()
             PushIllegalArgument();
     }
     else
-        PushNA();
+        PushError( FormulaError::NoRef ); // weboffice: a DDE link without data is #REF! in Excel
 
     mrDoc.EnableIdle(bOldEnabled);
     mpLinkManager->CloseCachedComps();

@@ -18,6 +18,7 @@
  */
 
 #include <xetable.hxx>
+#include <formula/tokenarray.hxx>
 
 #include <map>
 #include <numeric>
@@ -939,6 +940,26 @@ void XclExpFormulaCell::Save( XclExpStream& rStrm )
         mxStringRec->Save( rStrm );
 }
 
+// weboffice: true when a function in the formula has fewer or more arguments than Excel allows
+// (Calc accepts e.g. ABS() or ROUND(x); Excel cannot load a file containing such a formula).
+static bool lcl_HasExcelInvalidParamCount( const ScTokenArray& rCode, const XclExpRoot& rRoot )
+{
+    static const XclFunctionProvider aFuncProv( rRoot );
+    formula::FormulaTokenArrayPlainIterator aIter( rCode );
+    for (const formula::FormulaToken* pToken = aIter.FirstRPN(); pToken; pToken = aIter.NextRPN())
+    {
+        if (pToken->GetType() != formula::svByte)
+            continue;
+        const XclFunctionInfo* pInfo = aFuncProv.GetFuncInfoFromOpCode( pToken->GetOpCode() );
+        if (!pInfo || pInfo->mnXclFunc == EXC_FUNCID_EXTERNCALL)
+            continue;
+        const sal_uInt8 nParams = static_cast<const formula::FormulaByteToken*>(pToken)->GetByte();
+        if (nParams < pInfo->mnMinParamCount || nParams > pInfo->mnMaxParamCount)
+            return true;
+    }
+    return false;
+}
+
 void XclExpFormulaCell::SaveXml( XclExpXmlStream& rStrm )
 {
     const char* sType = nullptr;
@@ -963,6 +984,12 @@ void XclExpFormulaCell::SaveXml( XclExpXmlStream& rStrm )
 
     bool bWriteFormula = true;
     bool bTagStarted = false;
+    // weboffice: a formula Calc could not compile (e.g. ABS() without its argument) is not valid
+    // Excel syntax, and Excel refuses to open the whole file (even with repair). Keep only the
+    // cached error value; Excel shows it like Calc does.
+    if (const ScTokenArray* pCode = mrScFmlaCell.GetCode();
+        pCode && (pCode->GetCodeError() != FormulaError::NONE || lcl_HasExcelInvalidParamCount(*pCode, rStrm.GetRoot())))
+        bWriteFormula = false;
     ScAddress aScPos( static_cast< SCCOL >( GetXclPos().mnCol ),
             static_cast< SCROW >( GetXclPos().mnRow ), rStrm.GetRoot().GetCurrScTab() );
 
