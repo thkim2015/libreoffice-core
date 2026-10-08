@@ -454,7 +454,8 @@ OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageTy
         {
             // Excel writes the date separator as '/', shown as the system one (ko-KR '-');
             // en-US would show '/', so write the locale's separator as a literal
-            const OUString aSep = ScGlobal::getLocaleData().getDateSep();
+            const LocaleDataWrapper* pLD = LocaleDataWrapper::get( LanguageTag( MsLangId::getRealLanguage( eLang ) ) );
+            const OUString aSep = pLD ? pLD->getDateSep() : u"-"_ustr;
             for (sal_Int32 k = 0; k < aSep.getLength(); ++k)
                 aBuf.append(OUStringChar('\\') + OUStringChar(aSep[k]));
         }
