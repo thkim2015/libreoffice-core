@@ -1866,7 +1866,7 @@ void ScInterpreter::ScVDB()
         return;
 
     KahanSum fVdb = 0.0;
-    // weboffice: empty factor / no_switch take their defaults like Excel
+    // weboffice: like Excel, an empty no_switch is FALSE and factor 0 is allowed
     bool bNoSwitch = false;
     if (nParamCount == 7)
     {
@@ -1875,14 +1875,14 @@ void ScInterpreter::ScVDB()
         else
             bNoSwitch = GetBool();
     }
-    double  fFactor = nParamCount >= 6 ? GetDoubleWithDefault( 2.0 ) : 2.0;
+    double  fFactor = nParamCount >= 6 ? GetDouble() : 2.0; // empty = 0 like Excel (straight-line)
     double fEnd   = GetDouble();
     double fStart = GetDouble();
     double fLife  = GetDouble();
     double fSalvage   = GetDouble();
     double fCost   = GetDouble();
     if (fStart < 0.0 || fEnd < fStart || fEnd > fLife || fCost < 0.0
-                      || fSalvage > fCost || fFactor <= 0.0)
+                      || fSalvage > fCost || fFactor < 0.0)
         PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM!
     else
     {
