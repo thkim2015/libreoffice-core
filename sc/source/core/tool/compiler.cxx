@@ -5463,6 +5463,24 @@ std::unique_ptr<ScTokenArray> ScCompiler::CompileString( const OUString& rFormul
                 ++pFunctionStack[ nFunction ].nSep;
             }
         }
+        // weboffice: like Excel, a structured reference without a table name ([Income], written by
+        // ClosedXML in a totals row) refers to the table the formula is in
+        if (maRawToken.GetOpCode() == ocTableRefOpen && meLastOp != ocDBArea
+            && (maTableRefs.empty() || maTableRefs.back().mnLevel == 0))
+        {
+            const ScDBData* pDB = rDoc.GetDBAtCursor(aPos.Col(), aPos.Row(), aPos.Tab(), ScDBDataPortion::AREA);
+            if (pDB && rDoc.GetDBCollection()
+                && rDoc.GetDBCollection()->getNamedDBs().findByIndex(pDB->GetIndex()) == pDB)
+            {
+                ScTableRefToken* pTableRefToken = new ScTableRefToken( pDB->GetIndex(), ScTableRefToken::TABLE);
+                if (!static_cast<ScTokenArray*>(mpArr)->Add( pTableRefToken))
+                {
+                    SetError(FormulaError::CodeOverflow);
+                    break;
+                }
+                maTableRefs.emplace_back( pTableRefToken);
+            }
+        }
         FormulaToken* pNewToken = static_cast<ScTokenArray*>(mpArr)->Add( maRawToken.CreateToken(rDoc.GetSheetLimits()));
         // A lambda parameter written with the _xlop. prefix is optional. Its
         // byte records that, keeping an optional parameter distinct from a

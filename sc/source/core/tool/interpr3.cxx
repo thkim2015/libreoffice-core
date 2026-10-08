@@ -2508,6 +2508,7 @@ void ScInterpreter::ScZTest()
                 FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParam, nRefInList);
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(fVal, nErr))
                 {
                     fSum += fVal;
@@ -2950,6 +2951,7 @@ void ScInterpreter::ScHarMean()
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nCellVal, nErr))
                 {
                     if (nCellVal > 0.0)
@@ -3088,6 +3090,7 @@ void ScInterpreter::ScGeoMean()
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 double nCellVal;
                 ScValueIterator aValIter(mrContext, aRange, mnSubTotalFlags);
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nCellVal, nErr))
                 {
                     if (nCellVal > 0.0)
@@ -3253,6 +3256,7 @@ bool ScInterpreter::CalculateSkew(KahanSum& fSum, double& fCount, std::vector<do
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 FormulaError nErr = FormulaError::NONE;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(fVal, nErr))
                 {
                     fSum += fVal;
@@ -3884,6 +3888,7 @@ std::vector<double> ScInterpreter::GetRankNumberArray( SCSIZE& rCol, SCSIZE& rRo
             FormulaError nErr = FormulaError::NONE;
             double fCellVal;
             ScValueIterator aValIter(mrContext, aRange, mnSubTotalFlags);
+            aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
             if (aValIter.GetFirst(fCellVal, nErr))
             {
                 do
@@ -3982,6 +3987,7 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
                 FormulaError nErr = FormulaError::NONE;
                 double fCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst( fCellVal, nErr))
                 {
                     if (bIgnoreErrVal)
@@ -4775,6 +4781,7 @@ void ScInterpreter::ScAveDev()
                 double nCellVal;
                 PopDoubleRef( aRange, nParam, nRefInList);
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nCellVal, nErr))
                 {
                     rVal += nCellVal;
@@ -4854,6 +4861,7 @@ void ScInterpreter::ScAveDev()
                 double nCellVal;
                 PopDoubleRef( aRange, nParam, nRefInList);
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nCellVal, nErr))
                 {
                     rVal += std::abs(nCellVal - nMiddle);

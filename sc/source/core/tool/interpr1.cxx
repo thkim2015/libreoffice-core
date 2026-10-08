@@ -853,6 +853,7 @@ double ScInterpreter::Compare( ScQueryOp eOp )
     sc::Compare aComp;
     aComp.meOp = eOp;
     aComp.mbIgnoreCase = mrDoc.GetDocOptions().IsIgnoreCase();
+    bool aLogical[2] = { false, false }; // weboffice: TRUE/FALSE operands
     for( short i = 1; i >= 0; i-- )
     {
         sc::Compare::Cell& rCell = aComp.maCells[i];
@@ -865,6 +866,9 @@ double ScInterpreter::Compare( ScQueryOp eOp )
                 break;
             case svMissing:
             case svDouble:
+                aLogical[i] = pStack[sp - 1]->GetType() == svDouble
+                    && static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                           == static_cast<sal_Int16>(SvNumFormatType::LOGICAL);
                 rCell.mfValue = GetDouble();
                 rCell.mbValue = true;
                 break;
@@ -890,6 +894,7 @@ double ScInterpreter::Compare( ScQueryOp eOp )
                 }
                 else
                 {
+                    aLogical[i] = IsLogicalCell(aAdr, aCell);
                     rCell.mfValue = GetCellValue(aAdr, aCell);
                     rCell.mbValue = true;
                 }
@@ -942,6 +947,10 @@ double ScInterpreter::Compare( ScQueryOp eOp )
     if( nGlobalError != FormulaError::NONE )
         return 0;
     nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
+    // weboffice: Excel orders the types number < text < TRUE/FALSE, so a logical value never
+    // equals a number (FALSE=0 is FALSE) and is greater than any text (FALSE>"TRUE")
+    if (aLogical[0] != aLogical[1] && !aComp.maCells[0].mbEmpty && !aComp.maCells[1].mbEmpty)
+        return aLogical[0] ? 1.0 : -1.0;
     return sc::CompareFunc(aComp);
 }
 
@@ -2895,8 +2904,10 @@ void ScInterpreter::ScIsValue()
     switch ( GetRawStackType() )
     {
         case svDouble:
+            // weboffice: ISNUMBER(TRUE) is FALSE in Excel
+            bRes = static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                   != static_cast<sal_Int16>(SvNumFormatType::LOGICAL);
             Pop();
-            bRes = true;
         break;
         case svDoubleRef :
         case svSingleRef :
@@ -2911,10 +2922,11 @@ void ScInterpreter::ScIsValue()
                 switch (aCell.getType())
                 {
                     case CELLTYPE_VALUE :
-                        bRes = true;
+                        bRes = !IsLogicalCell(aAdr, aCell); // weboffice: a TRUE/FALSE cell is no number
                         break;
                     case CELLTYPE_FORMULA :
-                        bRes = (aCell.getFormula()->IsValue() && !aCell.getFormula()->IsEmpty());
+                        bRes = (aCell.getFormula()->IsValue() && !aCell.getFormula()->IsEmpty()
+                                && !IsLogicalCell(aAdr, aCell));
                         break;
                     default:
                         ; // nothing
@@ -4011,6 +4023,7 @@ void ScInterpreter::ScMin( bool bTextAsZero )
                 FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags, bTextAsZero );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nVal, nErr))
                 {
                     if (nMin > nVal)
@@ -4165,6 +4178,7 @@ void ScInterpreter::ScMax( bool bTextAsZero )
                 FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags, bTextAsZero );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nVal, nErr))
                 {
                     if (nMax < nVal)
@@ -4338,6 +4352,7 @@ void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double
                     FormulaError nErr = FormulaError::NONE;
                     PopDoubleRef( aRange, nParamCount, nRefInList);
                     ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags, bTextAsZero );
+                    aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                     if (aValIter.GetFirst(fVal, nErr))
                     {
                         do
@@ -4363,6 +4378,7 @@ void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double
                 FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags, bTextAsZero );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(fVal, nErr))
                 {
                     do
@@ -4587,6 +4603,11 @@ void ScInterpreter::ScColumns()
                     static_cast<sal_uLong>(aAbs.aEnd.Col() - aAbs.aStart.Col() + 1);
             }
             break;
+            case svDouble:
+            case svString:
+                Pop(); // weboffice: COLUMNS(PI()) is 1 in Excel
+                nVal++;
+            break;
             default:
                 PopError();
                 SetError(FormulaError::IllegalParameter);
@@ -4643,6 +4664,11 @@ void ScInterpreter::ScRows()
                 nVal += static_cast<sal_uLong>(aAbs.aEnd.Tab() - aAbs.aStart.Tab() + 1) *
                     static_cast<sal_uLong>(aAbs.aEnd.Row() - aAbs.aStart.Row() + 1);
             }
+            break;
+            case svDouble:
+            case svString:
+                Pop(); // weboffice: ROWS(5) is 1 in Excel
+                nVal++;
             break;
             default:
                 PopError();
@@ -6095,6 +6121,7 @@ void ScInterpreter::ScCountIf()
     svl::SharedString aString;
     double fVal = 0.0;
     bool bIsString = true;
+    bool bLogicalCrit = false; // weboffice: TRUE/FALSE criterion
     switch ( GetStackType() )
     {
         case svDoubleRef :
@@ -6107,6 +6134,7 @@ void ScInterpreter::ScCountIf()
                 return ;
             }
             ScRefCellValue aCell(mrDoc, aAdr);
+            bLogicalCrit = IsLogicalCell(aAdr, aCell);
             switch (aCell.getType())
             {
                 case CELLTYPE_VALUE :
@@ -6145,6 +6173,9 @@ void ScInterpreter::ScCountIf()
         break;
         default:
         {
+            bLogicalCrit = GetRawStackType() == svDouble
+                && static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                       == static_cast<sal_Int16>(SvNumFormatType::LOGICAL);
             fVal = GetDouble();
             bIsString = false;
         }
@@ -6152,6 +6183,82 @@ void ScInterpreter::ScCountIf()
     double fCount = 0.0;
     short nParam = 1;
     const SCSIZE nMatRows = GetRefListArrayMaxSize( nParam);
+    // weboffice: like Excel, a TRUE/FALSE criterion (TRUE, "TRUE", "<>FALSE", "<TRUE", ...) only
+    // compares with TRUE/FALSE cells, not with the numbers 1 and 0; "<>" counts every other cell
+    {
+        int nLogicalOp = -1; // 0 =, 1 <>, 2 <, 3 <=, 4 >, 5 >=
+        bool bCrit = false;
+        if (bLogicalCrit && !bIsString)
+        {
+            nLogicalOp = 0;
+            bCrit = fVal != 0.0;
+        }
+        else if (bIsString)
+        {
+            OUString aCrit = aString.getString().trim();
+            static const std::pair<std::u16string_view, int> aOps[] = {
+                { u"<>", 1 }, { u"<=", 3 }, { u">=", 5 }, { u"<", 2 }, { u">", 4 }, { u"=", 0 } };
+            int nOp = 0;
+            for (const auto& [aSym, n] : aOps)
+                if (aCrit.startsWith(aSym))
+                {
+                    nOp = n;
+                    aCrit = aCrit.copy(aSym.size()).trim();
+                    break;
+                }
+            if (aCrit.equalsIgnoreAsciiCase(u"TRUE") || aCrit.equalsIgnoreAsciiCase(u"FALSE"))
+            {
+                nLogicalOp = nOp;
+                bCrit = aCrit.equalsIgnoreAsciiCase(u"TRUE");
+            }
+        }
+        if (nLogicalOp >= 0 && nMatRows == 0
+            && (GetStackType() == svDoubleRef || GetStackType() == svSingleRef))
+        {
+            ScRange aRange;
+            if (GetStackType() == svSingleRef)
+            {
+                ScAddress aAdr;
+                PopSingleRef(aAdr);
+                aRange = ScRange(aAdr);
+            }
+            else
+                PopDoubleRef(aRange);
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError(nGlobalError);
+                return;
+            }
+            double fEqual = 0.0, fMatch = 0.0;
+            ScCellIterator aIter(mrDoc, aRange);
+            for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+            {
+                ScRefCellValue aCell(aIter.getRefCellValue());
+                if (!(aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                    || !IsLogicalCell(aIter.GetPos(), aCell))
+                    continue;
+                const bool b = aCell.getValue() != 0.0;
+                if (b == bCrit)
+                    fEqual += 1.0;
+                switch (nLogicalOp)
+                {
+                    case 2: fMatch += (!b && bCrit) ? 1.0 : 0.0; break;
+                    case 3: fMatch += (!b || bCrit) ? 1.0 : 0.0; break;
+                    case 4: fMatch += (b && !bCrit) ? 1.0 : 0.0; break;
+                    case 5: fMatch += (b || !bCrit) ? 1.0 : 0.0; break;
+                    default: break;
+                }
+            }
+            if (nLogicalOp == 0)
+                fMatch = fEqual;
+            else if (nLogicalOp == 1)
+                fMatch = static_cast<double>(aRange.aEnd.Col() - aRange.aStart.Col() + 1)
+                    * (aRange.aEnd.Row() - aRange.aStart.Row() + 1)
+                    * (aRange.aEnd.Tab() - aRange.aStart.Tab() + 1) - fEqual;
+            PushDouble(fMatch);
+            return;
+        }
+    }
     // There's either one RefList and nothing else, or none.
     ScMatrixRef xResMat = (nMatRows ? GetNewMat( 1, nMatRows, /*bEmpty*/true ) : nullptr);
     SCSIZE nRefListArrayPos = 0;
@@ -7834,16 +7941,29 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
         return;
     }
 
+    // weboffice: like Excel, a bad column/row number is only an error when the value is found;
+    // a value that is not there stays #N/A. Look up with the first column and replace the result.
+    FormulaError eIndexError = FormulaError::NONE;
     if ( fIndex < 0.0 )
+        eIndexError = FormulaError::NoValue;
+    else if ( bHLookup ? (pMat ? (fIndex >= nR) : (fIndex+nRow1 > nRow2)) : (pMat ? (fIndex >= nC) : (fIndex+nCol1 > nCol2)) )
+        eIndexError = FormulaError::NoRef; // #REF! like Excel
+    if (eIndexError != FormulaError::NONE)
+        fIndex = 0.0;
+    struct IndexErrorGuard
     {
-        PushIllegalArgument();
-        return;
-    }
-    if ( bHLookup ? (pMat ? (fIndex >= nR) : (fIndex+nRow1 > nRow2)) : (pMat ? (fIndex >= nC) : (fIndex+nCol1 > nCol2)) )
-    {
-        PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
-        return;
-    }
+        ScInterpreter& mrInterp;
+        FormulaError meError;
+        ~IndexErrorGuard()
+        {
+            if (meError == FormulaError::NONE || mrInterp.sp == 0
+                || mrInterp.pStack[mrInterp.sp - 1]->GetType() == svError
+                || mrInterp.nGlobalError != FormulaError::NONE)
+                return;
+            mrInterp.Pop();
+            mrInterp.PushError(meError);
+        }
+    } aIndexErrorGuard{ *this, eIndexError };
 
     SCROW nZIndex = static_cast<SCROW>(fIndex);
     SCCOL nSpIndex = static_cast<SCCOL>(fIndex);
@@ -12395,9 +12515,16 @@ void ScInterpreter::ScAddressFunc()
                 sTabStr = sTabStr.copy( nPos+1);
             }
         }
+        else if (sTabStr[0] == '[' && sTabStr.indexOf(']') > 0)
+        {
+            // weboffice: Excel writes ADDRESS(2;3;3;1;"[Book1]Sheet1") as [Book1]Sheet1!$C2
+            const sal_Int32 nEnd = sTabStr.indexOf(']');
+            aDoc = sTabStr.copy( 0, nEnd + 1);
+            sTabStr = sTabStr.copy( nEnd + 1);
+        }
         /* TODO: yet unsupported external reference in CONV_XL_R1C1 syntax may
          * need some extra handling to isolate Tab from Doc. */
-        if (sTabStr[0] != '\'' || !sTabStr.endsWith("'"))
+        if (!sTabStr.isEmpty() && (sTabStr[0] != '\'' || !sTabStr.endsWith("'")))
             ScCompiler::CheckTabQuotes( sTabStr, eConv);
         if (!aDoc.isEmpty())
             sTabStr = aDoc + sTabStr;
@@ -13641,6 +13768,22 @@ void ScInterpreter::ScText()
         default:
             {
                 FormulaConstTokenRef xTok( PopToken());
+                ScAddress aLogicalAdr;
+                if (nGlobalError == FormulaError::NONE && xTok->GetType() == svSingleRef)
+                {
+                    // weboffice: a TRUE/FALSE cell is text for TEXT() in Excel
+                    PushTokenRef( xTok);
+                    PopSingleRef( aLogicalAdr );
+                    ScRefCellValue aLogicalCell(mrDoc, aLogicalAdr);
+                    if (nGlobalError == FormulaError::NONE && IsLogicalCell(aLogicalAdr, aLogicalCell))
+                    {
+                        PushTokenRef( xTok);
+                        aStr = GetString();
+                        bString = true;
+                        break;
+                    }
+                    nGlobalError = FormulaError::NONE;
+                }
                 if (nGlobalError == FormulaError::NONE)
                 {
                     PushTokenRef( xTok);
@@ -13687,14 +13830,17 @@ void ScInterpreter::ScText()
         else
             eCellLang = ScGlobal::eLnge;
         // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
-        sFormatString = ScGlobal::ExcelDefaultNamesFormatCode( sFormatString, eCellLang );
-        if (bString)
+        bool bInvalidCode = false;
+        sFormatString = ScGlobal::ExcelTextFunctionFormatCode( sFormatString, eCellLang, bInvalidCode );
+        if (bInvalidCode)
+            PushNoValue();
+        else if (bString)
         {
             if (!mrContext.NFGetPreviewString( sFormatString, aStr.getString(),
                         aResult, &pColor, eCellLang))
                 PushIllegalArgument();
             else
-                PushString( aResult);
+                PushString( aResult.replace(u'\u2007', ' ')); // weboffice: Excel pads ? with a space
         }
         else
         {
@@ -13702,7 +13848,7 @@ void ScInterpreter::ScText()
                         aResult, &pColor, eCellLang))
                 PushIllegalArgument();
             else
-                PushString( aResult);
+                PushString( aResult.replace(u'\u2007', ' ')); // weboffice: Excel pads ? with a space
         }
     }
 }
@@ -13762,6 +13908,8 @@ void ScInterpreter::ScRept()
     OUString aStr = GetString().getString();
     if (nCnt < 0)
         PushIllegalArgument();
+    else if (static_cast<double>(nCnt) * aStr.getLength() > 32767)
+        PushNoValue(); // weboffice: Excel's cell text limit
     else if (static_cast<double>(nCnt) * aStr.getLength() > kScInterpreterMaxStrLen)
     {
         PushError( FormulaError::StringOverflow );

@@ -406,10 +406,29 @@ sal_Int32 SAL_CALL AnalysisAddIn::getWeeknum( const uno::Reference< beans::XProp
     sal_uInt16  nDay, nMonth, nYear;
     DaysToDate( nDate, nDay, nMonth, nYear );
 
+    // weboffice: Excel's return types - 1 Sunday, 2 and 11 Monday, 12..17 Tuesday..Sunday,
+    // 21 ISO 8601; any other is #NUM!
+    sal_Int32 nStartDay; // 0 Monday .. 6 Sunday
+    if (nMode == 1)
+        nStartDay = 6;
+    else if (nMode == 2)
+        nStartDay = 0;
+    else if (nMode >= 11 && nMode <= 17)
+        nStartDay = nMode - 11;
+    else if (nMode == 21)
+    {
+        const sal_Int32 nThursday = nDate - GetDayOfWeek( nDate ) + 3;
+        sal_uInt16 nTD, nTM, nTY;
+        DaysToDate( nThursday, nTD, nTM, nTY );
+        return ( nThursday - DateToDays( 1, 1, nTY ) ) / 7 + 1;
+    }
+    else
+        throw lang::IllegalArgumentException();
+
     sal_Int32   nFirstInYear = DateToDays( 1, 1, nYear );
     sal_uInt16  nFirstDayInYear = GetDayOfWeek( nFirstInYear );
 
-    return ( nDate - nFirstInYear + ( ( nMode == 1 )? ( nFirstDayInYear + 1 ) % 7 : nFirstDayInYear ) ) / 7 + 1;
+    return ( nDate - nFirstInYear + ( nFirstDayInYear - nStartDay + 7 ) % 7 ) / 7 + 1;
 }
 
 sal_Int32 SAL_CALL AnalysisAddIn::getEomonth( const uno::Reference< beans::XPropertySet >& xOpt, sal_Int32 nDate, sal_Int32 nMonths )
@@ -542,6 +561,8 @@ double SAL_CALL AnalysisAddIn::getSeriessum( double fX, double fN, double fM, co
 
 double SAL_CALL AnalysisAddIn::getQuotient( double fNum, double fDenom )
 {
+    if (fDenom == 0.0)
+        throw lang::IllegalArgumentException(u"#DIV/0!"_ustr, {}, 0); // weboffice: like Excel
     double fRet;
     if( (fNum < 0) != (fDenom < 0) )
         fRet = ::rtl::math::approxCeil( fNum / fDenom );
@@ -1025,7 +1046,7 @@ OUString SAL_CALL AnalysisAddIn::getComplex( double fR, double fI, const uno::An
             auto   pSuff = o3tl::forceAccess<OUString>(rSuff);
             bi = *pSuff == "i" || pSuff->isEmpty();
             if( !bi && *pSuff != "j" )
-                throw lang::IllegalArgumentException();
+                throw lang::IllegalArgumentException(u"#VALUE!"_ustr, {}, 0); // weboffice: like Excel
             }
             break;
         default:

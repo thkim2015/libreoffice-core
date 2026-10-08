@@ -500,6 +500,10 @@ static double lcl_IterResult( ScIterFunc eFunc, double fRes, sal_uLong nCount )
     return fRes;
 }
 
+// weboffice: like Excel, SUM/COUNT skip TRUE/FALSE cells of a range; the fast span set
+// methods only see numbers, so the value iterator is used.
+static bool lcl_ExcelSkipsLogicalCells() { return true; }
+
 void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
 {
     short nParamCount = GetByte();
@@ -691,7 +695,9 @@ void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         if ( nGlobalError != FormulaError::NONE )
                             nGlobalError = FormulaError::NONE;
                     }
-                    else if (aCell.hasNumeric())
+                    else if (aCell.hasNumeric() && (bTextAsZero || !IsLogicalCell(aAdr, aCell))
+                             && !((mnSubTotalFlags & SubtotalFlags::IgnoreNestedStAg)
+                                  && aCell.getType() == CELLTYPE_FORMULA && aCell.getFormula()->IsSubTotal()))
                     {
                         fVal = GetCellValue(aAdr, aCell);
                         if (nGlobalError != FormulaError::NONE)
@@ -813,7 +819,7 @@ void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                         nGlobalError = FormulaError::NONE;
                 }
                 else if (((eFunc == ifSUM && !bCalcAsShown) || eFunc == ifCOUNT )
-                        && mnSubTotalFlags == SubtotalFlags::NONE)
+                        && mnSubTotalFlags == SubtotalFlags::NONE && !lcl_ExcelSkipsLogicalCells())
                 {
                     // Use fast span set array method.
                     // ifSUM with bCalcAsShown has to use the slow bells and
@@ -850,6 +856,7 @@ void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                 else
                 {
                     ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags, bTextAsZero );
+                    aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                     FormulaError nErr = FormulaError::NONE;
                     if (aValIter.GetFirst(fVal, nErr))
                     {

@@ -2804,7 +2804,9 @@ sal_Int32 ImpSvNumberformatScan::FinalScan( OUString& rString )
             case NF_KEY_AP:                         // A/P
                 bTimePart = true;
                 bExp = true;                        // Abuse for A/P
-                sStrArray[i] = sKeyword[nTypeArray[i]]; // tTtT -> TTTT
+                // weboffice: keep an all lower case am/pm, a/p - Excel shows the case written
+                if (sStrArray[i] != sKeyword[nTypeArray[i]].toAsciiLowerCase())
+                    sStrArray[i] = sKeyword[nTypeArray[i]]; // tTtT -> TTTT
                 nPos = nPos + sStrArray[i].getLength();
                 i++;
                 break;

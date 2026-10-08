@@ -2257,6 +2257,9 @@ input for the following reasons:
             double fDiff = DateTime::Sub( DateTime(maNullDate), pCal->getEpochStart());
             fDays = ::rtl::math::approxFloor( pCal->getLocalDateTime() );
             fDays -= fDiff;
+            // weboffice: Excel's 1900 date system (1900-01-01 is 1, 1900-02-28 is 59)
+            if (maNullDate == Date(30, 12, 1899) && fDays >= 1.0 && fDays <= 60.0)
+                fDays -= 1.0;
             nTryOrder = nFormatOrder; // break for
         }
         else

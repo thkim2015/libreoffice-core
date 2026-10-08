@@ -201,6 +201,16 @@ bool ScValueIterator::GetThis(double& rValue, FormulaError& rErr)
         {
             case sc::element_type_numeric:
             {
+                if (mbSkipLogical && !bTextAsZero)
+                {
+                    ScAttrArray_IterGetNumberFormat(nNumFormat, pAttrArray,
+                        nAttrEndRow, pCol->pAttrArray.get(), nCurRow, mrDoc, &mrContext);
+                    if (mrContext.NFGetType(nNumFormat) == SvNumFormatType::LOGICAL)
+                    {
+                        IncPos();
+                        break;
+                    }
+                }
                 bNumValid = false;
                 rValue = sc::numeric_block::at(*maCurPos.first->data, maCurPos.second);
                 rErr = FormulaError::NONE;
@@ -226,6 +236,12 @@ bool ScValueIterator::GetThis(double& rValue, FormulaError& rErr)
                 if (rCell.GetErrorOrValue(rErr, rValue))
                 {
                     if ( rErr != FormulaError::NONE && ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
+                    {
+                        IncPos();
+                        break;
+                    }
+                    if (mbSkipLogical && !bTextAsZero && rErr == FormulaError::NONE
+                        && rCell.GetFormatType() == SvNumFormatType::LOGICAL)
                     {
                         IncPos();
                         break;

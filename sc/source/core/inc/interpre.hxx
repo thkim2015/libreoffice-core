@@ -297,6 +297,8 @@ private:
     void PushParameterExpected();
     void PushIllegalParameter();
     void PushIllegalArgument();
+    /// weboffice: a TRUE/FALSE cell (BOOLEAN number format, or a formula with a logical result)
+    bool IsLogicalCell( const ScAddress& rPos, const ScRefCellValue& rCell );
     void PushNoValue();
     void PushNA();
 

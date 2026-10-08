@@ -322,6 +322,9 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
         // weboffice: Excel shows a missing add-in or macro function as #NAME?
         case FormulaError::NoAddin:
         case FormulaError::NoMacro:
+        // weboffice: a name Excel could not resolve (a VBA function, a name of a macro) came in
+        // as "operator expected"; Excel shows #NAME?
+        case FormulaError::OperatorExpected:
             return ScCompiler::GetNativeSymbol(ocErrName);
         // weboffice: calling a cell like a function (=D6()) is #REF! in Excel
         case FormulaError::NotAFunction:
@@ -349,7 +352,6 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
         case FormulaError::IllegalArgument:
         case FormulaError::IllegalParameter:
         case FormulaError::PairExpected:
-        case FormulaError::OperatorExpected:
         case FormulaError::VariableExpected:
         case FormulaError::ParameterExpected:
         case FormulaError::CircularReference:
@@ -362,10 +364,150 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
     return ScResId(pErrNumber);
 }
 
+static OUString lcl_ExcelDefaultNamesFormatCodeCJK(const OUString& rCode, LanguageType eLang);
+
+// weboffice: Excel reads y and yy as the 2-digit year and yyy or more as the 4-digit year;
+// Calc knew only YY and YYYY (and showed a lone y as a letter).
+static OUString lcl_ExcelYearTokens(const OUString& rCode)
+{
+    const sal_Int32 nLen = rCode.getLength();
+    if (rCode.indexOf('y') < 0 && rCode.indexOf('Y') < 0)
+        return rCode;
+    OUStringBuffer aBuf(nLen + 4);
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            const sal_Int32 nEnd = rCode.indexOf('"', i + 1);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if (c == '\\' && i + 1 < nLen)
+        {
+            aBuf.append(rCode.subView(i, 2));
+            ++i;
+        }
+        else if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if (c == 'y' || c == 'Y')
+        {
+            sal_Int32 n = 1;
+            while (i + n < nLen && (rCode[i + n] == 'y' || rCode[i + n] == 'Y'))
+                ++n;
+            aBuf.append(n <= 2 ? u"yy" : u"yyyy");
+            i += n - 1;
+        }
+        else
+            aBuf.append(c);
+    }
+    return aBuf.makeStringAndClear();
+}
+
+OUString ScGlobal::ExcelTextFunctionFormatCode(const OUString& rCode, LanguageType eLang, bool& rbInvalid)
+{
+    rbInvalid = false;
+    const LanguageType eReal = MsLangId::getRealLanguage(eLang);
+    if (!MsLangId::isKorean(eReal) || rCode.isEmpty())
+        return ExcelDefaultNamesFormatCode(rCode, eLang);
+    const sal_Int32 nLen = rCode.getLength();
+    // is there a date or time part (then '/' is a literal, not a fraction)?
+    bool bDate = false;
+    bool bDigits = false;
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            const sal_Int32 nEnd = rCode.indexOf('"', i + 1);
+            i = nEnd < 0 ? nLen : nEnd;
+            continue;
+        }
+        if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            i = nEnd < 0 ? nLen : nEnd;
+            continue;
+        }
+        const sal_Unicode u = rtl::toAsciiUpperCase(c);
+        if (u == 'Y' || u == 'D' || u == 'H' || u == 'S' || u == 'M')
+            bDate = true;
+        if (c == '0' || c == '#' || c == '?')
+            bDigits = true;
+    }
+    OUStringBuffer aBuf(nLen + 8);
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            // a backslash in a quoted text is the won sign too
+            aBuf.append(c);
+            while (++i < nLen && rCode[i] != '"')
+                aBuf.append(rCode[i] == '\\' ? sal_Unicode(0x20A9) : rCode[i]);
+            if (i < nLen)
+                aBuf.append('"');
+        }
+        else if (c == '\\')
+            aBuf.append(u"\"\u20A9\""); // the won sign; the next character is a code again
+        else if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if ((c == 'G' || c == 'g') && rCode.matchIgnoreAsciiCase(u"general", i))
+        {
+            rbInvalid = true; // Korean Excel only knows G/표준
+            return rCode;
+        }
+        else if ((c == 'G' || c == 'g') && rCode.match(u"/\uD45C\uC900", i + 1))
+        {
+            aBuf.append(u"General");
+            i += 3;
+        }
+        else if (c == 'e' && bDigits && i + 1 < nLen && (rCode[i + 1] == '+' || rCode[i + 1] == '-'))
+        {
+            rbInvalid = true; // e is the era year in Korean Excel
+            return rCode;
+        }
+        else if ((c == 'a' || c == 'A') && rCode.matchIgnoreAsciiCase(u"am/pm", i))
+        {
+            aBuf.append(rCode.subView(i, 5));
+            i += 4;
+        }
+        else if ((c == 'a' || c == 'A') && rCode.matchIgnoreAsciiCase(u"a/p", i))
+        {
+            aBuf.append(rCode.subView(i, 3));
+            i += 2;
+        }
+        else if (c == '/' && bDate)
+            aBuf.append(u"\"/\"");
+        else
+            aBuf.append(c);
+    }
+    return ExcelDefaultNamesFormatCode(aBuf.makeStringAndClear(), eLang);
+}
+
 OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageType eLang)
 {
-    if (!MsLangId::isCJK(MsLangId::getRealLanguage(eLang)) || rCode.isEmpty())
+    if (rCode.isEmpty())
         return rCode;
+    const OUString aCode = lcl_ExcelYearTokens(rCode);
+    if (!MsLangId::isCJK(MsLangId::getRealLanguage(eLang)))
+        return aCode;
+    return lcl_ExcelDefaultNamesFormatCodeCJK(aCode, eLang);
+}
+
+static OUString lcl_ExcelDefaultNamesFormatCodeCJK(const OUString& rCode, LanguageType eLang)
+{
     bool bDayOrAmPm = false;
     bool bCjkDay = false;
     const sal_Int32 nLen = rCode.getLength();

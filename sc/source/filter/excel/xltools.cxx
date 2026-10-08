@@ -202,7 +202,7 @@ sal_uInt8 XclTools::GetXclErrorCode( FormulaError nScError )
         case FormulaError::DivisionByZero:         return EXC_ERR_DIV0;
         case FormulaError::IllegalParameter:       return EXC_ERR_VALUE;
         case FormulaError::PairExpected:           return EXC_ERR_VALUE;
-        case FormulaError::OperatorExpected:       return EXC_ERR_VALUE;
+        case FormulaError::OperatorExpected:       return EXC_ERR_NAME;  // weboffice: an unresolved name
         case FormulaError::VariableExpected:       return EXC_ERR_VALUE;
         case FormulaError::ParameterExpected:      return EXC_ERR_VALUE;
         case FormulaError::NoValue:                return EXC_ERR_VALUE;

@@ -242,6 +242,33 @@ double ScInterpreter::GetCellValueOrZero( const ScAddress& rPos, const ScRefCell
     return fValue;
 }
 
+bool ScInterpreter::IsLogicalCell( const ScAddress& rPos, const ScRefCellValue& rCell )
+{
+    switch (rCell.getType())
+    {
+        case CELLTYPE_VALUE:
+            return mrContext.NFGetType(mrDoc.GetNumberFormat(mrContext, rPos)) == SvNumFormatType::LOGICAL;
+        case CELLTYPE_FORMULA:
+        {
+            ScFormulaCell* pFCell = rCell.getFormula();
+            return pFCell->IsValue() && pFCell->GetErrCode() == FormulaError::NONE
+                && pFCell->GetFormatType() == SvNumFormatType::LOGICAL;
+        }
+        default:
+            return false;
+    }
+}
+
+// weboffice: TRUE/FALSE cell as text, like Excel ("TRUE", not "1")
+static svl::SharedString lcl_LogicalString( ScInterpreterContext& rContext, svl::SharedStringPool& rPool, double fVal )
+{
+    sal_uInt32 nKey = rContext.NFGetStandardFormat(SvNumFormatType::LOGICAL, ScGlobal::eLnge);
+    OUString aStr;
+    const Color* pColor = nullptr;
+    rContext.NFGetOutputString(fVal, nKey, aStr, &pColor);
+    return rPool.intern(aStr);
+}
+
 void ScInterpreter::GetCellString( svl::SharedString& rStr, const ScRefCellValue& rCell )
 {
     FormulaError nErr = FormulaError::NONE;
@@ -2642,6 +2669,8 @@ svl::SharedString ScInterpreter::GetString()
             if (nGlobalError == FormulaError::NONE)
             {
                 ScRefCellValue aCell(mrDoc, aAdr);
+                if (IsLogicalCell(aAdr, aCell))
+                    return lcl_LogicalString(mrContext, mrStrPool, GetCellValue(aAdr, aCell));
                 svl::SharedString aSS;
                 GetCellString(aSS, aCell);
                 return aSS;
@@ -2657,6 +2686,8 @@ svl::SharedString ScInterpreter::GetString()
             if ( nGlobalError == FormulaError::NONE && DoubleRefToPosSingleRef( aRange, aAdr ) )
             {
                 ScRefCellValue aCell(mrDoc, aAdr);
+                if (IsLogicalCell(aAdr, aCell))
+                    return lcl_LogicalString(mrContext, mrStrPool, GetCellValue(aAdr, aCell));
                 svl::SharedString aSS;
                 GetCellString(aSS, aCell);
                 return aSS;

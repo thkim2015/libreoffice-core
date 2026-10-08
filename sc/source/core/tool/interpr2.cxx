@@ -59,6 +59,41 @@ using namespace formula;
 
 // Date and Time
 
+// weboffice: Excel's 1900 date system counts the fictitious 1900-02-29 (serial 60), so a date before
+// 1900-03-01 is one less than in Calc (1900-01-01 is 1, not 2) and 0 is "1900-01-00".
+static bool lcl_IsExcel1900(const Date& rNullDate)
+{
+    return rNullDate == Date(30, 12, 1899);
+}
+
+// Calc serial -> Excel serial for a real date
+static double lcl_ToExcel1900(double fSerial)
+{
+    return (fSerial >= 1.0 && fSerial <= 60.0) ? fSerial - 1.0 : fSerial;
+}
+
+// year, month and day of an Excel serial below 61; false for any other serial
+static bool lcl_FromExcel1900(const Date& rNullDate, sal_Int32 nSerial, sal_Int32& rYear, sal_Int32& rMonth, sal_Int32& rDay)
+{
+    if (!lcl_IsExcel1900(rNullDate) || nSerial < 0 || nSerial > 60)
+        return false;
+    if (nSerial == 0)
+    {
+        rYear = 1900; rMonth = 1; rDay = 0;
+    }
+    else if (nSerial == 60)
+    {
+        rYear = 1900; rMonth = 2; rDay = 29;
+    }
+    else
+    {
+        Date aDate(rNullDate);
+        aDate.AddDays(nSerial + 1);
+        rYear = aDate.GetYear(); rMonth = aDate.GetMonth(); rDay = aDate.GetDay();
+    }
+    return true;
+}
+
 double ScInterpreter::GetDateSerial( sal_Int16 nYear, sal_Int16 nMonth, sal_Int16 nDay,
         bool bStrict )
 {
@@ -88,6 +123,24 @@ double ScInterpreter::GetDateSerial( sal_Int16 nYear, sal_Int16 nMonth, sal_Int1
         nD = 1;
     }
     Date aDate( nD, nM, nY);
+    if (!bStrict && lcl_IsExcel1900(mrContext.NFGetNullDate()))
+    {
+        // weboffice: like Excel, the first of the month in Excel's calendar plus the days
+        // (DATE(1900;1;60) and DATE(1900;2;29) are the fictitious 1900-02-29)
+        if (!aDate.IsValidAndGregorian())
+        {
+            SetError(FormulaError::NoValue);
+            return 0;
+        }
+        const double fFirst = lcl_ToExcel1900(static_cast<double>(aDate - mrContext.NFGetNullDate()));
+        const double fSerial = fFirst + (nDay - 1);
+        if (fSerial < 0.0)
+        {
+            SetError(FormulaError::IllegalFPOperation); // #NUM! like Excel
+            return 0;
+        }
+        return fSerial;
+    }
     if (!bStrict)
         aDate.AddDays( nDay - 1 );
     if (aDate.IsValidAndGregorian())
@@ -122,21 +175,42 @@ void ScInterpreter::ScGetActTime()
 void ScInterpreter::ScGetYear()
 {
     Date aDate = mrContext.NFGetNullDate();
-    aDate.AddDays( GetFloor32());
+    const sal_Int32 nSerial = GetFloor32();
+    sal_Int32 nY, nM, nD;
+    if (lcl_FromExcel1900(aDate, nSerial, nY, nM, nD)) // weboffice: YEAR(0) is 1900
+    {
+        PushDouble(nY);
+        return;
+    }
+    aDate.AddDays( nSerial );
     PushDouble( static_cast<double>(aDate.GetYear()) );
 }
 
 void ScInterpreter::ScGetMonth()
 {
     Date aDate = mrContext.NFGetNullDate();
-    aDate.AddDays( GetFloor32());
+    const sal_Int32 nSerial = GetFloor32();
+    sal_Int32 nY, nM, nD;
+    if (lcl_FromExcel1900(aDate, nSerial, nY, nM, nD)) // weboffice: MONTH(0) is 1
+    {
+        PushDouble(nM);
+        return;
+    }
+    aDate.AddDays( nSerial );
     PushDouble( static_cast<double>(aDate.GetMonth()) );
 }
 
 void ScInterpreter::ScGetDay()
 {
     Date aDate = mrContext.NFGetNullDate();
-    if (aDate.CheckedAddDays(GetFloor32()))
+    const sal_Int32 nSerial = GetFloor32();
+    sal_Int32 nY, nM, nD;
+    if (nGlobalError == FormulaError::NONE && lcl_FromExcel1900(aDate, nSerial, nY, nM, nD)) // weboffice: DAY(0) is 0
+    {
+        PushDouble(nD);
+        return;
+    }
+    if (aDate.CheckedAddDays(nSerial))
         PushDouble(static_cast<double>(aDate.GetDay()));
     else
     {
@@ -291,7 +365,7 @@ void ScInterpreter::ScGetWeekOfYear()
             nMinimumNumberOfDaysInWeek = 4;
             break;
         default :
-            PushIllegalArgument();
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
             return;
     }
     PushInt( static_cast<int>(aDate.GetWeekOfYear( eFirstDayOfWeek, nMinimumNumberOfDaysInWeek )) );
@@ -1521,6 +1595,7 @@ void ScInterpreter::ScIRR()
         else
         {
             ScValueIterator aValIter(mrContext, aRange, mnSubTotalFlags);
+            aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
             bool bLoop = aValIter.GetFirst(fValue, nIterError);
             while (bLoop && nIterError == FormulaError::NONE)
             {
@@ -1629,6 +1704,7 @@ void ScInterpreter::ScMIRR()
         else
         {
             ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+            aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
             double fCellValue;
             FormulaError nIterError = FormulaError::NONE;
 

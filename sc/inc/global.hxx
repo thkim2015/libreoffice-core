@@ -643,6 +643,10 @@ public:
         English even in ko/ja/zh, where Calc uses the locale's names. Returns the code with an
         English locale prefix in that case (not when it also uses aaa/aaaa, the CJK day names). */
     SC_DLLPUBLIC static OUString ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageType eLang);
+    /** weboffice: the format code of Excel's TEXT() as Korean Excel reads it (a typed code, not one
+        from a file): every backslash is a literal won sign, "General" is unknown (rbInvalid), "G/표준"
+        is General, '/' is a literal slash and a lower case exponent e is invalid. */
+    SC_DLLPUBLIC static OUString ExcelTextFunctionFormatCode(const OUString& rCode, LanguageType eLang, bool& rbInvalid);
     static OUString         GetLongErrorString(FormulaError nErrNumber);
     static bool             EETextObjEqual( const EditTextObject* pObj1,
                                             const EditTextObject* pObj2 );

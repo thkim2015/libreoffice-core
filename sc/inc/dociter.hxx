@@ -62,6 +62,7 @@ class ScValueIterator            // walk through all values in an area
     bool            bNumValid;
     bool            bCalcAsShown;
     bool            bTextAsZero;
+    bool            mbSkipLogical = false; // weboffice
 
     const sc::CellStoreType* mpCells;
     PositionType maCurPos;
@@ -83,6 +84,10 @@ public:
         bool bTextAsZero = false );
 
     void GetCurNumFmtInfo( SvNumFormatType& nType, sal_uInt32& nIndex );
+
+    /// weboffice: like Excel, skip TRUE/FALSE cells (BOOLEAN format or logical formula result),
+    /// unless text counts as zero (the ...A functions count them).
+    void SetSkipLogical( bool bSkip ) { mbSkipLogical = bSkip; }
 
     /// Does NOT reset rValue if no value found!
     bool GetFirst( double& rValue, FormulaError& rErr );

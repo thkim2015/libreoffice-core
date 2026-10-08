@@ -167,6 +167,7 @@ void ScInterpreter::ScGCD()
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nCellVal, nErr))
                 {
                     do
@@ -244,6 +245,7 @@ void ScInterpreter:: ScLCM()
                 PopDoubleRef( aRange, nParamCount, nRefInList);
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
+                aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
                 if (aValIter.GetFirst(nCellVal, nErr))
                 {
                     do
@@ -382,6 +384,18 @@ ScMatrixRef ScInterpreter::CreateMatrixFromDoubleRef( const FormulaToken* pToken
     {
         // Use fast array fill.
         mrDoc.FillMatrix(*pMat, nTab1, nCol1, nRow1, nCol2, nRow2);
+        // weboffice: TRUE/FALSE cells become boolean elements, which Excel's functions treat as
+        // booleans, not as numbers (SUMPRODUCT(A1:A3) of TRUE cells is 0, SUM ignores them).
+        ScCellIterator aLogicalIter( mrDoc, ScRange( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2));
+        for (bool bHas = aLogicalIter.first(); bHas; bHas = aLogicalIter.next())
+        {
+            ScRefCellValue aCell( aLogicalIter.getRefCellValue());
+            if ((aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                && IsLogicalCell( aLogicalIter.GetPos(), aCell))
+                pMat->PutBoolean( aCell.getValue() != 0.0,
+                                  static_cast<SCSIZE>(aLogicalIter.GetPos().Col() - nCol1),
+                                  static_cast<SCSIZE>(aLogicalIter.GetPos().Row() - nRow1));
+        }
     }
     else
     {
@@ -2534,6 +2548,17 @@ void ScInterpreter::ScFrequency()
     {
         PushIllegalArgument();
         return;
+    }
+    // weboffice: like Excel, of equal bins the first one (in the given order) gets the count;
+    // the sort left equal values in any order.
+    for (SCSIZE nRun = 0; nRun < nBinSize; )
+    {
+        SCSIZE nEnd = nRun + 1;
+        while (nEnd < nBinSize && aBinArray[nEnd] == aBinArray[nRun])
+            ++nEnd;
+        if (nEnd - nRun > 1)
+            std::sort(aBinIndexOrder.begin() + nRun, aBinIndexOrder.begin() + nEnd);
+        nRun = nEnd;
     }
 
     SCSIZE j;

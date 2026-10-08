@@ -3166,7 +3166,10 @@ bool SvNumberformat::ImpGetTimeOutput(double fNumber,
     {
         sal_uInt16 nCHour, nCMinute, nCSecond;
         double fFractionOfSecond;
-        tools::Time::GetClock( fNumberOrig, nCHour, nCMinute, nCSecond, fFractionOfSecond, nCntPost);
+        // weboffice: like Excel, round to the shown seconds (Calc truncated 0:04:37.6 to 0:04:37)
+        const double fClock = bInputLine ? fNumberOrig
+            : rtl::math::round( fNumberOrig * 86400.0, int(nCntPost) ) / 86400.0;
+        tools::Time::GetClock( fClock, nCHour, nCMinute, nCSecond, fFractionOfSecond, nCntPost);
         nHour = nCHour;
         nMin = nCMinute;
         nSec = nCSecond;
@@ -3784,6 +3787,21 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
     bool bRes = false;
 
     CalendarWrapper& rCal = *rCurrentLang.GetCalendar();
+    // weboffice: Excel's 1900 date system (0 is 1900-01-00, 60 the fictitious 1900-02-29, 1..59 a day later)
+    sal_Int32 nExcelDay = -1;
+    if (rCurrentLang.GetNullDate() == Date(30, 12, 1899) && fNumber >= 0.0 && fNumber < 61.0)
+    {
+        const double fDay = floor(fNumber);
+        if (fDay == 0.0)
+        {
+            fNumber += 2.0;
+            nExcelDay = 0;
+        }
+        else if (fDay == 60.0)
+            nExcelDay = 29;
+        else
+            fNumber += 1.0;
+    }
     if (!lcl_getValidDate( DateTime( rCurrentLang.GetNullDate() ), rCal.getEpochStart(), fNumber))
     {
         sBuff = ImpSvNumberformatScan::sErrStr;
@@ -3895,7 +3913,8 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_QUARTER, nNatNum ));
             break;
         case NF_KEY_D:                  // D
-            aStr = rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY, nNatNum );
+            aStr = nExcelDay >= 0 ? OUString::number(nExcelDay)
+                                  : rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY, nNatNum );
             // NatNum12: support variants of preposition, suffixation or article
             if ( bUseSpellout )
             {
@@ -3904,7 +3923,10 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             sBuff.append(aStr);
             break;
         case NF_KEY_DD:                 // DD
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY, nNatNum ));
+            if (nExcelDay >= 0)
+                sBuff.append(nExcelDay < 10 ? OUString("0" + OUString::number(nExcelDay)) : OUString::number(nExcelDay));
+            else
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY, nNatNum ));
             break;
         case NF_KEY_DDD:                // DDD
             if ( bOtherCalendar )
@@ -4059,11 +4081,14 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
     bool bRes = false;
 
     CalendarWrapper& rCal = *rCurrentLang.GetCalendar();
+    const double fSerialOrig = fNumber;
     if (!lcl_getValidDate( DateTime( rCurrentLang.GetNullDate() ), rCal.getEpochStart(), fNumber))
     {
         sBuff = ImpSvNumberformatScan::sErrStr;
         return false;
     }
+    const double fEpochShift = fNumber - fSerialOrig;
+    const bool bExcel1900 = rCurrentLang.GetNullDate() == Date(30, 12, 1899);
 
     const ImpSvNumberformatInfo& rInfo = NumFor[nIx].Info();
     bool bInputLine;
@@ -4078,8 +4103,9 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
     {
         bInputLine = false;
         nCntPost = rInfo.nCntPost;
-        // For clock format (not []) do not round up to seconds and thus days.
-        nFirstRounding = (rInfo.bThousand ? nCntPost : kTimeSignificantRound);
+        // weboffice: like Excel, a clock format also rounds to the shown seconds (and so may
+        // round up to the next day); Calc truncated.
+        nFirstRounding = nCntPost;
     }
     double fTime = (fNumber - floor( fNumber )) * 86400.0;
     fTime = ::rtl::math::round( fTime, int(nFirstRounding) );
@@ -4088,6 +4114,26 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
         // result of fNumber==x.999999999... rounded up, use correct date/time
         fTime -= 86400.0;
         fNumber = floor( fNumber + 0.5) + fTime;
+    }
+    else if (!bInputLine && !rInfo.bThousand)
+        fNumber = floor( fNumber ) + fTime / 86400.0;
+    // weboffice: Excel's 1900 date system, on the rounded value
+    sal_Int32 nExcelDay = -1;
+    {
+        const double fSerial = fNumber - fEpochShift;
+        if (bExcel1900 && fSerial >= 0.0 && fSerial < 61.0)
+        {
+            const double fDay = floor(fSerial);
+            if (fDay == 0.0)
+            {
+                fNumber += 2.0;
+                nExcelDay = 0;
+            }
+            else if (fDay == 60.0)
+                nExcelDay = 29;
+            else
+                fNumber += 1.0;
+        }
     }
     rCal.setLocalDateTime( fNumber );
 
@@ -4287,10 +4333,16 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_QUARTER, nNatNum ));
             break;
         case NF_KEY_D:                  // D
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY, nNatNum ));
+            if (nExcelDay >= 0)
+                sBuff.append(nExcelDay);
+            else
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY, nNatNum ));
             break;
         case NF_KEY_DD:                 // DD
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY, nNatNum ));
+            if (nExcelDay >= 0)
+                sBuff.append(nExcelDay < 10 ? OUString("0" + OUString::number(nExcelDay)) : OUString::number(nExcelDay));
+            else
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY, nNatNum ));
             break;
         case NF_KEY_DDD:                // DDD
             if ( bOtherCalendar )
@@ -4670,8 +4722,10 @@ bool SvNumberformat::ImpDecimalFill(const NativeNumberWrapper& rNatNum,
         } // of while
     } // of decimal places
 
+    // weboffice: like Excel, the decimal separator of the code is always shown (0.### -> "5.")
+    (void) bFilled;
     bRes |= ImpNumberFillWithThousands(rNatNum, rCurrentLang, sStr, rNumber, k, j, nIx, // Fill with . if needed
-                                       rInfo.nCntPre, bStarFlag, bFilled );
+                                       rInfo.nCntPre, bStarFlag, true );
 
     return bRes;
 }
