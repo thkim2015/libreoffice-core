@@ -3744,8 +3744,9 @@ void ScInterpreter::ScPercentrank( bool bInclusive )
                 fRes = GetPercentrank( aSortArray, fNum, bInclusive );
             if ( fRes != 0.0 )
             {
-                double fExp = ::rtl::math::approxFloor( log10( fRes ) ) + 1.0 - fSignificance;
-                fRes = ::rtl::math::round( fRes * pow( 10, -fExp ) ) / pow( 10, -fExp );
+                // weboffice: like Excel, cut (not round) to <significance> decimal places
+                const double fFac = pow( 10.0, fSignificance );
+                fRes = ::rtl::math::approxFloor( fRes * fFac ) / fFac;
             }
             PushDouble( fRes );
         }

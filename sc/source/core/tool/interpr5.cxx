@@ -2344,6 +2344,15 @@ void ScInterpreter::ScSumProduct()
     pMatLast->GetDimensions(nCLast, nRLast);
     std::vector<double> aResArray;
     pMatLast->GetDoubleArray(aResArray);
+    // weboffice: TRUE/FALSE elements are ignored like text (Excel: SUMPRODUCT(A1:A3>0) is 0)
+    auto lcl_DropBooleans = [](const ScMatrix& rMat, std::vector<double>& rArray, SCSIZE nCols, SCSIZE nRows)
+    {
+        for (SCSIZE c = 0; c < nCols; ++c)
+            for (SCSIZE r = 0; r < nRows; ++r)
+                if (rMat.IsBoolean(c, r) && c * nRows + r < rArray.size())
+                    rArray[c * nRows + r] = CreateDoubleError(FormulaError::ElementNaN);
+    };
+    lcl_DropBooleans(*pMatLast, aResArray, nCLast, nRLast);
 
     while (nParamCount--)
     {
@@ -2360,7 +2369,16 @@ void ScInterpreter::ScSumProduct()
             return;
         }
 
-        pMat->MergeDoubleArrayMultiply(aResArray);
+        std::vector<double> aArray;
+        pMat->GetDoubleArray(aArray);
+        lcl_DropBooleans(*pMat, aArray, nC, nR);
+        for (size_t k = 0; k < aResArray.size() && k < aArray.size(); ++k)
+        {
+            if (GetDoubleErrorValue(aArray[k]) == FormulaError::ElementNaN)
+                aResArray[k] = aArray[k];
+            else if (GetDoubleErrorValue(aResArray[k]) == FormulaError::NONE)
+                aResArray[k] *= aArray[k];
+        }
     }
 
     KahanSum fSum = 0.0;
