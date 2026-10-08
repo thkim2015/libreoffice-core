@@ -1882,14 +1882,23 @@ void ScInterpreter::ScVDB()
     double fSalvage   = GetDouble();
     double fCost   = GetDouble();
     // weboffice: Excel gives #NUM! for these, 0 when salvage exceeds cost, #DIV/0! for life 0
+    // (each case returns: the result is pushed once, at the end of the function)
     if (fStart < 0.0 || fEnd < fStart || fEnd > fLife || fCost < 0.0
                       || fSalvage < 0.0 || fFactor < 0.0)
+    {
         PushError( FormulaError::IllegalFPOperation );
-    else if (fSalvage >= fCost)
+        return;
+    }
+    if (fSalvage >= fCost)
+    {
         PushDouble( 0.0 );
-    else if (fLife == 0.0)
+        return;
+    }
+    if (fLife == 0.0)
+    {
         PushError( FormulaError::DivisionByZero );
-    else
+        return;
+    }
     {
         double fIntStart = ::rtl::math::approxFloor(fStart);
         double fIntEnd   = ::rtl::math::approxCeil(fEnd);
