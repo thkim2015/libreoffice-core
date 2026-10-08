@@ -3794,7 +3794,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
     OUString aOrgCalendar; // empty => not changed yet
 
     double fOrgDateTime(0.0);
-    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( GetLanguage() ) );
+    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) ) );
     if ( bOtherCalendar )
     {
         SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -3992,7 +3992,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             break;
         case NF_KEY_EC:                 // E
             // weboffice: Excel ko-KR "e" is the 4-digit year (Gregorian)
-            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( GetLanguage() )
+            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) )
                     ? CalendarDisplayCode::LONG_YEAR : CalendarDisplayCode::SHORT_YEAR, nNatNum ));
             break;
         case NF_KEY_EEC:                // EE
@@ -4094,7 +4094,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
     int nUseMonthCase = 0; // Not decided yet
     OUString aOrgCalendar; // empty => not changed yet
     double fOrgDateTime(0.0);
-    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( GetLanguage() ) );
+    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) ) );
     if ( bOtherCalendar )
     {
         SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -4364,7 +4364,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             break;
         case NF_KEY_EC:                 // E
             // weboffice: Excel ko-KR "e" is the 4-digit year (Gregorian)
-            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( GetLanguage() )
+            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) )
                     ? CalendarDisplayCode::LONG_YEAR : CalendarDisplayCode::SHORT_YEAR, nNatNum ));
             break;
         case NF_KEY_EEC:                // EE

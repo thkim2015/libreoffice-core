@@ -364,7 +364,7 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
 
 OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageType eLang)
 {
-    if (!MsLangId::isCJK(eLang) || rCode.isEmpty())
+    if (!MsLangId::isCJK(MsLangId::getRealLanguage(eLang)) || rCode.isEmpty())
         return rCode;
     bool bDayOrAmPm = false;
     bool bCjkDay = false;
@@ -414,7 +414,35 @@ OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageTy
     }
     if (!bDayOrAmPm || bCjkDay)
         return rCode;
-    return "[$-409]" + rCode;
+    OUStringBuffer aBuf("[$-409]");
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            const sal_Int32 nEnd = rCode.indexOf('"', i + 1);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if (c == '\\' && i + 1 < nLen)
+        {
+            aBuf.append(rCode.subView(i, 2));
+            ++i;
+        }
+        else if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if (c == '-')
+            aBuf.append("\\-");
+        else
+            aBuf.append(c);
+    }
+    return aBuf.makeStringAndClear();
 }
 
 OUString ScGlobal::GetLongErrorString(FormulaError nErr)
