@@ -1866,8 +1866,16 @@ void ScInterpreter::ScVDB()
         return;
 
     KahanSum fVdb = 0.0;
-    bool bNoSwitch = nParamCount == 7 && GetBool();
-    double  fFactor = nParamCount >= 6 ? GetDouble() : 2.0;
+    // weboffice: empty factor / no_switch take their defaults like Excel
+    bool bNoSwitch = false;
+    if (nParamCount == 7)
+    {
+        if (IsMissing())
+            Pop();
+        else
+            bNoSwitch = GetBool();
+    }
+    double  fFactor = nParamCount >= 6 ? GetDoubleWithDefault( 2.0 ) : 2.0;
     double fEnd   = GetDouble();
     double fStart = GetDouble();
     double fLife  = GetDouble();
@@ -1875,7 +1883,7 @@ void ScInterpreter::ScVDB()
     double fCost   = GetDouble();
     if (fStart < 0.0 || fEnd < fStart || fEnd > fLife || fCost < 0.0
                       || fSalvage > fCost || fFactor <= 0.0)
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM!
     else
     {
         double fIntStart = ::rtl::math::approxFloor(fStart);
@@ -2180,9 +2188,14 @@ void ScInterpreter::ScRate()
     double fNper = GetDouble();
     double fOrigGuess = fGuess;
 
-    if (fNper <= 0.0) // constraint from ODFF spec
+    if (fNper <= 0.0) // constraint from ODFF spec; Excel gives #NUM!
     {
-        PushIllegalArgument();
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
+    if (fGuess <= -1.0) // Excel: #VALUE!
+    {
+        PushNoValue();
         return;
     }
     bool bValid = RateIteration(fNper, fPayment, fPv, fFv, bPayType, fGuess);
@@ -2407,13 +2420,19 @@ void ScInterpreter::ScMod()
         return;
     }
     double fNum = GetDouble();   // Numerator
+    // weboffice: Excel gives #NUM! once the quotient reaches 1.1259E+12 (measured)
+    if ( std::fabs( fNum / fDenom ) >= 1.1259e12 )
+    {
+        PushError( FormulaError::IllegalFPOperation );
+        return;
+    }
     double fRes = ::rtl::math::approxSub( fNum,
             ::rtl::math::approxFloor( fNum / fDenom ) * fDenom );
     if ( ( fDenom > 0 && fRes >= 0 && fRes < fDenom ) ||
          ( fDenom < 0 && fRes <= 0 && fRes > fDenom ) )
         PushDouble( fRes );
     else
-        PushError( FormulaError::NoValue );
+        PushError( FormulaError::IllegalFPOperation );
 }
 
 void ScInterpreter::ScIntersect()

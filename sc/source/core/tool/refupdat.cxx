@@ -465,44 +465,29 @@ ScRefUpdateRes ScRefUpdate::Update( UpdateRefMode eUpdateRefMode,
 void ScRefUpdate::MoveRelWrap( const ScDocument& rDoc, const ScAddress& rPos,
                                SCCOL nMaxCol, SCROW nMaxRow, ScComplexRefData& rRef )
 {
+    // toAbs makes out-of-range values invalid (-1) before wrapping, so a name like
+    // Excel's XFB1 (three columns left) used to wrap to the last column. Wrap the
+    // unchecked value instead.
+    auto wrapped = [](sal_Int32 n, sal_Int32 nMax)
+    {
+        n %= (nMax + 1);
+        if (n < 0)
+            n += nMax + 1;
+        return n;
+    };
     ScRange aAbsRange = rRef.toAbs(rDoc, rPos);
-    if( rRef.Ref1.IsColRel() )
+    const sal_Int32 nMaxTab = rDoc.GetTableCount() - 1;
+    auto fix = [&](const ScSingleRefData& r, ScAddress& rAbs)
     {
-        SCCOL nCol = aAbsRange.aStart.Col();
-        lcl_MoveItWrap(nCol, nMaxCol);
-        aAbsRange.aStart.SetCol(nCol);
-    }
-    if( rRef.Ref2.IsColRel() )
-    {
-        SCCOL nCol = aAbsRange.aEnd.Col();
-        lcl_MoveItWrap(nCol, nMaxCol);
-        aAbsRange.aEnd.SetCol(nCol);
-    }
-    if( rRef.Ref1.IsRowRel() )
-    {
-        SCROW nRow = aAbsRange.aStart.Row();
-        lcl_MoveItWrap(nRow, nMaxRow);
-        aAbsRange.aStart.SetRow(nRow);
-    }
-    if( rRef.Ref2.IsRowRel() )
-    {
-        SCROW nRow = aAbsRange.aEnd.Row();
-        lcl_MoveItWrap(nRow, nMaxRow);
-        aAbsRange.aEnd.SetRow(nRow);
-    }
-    SCTAB nMaxTab = rDoc.GetTableCount() - 1;
-    if( rRef.Ref1.IsTabRel() )
-    {
-        SCTAB nTab = aAbsRange.aStart.Tab();
-        lcl_MoveItWrap(nTab, nMaxTab);
-        aAbsRange.aStart.SetTab(nTab);
-    }
-    if( rRef.Ref2.IsTabRel() )
-    {
-        SCTAB nTab = aAbsRange.aEnd.Tab();
-        lcl_MoveItWrap(nTab, nMaxTab);
-        aAbsRange.aEnd.SetTab(nTab);
-    }
+        if (r.IsColRel() && !r.IsColDeleted())
+            rAbs.SetCol(static_cast<SCCOL>(wrapped(sal_Int32(r.Col()) + rPos.Col(), nMaxCol)));
+        if (r.IsRowRel() && !r.IsRowDeleted())
+            rAbs.SetRow(static_cast<SCROW>(wrapped(sal_Int32(r.Row()) + rPos.Row(), nMaxRow)));
+        if (r.IsTabRel() && !r.IsTabDeleted() && nMaxTab >= 0)
+            rAbs.SetTab(static_cast<SCTAB>(wrapped(sal_Int32(r.Tab()) + rPos.Tab(), nMaxTab)));
+    };
+    fix(rRef.Ref1, aAbsRange.aStart);
+    fix(rRef.Ref2, aAbsRange.aEnd);
 
     aAbsRange.PutInOrder();
     rRef.SetRange(rDoc.GetSheetLimits(), aAbsRange, rPos);
