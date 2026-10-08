@@ -28,6 +28,10 @@
 #include <tools/debug.hxx>
 #include <tools/long.hxx>
 #include <i18nlangtag/mslangid.hxx>
+#include <rtl/ustring.hxx>
+#include <string_view>
+
+static OUString lcl_AmPmCase( std::u16string_view aCode, const OUString& rName ); // weboffice
 #include <rtl/math.hxx>
 #include <unotools/charclass.hxx>
 #include <unotools/calendarwrapper.hxx>
@@ -3280,26 +3284,26 @@ bool SvNumberformat::ImpGetTimeOutput(double fNumber,
             }
             if (cAmPm == 'a')
             {
-                sBuff.append(rCal.getDisplayName(
-                                 CalendarDisplayIndex::AM_PM, AmPmValue::AM, 0 ));
+                sBuff.append(lcl_AmPmCase(rInfo.sStrArray[i], rCal.getDisplayName(
+                                 CalendarDisplayIndex::AM_PM, AmPmValue::AM, 0 )));
             }
             else
             {
-                sBuff.append(rCal.getDisplayName(
-                                 CalendarDisplayIndex::AM_PM, AmPmValue::PM, 0 ));
+                sBuff.append(lcl_AmPmCase(rInfo.sStrArray[i], rCal.getDisplayName(
+                                 CalendarDisplayIndex::AM_PM, AmPmValue::PM, 0 )));
             }
             break;
         }
         case NF_KEY_AP:                 // A/P
+        {
+            // weboffice: like Excel, the letter keeps the case written in the code (A/P -> P)
+            const bool bUpper = !rInfo.sStrArray[i].isEmpty() && rInfo.sStrArray[i][0] == 'A';
             if (cAmPm == 'a')
-            {
-                sBuff.append('a');
-            }
+                sBuff.append(bUpper ? 'A' : 'a');
             else
-            {
-                sBuff.append('p');
-            }
+                sBuff.append(bUpper ? 'P' : 'p');
             break;
+        }
         case NF_KEY_MI:                 // M
             sBuff.append(ImpIntToString(rNatNum, nIx, nMin ));
             break;
@@ -3448,9 +3452,19 @@ sal_Int32 SvNumberformat::ImpUseMonthCase( int & io_nState, const ImpSvNumFor& r
     return CalendarDisplayCode::LONG_MONTH_NAME;
 }
 
+// weboffice: like Excel, "am/pm" written in lower case shows "am"/"pm" (ASCII names only)
+static OUString lcl_AmPmCase( std::u16string_view aCode, const OUString& rName )
+{
+    if (!aCode.empty() && aCode[0] == 'a')
+        return rName.toAsciiLowerCase();
+    return rName;
+}
+
 namespace {
 
-bool ImpIsOtherCalendar( const ImpSvNumFor& rNumFor, const CalendarWrapper& rCal )
+// weboffice: bKorean - like Excel (ko-KR), AAA/AAAA (day names) and E (year) stay in the Gregorian
+// calendar; Calc switched to the Korean hanja calendar (day names 日月火水木金土, 2-digit year).
+bool ImpIsOtherCalendar( const ImpSvNumFor& rNumFor, const CalendarWrapper& rCal, bool bKorean = false )
 {
     if ( rCal.getUniqueID() != GREGORIAN )
     {
@@ -3467,10 +3481,13 @@ bool ImpIsOtherCalendar( const ImpSvNumFor& rNumFor, const CalendarWrapper& rCal
             return false;
         case NF_KEY_EC :
         case NF_KEY_EEC :
-        case NF_KEY_R :
-        case NF_KEY_RR :
         case NF_KEY_AAA :
         case NF_KEY_AAAA :
+            if (bKorean)
+                break;
+            return true;
+        case NF_KEY_R :
+        case NF_KEY_RR :
         case NF_KEY_G :
         case NF_KEY_GG :
         case NF_KEY_GGG :
@@ -3777,7 +3794,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
     OUString aOrgCalendar; // empty => not changed yet
 
     double fOrgDateTime(0.0);
-    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar() );
+    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( GetLanguage() ) );
     if ( bOtherCalendar )
     {
         SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -3974,7 +3991,9 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             }
             break;
         case NF_KEY_EC:                 // E
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_YEAR, nNatNum ));
+            // weboffice: Excel ko-KR "e" is the 4-digit year (Gregorian)
+            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( GetLanguage() )
+                    ? CalendarDisplayCode::LONG_YEAR : CalendarDisplayCode::SHORT_YEAR, nNatNum ));
             break;
         case NF_KEY_EEC:                // EE
         case NF_KEY_R:                  // R
@@ -4075,7 +4094,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
     int nUseMonthCase = 0; // Not decided yet
     OUString aOrgCalendar; // empty => not changed yet
     double fOrgDateTime(0.0);
-    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar() );
+    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( GetLanguage() ) );
     if ( bOtherCalendar )
     {
         SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -4201,25 +4220,25 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
         case NF_KEY_AMPM:               // AM/PM
             if (cAmPm == 'a')
             {
-                sBuff.append(rCal.getDisplayName( CalendarDisplayIndex::AM_PM,
-                                                  AmPmValue::AM, 0 ));
+                sBuff.append(lcl_AmPmCase(rInfo.sStrArray[i], rCal.getDisplayName( CalendarDisplayIndex::AM_PM,
+                                                  AmPmValue::AM, 0 )));
             }
             else
             {
-                sBuff.append(rCal.getDisplayName( CalendarDisplayIndex::AM_PM,
-                                                  AmPmValue::PM, 0 ));
+                sBuff.append(lcl_AmPmCase(rInfo.sStrArray[i], rCal.getDisplayName( CalendarDisplayIndex::AM_PM,
+                                                  AmPmValue::PM, 0 )));
             }
             break;
         case NF_KEY_AP:                 // A/P
+        {
+            // weboffice: like Excel, the letter keeps the case written in the code (A/P -> P)
+            const bool bUpper = !rInfo.sStrArray[i].isEmpty() && rInfo.sStrArray[i][0] == 'A';
             if (cAmPm == 'a')
-            {
-                sBuff.append('a');
-            }
+                sBuff.append(bUpper ? 'A' : 'a');
             else
-            {
-                sBuff.append('p');
-            }
+                sBuff.append(bUpper ? 'P' : 'p');
             break;
+        }
         case NF_KEY_MI:                 // M
             sBuff.append(ImpIntToString(rNatNum, nIx, nMin ));
             break;
@@ -4344,7 +4363,9 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             }
             break;
         case NF_KEY_EC:                 // E
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_YEAR, nNatNum ));
+            // weboffice: Excel ko-KR "e" is the 4-digit year (Gregorian)
+            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( GetLanguage() )
+                    ? CalendarDisplayCode::LONG_YEAR : CalendarDisplayCode::SHORT_YEAR, nNatNum ));
             break;
         case NF_KEY_EEC:                // EE
         case NF_KEY_R:                  // R

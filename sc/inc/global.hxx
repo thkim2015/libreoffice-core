@@ -639,6 +639,10 @@ public:
     static const InputHandlerFunctionNames& GetInputHandlerFunctionNames();
 
     static OUString         GetErrorString(FormulaError nErrNumber);
+    /** weboffice: Excel shows ddd/dddd and AM/PM of a format code without a locale ([$-xxx]) in
+        English even in ko/ja/zh, where Calc uses the locale's names. Returns the code with an
+        English locale prefix in that case (not when it also uses aaa/aaaa, the CJK day names). */
+    SC_DLLPUBLIC static OUString ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageType eLang);
     static OUString         GetLongErrorString(FormulaError nErrNumber);
     static bool             EETextObjEqual( const EditTextObject* pObj1,
                                             const EditTextObject* pObj2 );

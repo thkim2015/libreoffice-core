@@ -22,6 +22,7 @@
 #include <string_view>
 
 #include <numberformatsbuffer.hxx>
+#include <global.hxx>
 #include <biffhelper.hxx>
 
 #include <com/sun/star/i18n/NumberFormatIndex.hpp>
@@ -1833,8 +1834,11 @@ void NumberFormat::setPredefinedId( const Locale& rLocale, sal_Int16 nPredefId )
 
 void NumberFormat::finalizeImport( const Reference< XNumberFormats >& rxNumFmts, const Locale& rFromLocale )
 {
+    // weboffice: Excel shows ddd/dddd and AM/PM without a locale in English (see ScGlobal)
     if( rxNumFmts.is() && !maModel.maFmtCode.isEmpty() )
-        maApiData.mnIndex = lclCreateFormat( rxNumFmts, maModel.maFmtCode, maModel.maLocale, rFromLocale );
+        maApiData.mnIndex = lclCreateFormat( rxNumFmts,
+            ScGlobal::ExcelDefaultNamesFormatCode( maModel.maFmtCode, LanguageTag( maModel.maLocale ).getLanguageType() ),
+            maModel.maLocale, rFromLocale );
     else
         maApiData.mnIndex = lclCreatePredefinedFormat( rxNumFmts, maModel.mnPredefId, maModel.maLocale );
 }

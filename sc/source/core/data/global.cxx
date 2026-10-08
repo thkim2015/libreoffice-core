@@ -362,6 +362,61 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
     return ScResId(pErrNumber);
 }
 
+OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageType eLang)
+{
+    if (!MsLangId::isCJK(eLang) || rCode.isEmpty())
+        return rCode;
+    bool bDayOrAmPm = false;
+    bool bCjkDay = false;
+    const sal_Int32 nLen = rCode.getLength();
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            while (++i < nLen && rCode[i] != '"')
+                ;
+            continue;
+        }
+        if (c == '\\')
+        {
+            ++i;
+            continue;
+        }
+        if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            if (nEnd < 0)
+                break;
+            // an explicit locale ([$-412], [$€-407]) decides the names, like in Excel
+            if (rCode[i + 1] == '$' && rCode.indexOf('-', i) > 0 && rCode.indexOf('-', i) < nEnd)
+                return rCode;
+            i = nEnd;
+            continue;
+        }
+        const sal_Unicode u = rtl::toAsciiUpperCase(c);
+        if ((u == 'D' || u == 'A') && i + 2 < nLen && rtl::toAsciiUpperCase(rCode[i + 1]) == u
+            && rtl::toAsciiUpperCase(rCode[i + 2]) == u)
+        {
+            if (u == 'D')
+                bDayOrAmPm = true;
+            else
+                bCjkDay = true;
+            while (i + 1 < nLen && rtl::toAsciiUpperCase(rCode[i + 1]) == u)
+                ++i;
+            continue;
+        }
+        if (u == 'A' && i + 2 < nLen && rCode[i + 1] == '/' && rtl::toAsciiUpperCase(rCode[i + 2]) == 'P')
+            bDayOrAmPm = true;
+        if (u == 'A' && i + 4 < nLen && rtl::toAsciiUpperCase(rCode[i + 1]) == 'M' && rCode[i + 2] == '/'
+            && rtl::toAsciiUpperCase(rCode[i + 3]) == 'P' && rtl::toAsciiUpperCase(rCode[i + 4]) == 'M')
+            bDayOrAmPm = true;
+    }
+    if (!bDayOrAmPm || bCjkDay)
+        return rCode;
+    return "[$-409]" + rCode;
+}
+
 OUString ScGlobal::GetLongErrorString(FormulaError nErr)
 {
     TranslateId pErrNumber;

@@ -13686,6 +13686,8 @@ void ScInterpreter::ScText()
             eCellLang = pPattern->GetItem( ATTR_LANGUAGE_FORMAT ).GetValue();
         else
             eCellLang = ScGlobal::eLnge;
+        // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
+        sFormatString = ScGlobal::ExcelDefaultNamesFormatCode( sFormatString, eCellLang );
         if (bString)
         {
             if (!mrContext.NFGetPreviewString( sFormatString, aStr.getString(),
