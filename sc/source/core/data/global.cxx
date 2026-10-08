@@ -439,6 +439,25 @@ OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageTy
         }
         else if (c == '-')
             aBuf.append("\\-");
+        else if (rtl::toAsciiUpperCase(c) == 'A' && i + 4 < nLen && rCode[i + 2] == '/'
+                 && rtl::toAsciiUpperCase(rCode[i + 1]) == 'M')
+        {
+            aBuf.append(rCode.subView(i, 5)); // AM/PM
+            i += 4;
+        }
+        else if (rtl::toAsciiUpperCase(c) == 'A' && i + 2 < nLen && rCode[i + 1] == '/')
+        {
+            aBuf.append(rCode.subView(i, 3)); // A/P
+            i += 2;
+        }
+        else if (c == '/')
+        {
+            // Excel writes the date separator as '/', shown as the system one (ko-KR '-');
+            // en-US would show '/', so write the locale's separator as a literal
+            const OUString aSep = ScGlobal::getLocaleData().getDateSep();
+            for (sal_Int32 k = 0; k < aSep.getLength(); ++k)
+                aBuf.append(OUStringChar('\\') + OUStringChar(aSep[k]));
+        }
         else
             aBuf.append(c);
     }
