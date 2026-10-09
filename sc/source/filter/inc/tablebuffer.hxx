@@ -90,6 +90,8 @@ public:
     sal_Int32    getHeaderRows() const { return maModel.mnHeaderRows; }
     /** Returns the number of totals rows in the table range. */
     sal_Int32    getTotalsRows() const { return maModel.mnTotalsRows; }
+    /// weboffice: the table's filter has a condition
+    bool         hasFilterColumns() const { return maAutoFilters.hasFilterColumns(); }
 
 private:
     TableModel          maModel;
@@ -121,6 +123,14 @@ public:
     TableRef            getTable( sal_Int32 nTableId ) const;
     /** Returns a table by its display name. */
     TableRef            getTable( const OUString& rDispName ) const;
+    /// weboffice: a table of the sheet has a filter condition
+    bool                hasFilterOnSheet( SCTAB nTab ) const
+    {
+        for (const auto& rxTable : maTables)
+            if (rxTable->getOriginalRange().aStart.Tab() == nTab && rxTable->hasFilterColumns())
+                return true;
+        return false;
+    }
 
 private:
     /** Inserts the passed table into the maps according to its identifier and name. */

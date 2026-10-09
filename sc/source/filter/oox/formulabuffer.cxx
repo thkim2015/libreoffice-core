@@ -8,6 +8,8 @@
  */
 
 #include <formulabuffer.hxx>
+#include <dbdata.hxx>
+#include <rtl/character.hxx>
 #include <externallinkbuffer.hxx>
 #include <formulacell.hxx>
 #include <document.hxx>
@@ -188,6 +190,57 @@ private:
     sc::TokenStringContext maCxt;
 };
 
+
+// weboffice: a structured reference without a table name ([Income], written by ClosedXML in a
+// totals row) refers to the table the formula is in, like in Excel; give it the table name before
+// compiling (the OOXML grammar would read the bracket as an external document)
+static OUString lcl_QualifyTableRefs( ScDocument& rDoc, const ScAddress& rPos, const OUString& rFormula )
+{
+    if (rFormula.indexOf('[') < 0)
+        return rFormula;
+    const ScDBData* pDB = rDoc.GetDBAtCursor(rPos.Col(), rPos.Row(), rPos.Tab(), ScDBDataPortion::AREA);
+    if (!pDB || !rDoc.GetDBCollection()
+        || rDoc.GetDBCollection()->getNamedDBs().findByIndex(pDB->GetIndex()) != pDB)
+        return rFormula;
+    const OUString aName = pDB->GetName();
+    OUStringBuffer aBuf(rFormula.getLength() + 16);
+    const sal_Int32 nLen = rFormula.getLength();
+    sal_Int32 nDepth = 0;
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rFormula[i];
+        if ((c == '"' || c == '\'') && nDepth == 0)
+        {
+            const sal_Int32 nEnd = rFormula.indexOf(c, i + 1);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rFormula.subView(i, nTo - i + 1));
+            i = nTo;
+            continue;
+        }
+        if (c == '[')
+        {
+            if (nDepth == 0)
+            {
+                const sal_Unicode cPrev = i > 0 ? rFormula[i - 1] : ' ';
+                const bool bAfterName = rtl::isAsciiAlphanumeric(cPrev) || cPrev == '_' || cPrev == '.'
+                                        || cPrev == ']' || cPrev == '\'' || cPrev > 127;
+                // [1]Sheet!A1 is an external document
+                const sal_Int32 nClose = rFormula.indexOf(']', i);
+                bool bDigits = nClose > i + 1;
+                for (sal_Int32 k = i + 1; bDigits && k < nClose; ++k)
+                    bDigits = rtl::isAsciiDigit(rFormula[k]);
+                if (!bAfterName && !bDigits)
+                    aBuf.append(aName);
+            }
+            ++nDepth;
+        }
+        else if (c == ']' && nDepth > 0)
+            --nDepth;
+        aBuf.append(c);
+    }
+    return aBuf.makeStringAndClear();
+}
+
 void applySharedFormulas(
     ScDocumentImport& rDoc,
     std::vector<FormulaBuffer::SharedFormulaEntry>& rSharedFormulas,
@@ -204,7 +257,7 @@ void applySharedFormulas(
             const OUString& rTokenStr = rEntry.maTokenStr;
 
             ScCompiler aComp(rDoc.getDoc(), aPos, formula::FormulaGrammar::GRAM_OOXML, true, false);
-            std::unique_ptr<ScTokenArray> pArray = aComp.CompileString(rTokenStr);
+            std::unique_ptr<ScTokenArray> pArray = aComp.CompileString(lcl_QualifyTableRefs(rDoc.getDoc(), aPos, rTokenStr));
             if (pArray)
             {
                 stripRedundantParentheses(*pArray, {ocSingleValue});
@@ -370,7 +423,7 @@ void applyCellFormulas(
 
         ScCompiler aCompiler(rDoc.getDoc(), aPos, formula::FormulaGrammar::GRAM_OOXML, true, false);
         aCompiler.SetExternalLinks(rExternalLinks);
-        std::unique_ptr<ScTokenArray> pCode = aCompiler.CompileString(rItem.maTokenStr);
+        std::unique_ptr<ScTokenArray> pCode = aCompiler.CompileString(lcl_QualifyTableRefs(rDoc.getDoc(), aPos, rItem.maTokenStr));
         if (!pCode)
             continue;
 
@@ -409,7 +462,7 @@ void applyArrayFormulas(
 
         ScCompiler aComp(rDoc.getDoc(), aPos, formula::FormulaGrammar::GRAM_OOXML);
         aComp.SetExternalLinks(rExternalLinks);
-        std::unique_ptr<ScTokenArray> pArray(aComp.CompileString(rAddressItem.maTokenAndAddress.maTokenStr));
+        std::unique_ptr<ScTokenArray> pArray(aComp.CompileString(lcl_QualifyTableRefs(rDoc.getDoc(), aPos, rAddressItem.maTokenAndAddress.maTokenStr)));
         if (pArray)
         {
             stripRedundantParentheses(*pArray, {ocSingleValue});

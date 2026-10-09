@@ -6139,6 +6139,43 @@ void ScInterpreter::ScAverageIf()
     IterateParametersIf( ifAVERAGEIF);
 }
 
+namespace {
+// weboffice: Excel's wildcard match of a COUNTIF criterion (* ? and ~ escape), case-insensitive
+bool lcl_ExcelWildcardMatch( std::u16string_view aPat, std::u16string_view aStr )
+{
+    size_t p = 0, s = 0, nStarP = std::u16string_view::npos, nStarS = 0;
+    while (s < aStr.size())
+    {
+        if (p < aPat.size() && aPat[p] == '~' && p + 1 < aPat.size()
+            && (aPat[p + 1] == '*' || aPat[p + 1] == '?' || aPat[p + 1] == '~'))
+        {
+            if (aPat[p + 1] == aStr[s]) { p += 2; ++s; continue; }
+        }
+        else if (p < aPat.size() && aPat[p] == '*')
+        {
+            nStarP = p++;
+            nStarS = s;
+            continue;
+        }
+        else if (p < aPat.size() && (aPat[p] == '?' || aPat[p] == aStr[s]))
+        {
+            ++p; ++s;
+            continue;
+        }
+        if (nStarP != std::u16string_view::npos)
+        {
+            p = nStarP + 1;
+            s = ++nStarS;
+            continue;
+        }
+        return false;
+    }
+    while (p < aPat.size() && aPat[p] == '*')
+        ++p;
+    return p == aPat.size();
+}
+}
+
 void ScInterpreter::ScCountIf()
 {
     if ( !MustHaveParamCount( GetByte(), 2 ) )
@@ -6148,6 +6185,39 @@ void ScInterpreter::ScCountIf()
     double fVal = 0.0;
     bool bIsString = true;
     bool bLogicalCrit = false; // weboffice: TRUE/FALSE criterion
+    // weboffice: an error as criterion (COUNTIF(A1:A9;1/0)) counts the cells with that error
+    if (GetStackType() == svError)
+    {
+        const FormulaError eCrit = static_cast<const FormulaErrorToken*>(pStack[sp - 1])->GetError();
+        Pop();
+        if (GetStackType() == svDoubleRef || GetStackType() == svSingleRef)
+        {
+            ScRange aRange;
+            if (GetStackType() == svSingleRef)
+            {
+                ScAddress aAdr;
+                PopSingleRef(aAdr);
+                aRange = ScRange(aAdr);
+            }
+            else
+                PopDoubleRef(aRange);
+            double fErrors = 0.0;
+            ScCellIterator aIter(mrDoc, aRange);
+            for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+            {
+                ScRefCellValue aCell(aIter.getRefCellValue());
+                if (aCell.getType() == CELLTYPE_FORMULA && aCell.getFormula()->GetErrCode() == eCrit)
+                    fErrors += 1.0;
+            }
+            PushDouble(fErrors);
+        }
+        else
+        {
+            Pop();
+            PushError(eCrit);
+        }
+        return;
+    }
     switch ( GetStackType() )
     {
         case svDoubleRef :
@@ -6284,6 +6354,148 @@ void ScInterpreter::ScCountIf()
             PushDouble(fMatch);
             return;
         }
+    }
+    // weboffice: Excel's COUNTIF wants a range, an array (COUNTIF(IF(...);2)) is #VALUE!
+    if (nMatRows == 0 && GetStackType() == svMatrix)
+    {
+        Pop();
+        PushNoValue();
+        return;
+    }
+    // weboffice: like Excel (measured), a criterion with a number matches numbers and texts that read
+    // as that number, a text criterion (wildcards * ? ~) matches only texts, TRUE/FALSE cells match
+    // neither, comparisons only compare numbers with numbers and texts with texts, "<>" counts every
+    // other cell (also blank ones), "" counts blank and empty text cells and "=" only blank ones
+    if (nMatRows == 0 && !bLogicalCrit && (GetStackType() == svDoubleRef || GetStackType() == svSingleRef))
+    {
+        int nOp = 0; // 0 =, 1 <>, 2 <, 3 <=, 4 >, 5 >=
+        bool bExplicitOp = false;
+        OUString aRest;
+        double fCrit = 0.0;
+        bool bCritNumber = false;
+        if (bIsString)
+        {
+            OUString aCrit = aString.getString();
+            static const std::pair<std::u16string_view, int> aOps[] = {
+                { u"<>", 1 }, { u"<=", 3 }, { u">=", 5 }, { u"<", 2 }, { u">", 4 }, { u"=", 0 } };
+            for (const auto& [aSym, n] : aOps)
+                if (aCrit.startsWith(aSym))
+                {
+                    nOp = n;
+                    bExplicitOp = true;
+                    aCrit = aCrit.copy(aSym.size());
+                    break;
+                }
+            aRest = aCrit;
+            sal_uInt32 nFormat = 0;
+            bCritNumber = !aRest.trim().isEmpty() && mrContext.NFIsNumberFormat(aRest.trim(), nFormat, fCrit);
+        }
+        else
+        {
+            bCritNumber = true;
+            fCrit = fVal;
+        }
+        ScRange aRange;
+        if (GetStackType() == svSingleRef)
+        {
+            ScAddress aAdr;
+            PopSingleRef(aAdr);
+            aRange = ScRange(aAdr);
+        }
+        else
+            PopDoubleRef(aRange);
+        if (nGlobalError != FormulaError::NONE)
+        {
+            PushError(nGlobalError);
+            return;
+        }
+        const OUString aRestLower = ScGlobal::getCharClass().lowercase(aRest);
+        CollatorWrapper& rCollator = ScGlobal::GetCollator();
+        const bool bEmptyCrit = bIsString && aRest.isEmpty();
+        double fHits = 0.0, fNonBlank = 0.0, fEqual = 0.0;
+        ScCellIterator aIter(mrDoc, aRange);
+        for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+        {
+            ScRefCellValue aCell(aIter.getRefCellValue());
+            if (aCell.isEmpty())
+                continue;
+            fNonBlank += 1.0;
+            if (aCell.hasError())
+            {
+                // an error matches the criterion written as that error ("#DIV/0!")
+                if (bIsString && !bCritNumber && (nOp == 0 || nOp == 1) && aCell.getType() == CELLTYPE_FORMULA
+                    && ScGlobal::GetErrorString(aCell.getFormula()->GetErrCode()).equalsIgnoreAsciiCase(aRest))
+                    fEqual += 1.0;
+                continue;
+            }
+            const bool bLogical = (aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                                  && IsLogicalCell(aIter.GetPos(), aCell);
+            const bool bNumber = !bLogical && aCell.hasNumeric();
+            const bool bText = aCell.hasString();
+            const OUString aText = bText ? aCell.getString(mrDoc) : OUString();
+            if (bEmptyCrit)
+            {
+                // "" counts empty texts here (blank cells below), "=" and comparisons count nothing
+                if (nOp == 0 && !bExplicitOp && bText && aText.isEmpty())
+                    fHits += 1.0;
+                continue;
+            }
+            if (nOp == 0 || nOp == 1)
+            {
+                bool bEq = false;
+                if (bCritNumber)
+                {
+                    if (bNumber)
+                        bEq = rtl::math::approxEqual(aCell.getValue(), fCrit);
+                    else if (bText && nOp == 0)
+                    {
+                        sal_uInt32 nFormat = 0;
+                        double fText = 0.0;
+                        const OUString aTrim = aText.trim();
+                        bEq = !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, fText)
+                              && rtl::math::approxEqual(fText, fCrit);
+                    }
+                }
+                else if (bText)
+                    bEq = lcl_ExcelWildcardMatch(aRestLower, ScGlobal::getCharClass().lowercase(aText));
+                if (bEq)
+                    fEqual += 1.0;
+                continue;
+            }
+            // comparisons
+            sal_Int32 nCmp;
+            if (bCritNumber)
+            {
+                if (!bNumber)
+                    continue;
+                const double f = aCell.getValue();
+                nCmp = rtl::math::approxEqual(f, fCrit) ? 0 : (f < fCrit ? -1 : 1);
+            }
+            else
+            {
+                if (!bText)
+                    continue;
+                nCmp = rCollator.compareString(aText, aRest);
+            }
+            if ((nOp == 2 && nCmp < 0) || (nOp == 3 && nCmp <= 0) || (nOp == 4 && nCmp > 0) || (nOp == 5 && nCmp >= 0))
+                fHits += 1.0;
+        }
+        const double fTotal = static_cast<double>(aRange.aEnd.Col() - aRange.aStart.Col() + 1)
+                              * (aRange.aEnd.Row() - aRange.aStart.Row() + 1)
+                              * (aRange.aEnd.Tab() - aRange.aStart.Tab() + 1);
+        if (bEmptyCrit)
+        {
+            if (nOp == 0)
+                fHits += fTotal - fNonBlank;           // "" and "=" count blank cells
+            else if (nOp == 1)
+                fHits = fNonBlank;                     // "<>" counts all non-blank cells
+        }
+        else if (nOp == 0)
+            fHits = fEqual;
+        else if (nOp == 1)
+            fHits = fTotal - fEqual;
+        PushDouble(fHits);
+        return;
     }
     // There's either one RefList and nothing else, or none.
     ScMatrixRef xResMat = (nMatRows ? GetNewMat( 1, nMatRows, /*bEmpty*/true ) : nullptr);
@@ -11700,7 +11912,21 @@ void ScInterpreter::ScSubTotal()
         nFunc -= 100;
     }
 
-    if ( nGlobalError != FormulaError::NONE || nFunc < 1 || nFunc > 11 )
+    // weboffice: like Excel, an error given as an argument (SUBTOTAL(9;#REF!)) is the result
+    FormulaError eArgError = FormulaError::NONE;
+    for (sal_uInt8 i = 1; i < nParamCount && eArgError == FormulaError::NONE; ++i)
+    {
+        const FormulaToken* pArg = pStack[ sp - nParamCount + i ];
+        if (pArg->GetType() == svError)
+            eArgError = static_cast<const FormulaErrorToken*>(pArg)->GetError();
+    }
+    if ( nGlobalError == FormulaError::NONE && eArgError != FormulaError::NONE )
+    {
+        for (sal_uInt8 i = 0; i < nParamCount; ++i)
+            Pop();
+        PushError( eArgError );
+    }
+    else if ( nGlobalError != FormulaError::NONE || nFunc < 1 || nFunc > 11 )
         PushIllegalArgument();  // simulate return on stack, not SetError(...)
     else
     {

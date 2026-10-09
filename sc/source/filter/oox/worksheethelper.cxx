@@ -73,6 +73,8 @@
 #include <cellvalue.hxx>
 #include <columnspanset.hxx>
 #include <dbdata.hxx>
+#include <queryparam.hxx>
+#include <queryentry.hxx>
 #include <cellsuno.hxx>
 #include <NamedSheetViewImporter.hxx>
 #include <fmtuno.hxx>
@@ -971,31 +973,35 @@ void WorksheetGlobals::finalizeWorksheetImport()
     if (pTable)
         pTable->SetOptimalMinRowHeight(maDefRowModel.mfHeight * 20); // in TWIPS
 
-    ScDBData* pDBData = rDoc.GetAnonymousDBData(nTab);
-    if (pDBData && pDBData->HasAutoFilter())
+    // weboffice: like Excel, when a filter of the sheet (its auto filter or a table's) has a
+    // condition, every hidden row of the sheet counts as filtered (SUBTOTAL 9 leaves it out);
+    // without a condition hidden rows are hidden by hand, also inside a filter range
+    auto lcl_HasActiveFilter = [](const ScDBData& rDB)
     {
-        ScRange aRange;
-        pDBData->GetArea(aRange);
-        SCCOLROW nStartRow = static_cast<SCCOLROW>(aRange.aStart.Row());
-        SCCOLROW nEndRow = static_cast<SCCOLROW>(aRange.aEnd.Row());
-        aSpans.push_back(sc::ColRowSpan(nStartRow, nEndRow));
-    }
+        if (!rDB.HasAutoFilter())
+            return false;
+        ScQueryParam aParam;
+        rDB.GetQueryParam(aParam);
+        return aParam.GetEntryCount() > 0 && aParam.GetEntry(0).bDoQuery;
+    };
+    bool bActiveFilter = false;
+    if (ScDBData* pDBData = rDoc.GetAnonymousDBData(nTab))
+        bActiveFilter = lcl_HasActiveFilter(*pDBData);
     ScDBCollection* pDocColl = rDoc.GetDBCollection();
-    if (!pDocColl->empty())
+    if (!bActiveFilter && pDocColl && !pDocColl->empty())
     {
-        ScDBCollection::NamedDBs& rDBs = pDocColl->getNamedDBs();
-        for (const auto& rxDB : rDBs)
-        {
-            if (rxDB->GetTab() == nTab && rxDB->HasAutoFilter())
+        for (const auto& rxDB : pDocColl->getNamedDBs())
+            if (rxDB->GetTab() == nTab && lcl_HasActiveFilter(*rxDB))
             {
-                ScRange aRange;
-                rxDB->GetArea(aRange);
-                SCCOLROW nStartRow = static_cast<SCCOLROW>(aRange.aStart.Row());
-                SCCOLROW nEndRow = static_cast<SCCOLROW>(aRange.aEnd.Row());
-                aSpans.push_back(sc::ColRowSpan(nStartRow, nEndRow));
+                bActiveFilter = true;
+                break;
             }
-        }
     }
+    // table filters are applied after the sheets, so look at the table models of the file
+    if (!bActiveFilter)
+        bActiveFilter = getTables().hasFilterOnSheet(nTab);
+    if (bActiveFilter)
+        aSpans.push_back(sc::ColRowSpan(0, rDoc.MaxRow()));
     convertRows(aSpans);
     lclUpdateProgressBar( mxFinalProgress, 1.0 );
 }

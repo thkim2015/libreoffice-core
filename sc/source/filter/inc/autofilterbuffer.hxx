@@ -252,6 +252,10 @@ public:
 
     rtl::Reference<ScDatabaseRangeObj> createDatabaseObject(sal_Int16 nSheet);
 
+public:
+    /// weboffice: the file gives a filter condition (a filterColumn)
+    bool                hasFilterColumns() const { return !maFilterColumns.empty(); }
+
 private:
     typedef RefVector< FilterColumn > FilterColumnVector;
 
@@ -279,6 +283,15 @@ public:
         @return  True = this buffer contains valid auto filter settings. */
     bool                finalizeImport( const rtl::Reference<ScDatabaseRangeObj>& rxDatabaseRange,
                                         sal_Int16 nSheet );
+
+    /// weboffice: one of the filters has a condition
+    bool                hasFilterColumns() const
+    {
+        for (const auto& rxFilter : maAutoFilters)
+            if (rxFilter->hasFilterColumns())
+                return true;
+        return false;
+    }
 
 private:
     /** Returns the auto filter object used to perform auto filtering. */
