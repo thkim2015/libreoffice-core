@@ -8089,7 +8089,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
         rEntry.eOp = SC_LESS_EQUAL;
     // weboffice: Excel's approximate lookup of a blank cell looks for 0
     bool bBlankLookup = false;
-    if (bSorted && GetStackType() == svSingleRef)
+    if (GetStackType() == svSingleRef)
     {
         const ScAddress aLookupAdr = static_cast<const ScSingleRefToken*>(pStack[sp - 1])->GetSingleRef().toAbs(mrDoc, aPos);
         bBlankLookup = ScRefCellValue(mrDoc, aLookupAdr).isEmpty();
@@ -8098,6 +8098,11 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
         return;
 
     ScQueryEntry::Item& rItem = rEntry.GetQueryItem();
+    if (bBlankLookup && !bSorted)
+    {
+        PushNA(); // weboffice: an exact lookup of a blank cell finds nothing in Excel
+        return;
+    }
     if (bBlankLookup)
     {
         rItem.meType = ScQueryEntry::ByValue;

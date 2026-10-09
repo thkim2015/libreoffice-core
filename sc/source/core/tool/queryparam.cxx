@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <limits>
 #include <memory>
 #include <interpretercontext.hxx>
 #include <queryparam.hxx>
@@ -298,6 +299,16 @@ void ScQueryParamBase::FillInExcelSyntax(
     // match. (empty = 0) is not a match.
     rItem.mbMatchEmpty = ((rEntry.eOp == SC_EQUAL && rItem.maString.isEmpty())
             || (rEntry.eOp == SC_NOT_EQUAL && !rItem.maString.isEmpty()));
+
+    // weboffice: "<", "<=", ">", ">=" without a value match nothing in Excel's COUNTIF
+    if (rItem.maString.isEmpty() && (rEntry.eOp == SC_LESS || rEntry.eOp == SC_LESS_EQUAL
+                                     || rEntry.eOp == SC_GREATER || rEntry.eOp == SC_GREATER_EQUAL))
+    {
+        rItem.mbMatchEmpty = false;
+        rItem.meType = ScQueryEntry::ByValue;
+        rItem.mfVal = std::numeric_limits<double>::quiet_NaN();
+        return;
+    }
 
     // SetQueryBy override item members with special values, so do this last.
     if (bByEmpty)
