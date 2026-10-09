@@ -1028,33 +1028,28 @@ double GetAmorlinc( sal_Int32 nNullDate, double fCost, sal_Int32 nDate, sal_Int3
 double GetDuration( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double fCoup,
     double fYield, sal_Int32 nFreq, sal_Int32 nBase )
 {
-    double          fYearfrac = GetYearFrac( nNullDate, nSettle, nMat, nBase );
-    double          fNumOfCoups = GetCoupnum( nNullDate, nSettle, nMat, nFreq, nBase );
-    double          fDur = 0.0;
-    const double    f100 = 100.0;
-    fCoup *= f100 / double( nFreq );    // fCoup is used as cash flow
-    fYield /= nFreq;
-    fYield += 1.0;
+    // weboffice: like Excel - the cash flows at the coupon dates, the first after DSC/E of a
+    // period with DSC = E - A (as in PRICE); Calc used the year fraction instead
+    const double fE = GetCoupdays( nNullDate, nSettle, nMat, nFreq, nBase );
+    const double fA = GetCoupdaybs( nNullDate, nSettle, nMat, nFreq, nBase );
+    const double fNumOfCoups = GetCoupnum( nNullDate, nSettle, nMat, nFreq, nBase );
+    const double fDSC_E = ( fE - fA ) / fE;
+    const double f100 = 100.0;
+    const double fCash = fCoup * f100 / double( nFreq );
+    const double fBase = 1.0 + fYield / double( nFreq );
 
-    double nDiff = fYearfrac * nFreq - fNumOfCoups;
+    double fDur = 0.0;
+    double p = 0.0;
+    for( double k = 1.0 ; k <= fNumOfCoups ; k++ )
+    {
+        const double t = k - 1.0 + fDSC_E;
+        const double fFlow = fCash + ( k == fNumOfCoups ? f100 : 0.0 );
+        const double fDisc = pow( fBase, t );
+        fDur += t * fFlow / fDisc;
+        p += fFlow / fDisc;
+    }
 
-    double          t;
-
-    for( t = 1.0 ; t < fNumOfCoups ; t++ )
-        fDur += ( t + nDiff ) * fCoup / pow( fYield, t + nDiff );
-
-    fDur += ( fNumOfCoups + nDiff ) * ( fCoup + f100 ) / pow( fYield, fNumOfCoups + nDiff );
-
-    double          p = 0.0;
-    for( t = 1.0 ; t < fNumOfCoups ; t++ )
-        p += fCoup / pow( fYield, t + nDiff );
-
-    p += ( fCoup + f100 ) / pow( fYield, fNumOfCoups + nDiff );
-
-    fDur /= p;
-    fDur /= double( nFreq );
-
-    return fDur;
+    return fDur / p / double( nFreq );
 }
 
 
@@ -1141,9 +1136,10 @@ double getPrice_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double
     double      fFreq = nFreq;
 
     double      fE = GetCoupdays( nNullDate, nSettle, nMat, nFreq, nBase );
-    double      fDSC_E = GetCoupdaysnc( nNullDate, nSettle, nMat, nFreq, nBase ) / fE;
     double      fN = GetCoupnum( nNullDate, nSettle, nMat, nFreq, nBase );
     double      fA = GetCoupdaybs( nNullDate, nSettle, nMat, nFreq, nBase );
+    // weboffice: Excel takes DSC as E - A (with basis 2 and 3 not COUPDAYSNC, A + DSC != E)
+    double      fDSC_E = ( fE - fA ) / fE;
 
     double      fRet = fRedemp / ( pow( 1.0 + fYield / fFreq, fN - 1.0 + fDSC_E ) );
     fRet -= 100.0 * fRate / fFreq * fA / fE;
@@ -2026,24 +2022,23 @@ ConvertDataList::ConvertDataList()
 #define NEWL(str,unit,offs,cl)  maVector.push_back(std::make_unique<ConvertDataLinear>(u"" str,unit,offs,cl))
 #define NEWLP(str,unit,offs,cl) maVector.push_back(std::make_unique<ConvertDataLinear>(u"" str,unit,offs,cl,true))
 
-    const size_t expected_size = 146;
+    const size_t expected_size = 133;
     maVector.reserve(expected_size);
 
     // *** are extra and not standard Excel Analysis Addin!
 
     // MASS: 1 Gram is...
     NEWDP( "g",         1.0000000000000000E00,  CDC_Mass ); // Gram
-    NEWD( "sg",         6.8522050005347800E-05, CDC_Mass ); // Pieces
-    NEWD( "lbm",        2.2046229146913400E-03, CDC_Mass ); // Pound (commercial weight)
-    NEWDP( "u",         6.0221370000000000E23,  CDC_Mass ); // U (atomic mass)
-    NEWD( "ozm",        3.5273971800362700E-02, CDC_Mass ); // Ounce (commercial weight)
-    NEWD( "stone",      1.574730e-04,           CDC_Mass ); // *** Stone
-    NEWD( "ton",        1.102311e-06,           CDC_Mass ); // *** Ton
-    NEWD( "grain",      1.543236E01,            CDC_Mass ); // *** Grain
-    NEWD( "pweight",    7.054792E-01,           CDC_Mass ); // *** Pennyweight
-    NEWD( "hweight",    1.968413E-05,           CDC_Mass ); // *** Hundredweight
-    NEWD( "shweight",   2.204623E-05,           CDC_Mass ); // *** Shorthundredweight
-    NEWD( "brton",      9.842065E-07,           CDC_Mass ); // *** Gross Registered Ton
+    NEWD( "sg",         6.852176585679177E-05, CDC_Mass ); // Pieces // weboffice: Excel
+    NEWD( "lbm",        0.002204622621848776, CDC_Mass ); // Pound (commercial weight) // weboffice: Excel
+    NEWDP( "u",         6.022141794216764E+23,  CDC_Mass ); // U (atomic mass) // weboffice: Excel
+    NEWD( "ozm",        0.035273961949580414, CDC_Mass ); // Ounce (commercial weight) // weboffice: Excel
+    NEWD( "stone",      0.00015747304441776972,           CDC_Mass ); // *** Stone // weboffice: Excel
+    NEWD( "ton",        1.102311310924388E-06,           CDC_Mass ); // *** Ton // weboffice: Excel
+    NEWD( "grain",      15.43235835294143,            CDC_Mass ); // *** Grain // weboffice: Excel
+    NEWD( "hweight",    1.9684130552221215E-05,           CDC_Mass ); // *** Hundredweight // weboffice: Excel
+    NEWD( "shweight",   2.2046226218487758E-05,           CDC_Mass ); // *** Shorthundredweight // weboffice: Excel
+    NEWD( "brton",      9.842065276110607E-07,           CDC_Mass ); // *** Gross Registered Ton // weboffice: Excel
     NEWD( "cwt",        2.2046226218487758E-05, CDC_Mass ); // U.S. (short) hundredweight
     NEWD( "shweight",   2.2046226218487758E-05, CDC_Mass ); // U.S. (short) hundredweight also
     NEWD( "uk_cwt",     1.9684130552221213E-05, CDC_Mass ); // Imperial hundredweight
@@ -2061,13 +2056,11 @@ ConvertDataList::ConvertDataList()
     NEWD( "yd",         1.0936132983377078E00,  CDC_Length ); // Yard               1,0936132983377077865266841644794
     NEWDP( "ang",       1.0000000000000000E10,  CDC_Length ); // Angstrom
     NEWD( "Pica",       2.8346456692913386E03,  CDC_Length ); // Pica Point (1/72 Inch)   2834,6456692913385826771653543307
-    NEWD( "picapt",     2.8346456692913386E03,  CDC_Length ); // Pica Point (1/72 Inch)   2834,6456692913385826771653543307
-    NEWD( "pica",       2.36220472441E02,       CDC_Length ); // pica (1/6 Inch)
-    NEWD( "ell",        8.748906E-01,           CDC_Length ); // *** Ell
-    NEWDP( "parsec",    3.240779E-17,           CDC_Length ); // *** Parsec
-    NEWDP( "pc",        3.240779E-17,           CDC_Length ); // *** Parsec also
-    NEWDP( "lightyear", 1.0570234557732930E-16, CDC_Length ); // *** Light Year
-    NEWDP( "ly",        1.0570234557732930E-16, CDC_Length ); // *** Light Year also
+    NEWD( "pica",       236.22047244094486,       CDC_Length ); // pica (1/6 Inch) // weboffice: Excel
+    NEWD( "ell",        0.8748906386701663,           CDC_Length ); // *** Ell // weboffice: Excel
+    NEWDP( "parsec",    3.240779289664725E-17,           CDC_Length ); // *** Parsec // weboffice: Excel
+    NEWDP( "pc",        3.240779289664725E-17,           CDC_Length ); // *** Parsec also // weboffice: Excel
+    NEWDP( "ly",        1.0570008340246154E-16, CDC_Length ); // *** Light Year also // weboffice: Excel
     NEWD( "survey_mi",  6.2136994949494949E-04, CDC_Length ); // U.S. survey mile
 
     // TIME: 1 Second is...
@@ -2082,40 +2075,40 @@ ConvertDataList::ConvertDataList()
 
     // PRESSURE: 1 Pascal is...
     NEWDP( "Pa",    1.0000000000000000E00,  CDC_Pressure ); // Pascal
-    NEWDP( "atm",   9.8692329999819300E-06, CDC_Pressure ); // Atmosphere
-    NEWDP( "at",    9.8692329999819300E-06, CDC_Pressure ); // Atmosphere also
-    NEWDP( "mmHg",  7.5006170799862700E-03, CDC_Pressure ); // mm Hg (Mercury)
-    NEWD( "Torr",   7.5006380000000000E-03, CDC_Pressure ); // *** Torr
-    NEWD( "psi",    1.4503770000000000E-04, CDC_Pressure ); // *** Psi
+    NEWDP( "atm",   9.869232667160129E-06, CDC_Pressure ); // Atmosphere // weboffice: Excel
+    NEWDP( "at",    9.869232667160129E-06, CDC_Pressure ); // Atmosphere also // weboffice: Excel
+    NEWDP( "mmHg",  0.007500637554192106, CDC_Pressure ); // mm Hg (Mercury) // weboffice: Excel
+    NEWD( "Torr",   0.007500616827041697, CDC_Pressure ); // *** Torr // weboffice: Excel
+    NEWD( "psi",    0.0001450377377302092, CDC_Pressure ); // *** Psi // weboffice: Excel
 
     // FORCE: 1 Newton is...
     NEWDP( "N",     1.0000000000000000E00,  CDC_Force ); // Newton
     NEWDP( "dyn",   1.0000000000000000E05,  CDC_Force ); // Dyn
     NEWDP( "dy",    1.0000000000000000E05,  CDC_Force ); // Dyn also
-    NEWD( "lbf",    2.24808923655339E-01,   CDC_Force ); // Pound-Force
-    NEWDP( "pond",  1.019716E02,            CDC_Force ); // *** Pond
+    NEWD( "lbf",    0.22480894309971047,   CDC_Force ); // Pound-Force // weboffice: Excel
+    NEWDP( "pond",  101.97162129779282,            CDC_Force ); // *** Pond // weboffice: Excel
 
     // ENERGY: 1 Joule is...
     NEWDP( "J",     1.0000000000000000E00,  CDC_Energy ); // Joule
     NEWDP( "e",     1.0000000000000000E07,  CDC_Energy ); // Erg  -> https://en.wikipedia.org/wiki/Erg
-    NEWDP( "c",     2.3900624947346700E-01, CDC_Energy ); // Thermodynamical Calorie
-    NEWDP( "cal",   2.3884619064201700E-01, CDC_Energy ); // Calorie
-    NEWDP( "eV",    6.2414570000000000E18,  CDC_Energy ); // Electronvolt
-    NEWDP( "ev",    6.2414570000000000E18,  CDC_Energy ); // Electronvolt also
-    NEWD( "HPh",    3.7250611111111111E-07, CDC_Energy ); // Horsepower Hours
-    NEWD( "hh",     3.7250611111111111E-07, CDC_Energy ); // Horsepower Hours also
+    NEWDP( "c",     0.2390057361376673, CDC_Energy ); // Thermodynamical Calorie // weboffice: Excel
+    NEWDP( "cal",   0.23884589662749595, CDC_Energy ); // Calorie // weboffice: Excel
+    NEWDP( "eV",    6.241509647120418E+18,  CDC_Energy ); // Electronvolt // weboffice: Excel
+    NEWDP( "ev",    6.241509647120418E+18,  CDC_Energy ); // Electronvolt also // weboffice: Excel
+    NEWD( "HPh",    3.725061359986188E-07, CDC_Energy ); // Horsepower Hours // weboffice: Excel
+    NEWD( "hh",     3.725061359986188E-07, CDC_Energy ); // Horsepower Hours also // weboffice: Excel
     NEWDP( "Wh",    2.7777777777777778E-04, CDC_Energy ); // Watt Hours
     NEWDP( "wh",    2.7777777777777778E-04, CDC_Energy ); // Watt Hours also
-    NEWD( "flb",    2.37304222192651E01,    CDC_Energy ); // Foot Pound
-    NEWD( "BTU",    9.4781506734901500E-04, CDC_Energy ); // British Thermal Unit
-    NEWD( "btu",    9.4781506734901500E-04, CDC_Energy ); // British Thermal Unit also
+    NEWD( "flb",    0.7375621492772654,    CDC_Energy ); // Foot Pound // weboffice: Excel
+    NEWD( "BTU",    0.0009478171203133171, CDC_Energy ); // British Thermal Unit // weboffice: Excel
+    NEWD( "btu",    0.0009478171203133171, CDC_Energy ); // British Thermal Unit also // weboffice: Excel
 
     // POWER: 1 Watt is...
     NEWDP( "W",     1.0000000000000000E00,  CDC_Power ); // Watt
     NEWDP( "w",     1.0000000000000000E00,  CDC_Power ); // Watt also
-    NEWD( "HP",     1.341022E-03,           CDC_Power ); // Horsepower
-    NEWD( "h",      1.341022E-03,           CDC_Power ); // Horsepower also
-    NEWD( "PS",     1.359622E-03,           CDC_Power ); // *** German Pferdestaerke
+    NEWD( "HP",     0.0013410220895950279,           CDC_Power ); // Horsepower // weboffice: Excel
+    NEWD( "h",      0.0013410220895950279,           CDC_Power ); // Horsepower also // weboffice: Excel
+    NEWD( "PS",     0.0013596216173039043,           CDC_Power ); // *** German Pferdestaerke // weboffice: Excel
 
     // MAGNETISM: 1 Tesla is...
     NEWDP( "T",     1.0000000000000000E00,  CDC_Magnetism ); // Tesla
@@ -2152,19 +2145,12 @@ ConvertDataList::ConvertDataList()
     NEWD( "yd3",        1.3079506193143922E-03, CDC_Volume ); // *** Cubic Yard
     NEWDP( "ang3",      1.0000000000000000E27,  CDC_Volume ); // *** Cubic Angstrom
     NEWD( "Pica3",      2.2776990435870636E07,  CDC_Volume ); // *** Cubic Pica Point (1/72 inch)
-    NEWD( "picapt3",    2.2776990435870636E07,  CDC_Volume ); // *** Cubic Pica Point (1/72 inch)
-    NEWD( "pica3",      1.31811287245E04,       CDC_Volume ); // *** Cubic Pica (1/6 inch)
     NEWD( "barrel",     6.2898107704321051E-03, CDC_Volume ); // *** Barrel (=42gal)
-    NEWD( "bushel",     2.837759E-02,           CDC_Volume ); // *** Bushel
-    NEWD( "regton",     3.531467E-04,           CDC_Volume ); // *** Register ton
-    NEWD( "GRT",        3.531467E-04,           CDC_Volume ); // *** Register ton also
-    NEWD( "Schooner",   2.3529411764705882E00,  CDC_Volume ); // *** austr. Schooner
-    NEWD( "Middy",      3.5087719298245614E00,  CDC_Volume ); // *** austr. Middy
-    NEWD( "Glass",      5.0000000000000000E00,  CDC_Volume ); // *** austr. Glass
-    NEWD( "Sixpack",    0.5,                    CDC_Volume ); // ***
-    NEWD( "Humpen",     2.0,                    CDC_Volume ); // ***
-    NEWD( "ly3",        1.1810108125623799E-51, CDC_Volume ); // *** Cubic light-year
-    NEWD( "MTON",       1.4125866688595436E00,  CDC_Volume ); // *** Measurement ton
+    NEWD( "bushel",     0.028377593258401747,           CDC_Volume ); // *** Bushel // weboffice: Excel
+    NEWD( "regton",     0.00035314666721488586,           CDC_Volume ); // *** Register ton // weboffice: Excel
+    NEWD( "GRT",        0.00035314666721488586,           CDC_Volume ); // *** Register ton also // weboffice: Excel
+    NEWD( "ly3",        1.1809349884417084E-51, CDC_Volume ); // *** Cubic light-year // weboffice: Excel
+    NEWD( "MTON",       0.0008828666680372147,  CDC_Volume ); // *** Measurement ton // weboffice: Excel
     NEWD( "tspm",       2.0000000000000000E02,  CDC_Volume ); // *** Modern teaspoon
     NEWD( "uk_gal",     2.1996924829908779E-01,  CDC_Volume ); // U.K. / Imperial gallon        1/4.54609
     NEWD( "uk_qt",      8.7987699319635115E-01,  CDC_Volume ); // U.K. / Imperial quart         1/4 imperial gallon
@@ -2178,14 +2164,11 @@ ConvertDataList::ConvertDataList()
     NEWD( "yd2",        1.1959900463010803E00,  CDC_Area ); // *** Square Yard
     NEWDP( "ang2",      1.0000000000000000E20,  CDC_Area ); // *** Square Angstrom
     NEWD( "Pica2",      8.0352160704321409E06,  CDC_Area ); // *** Square Pica Point (1/72 inch)
-    NEWD( "picapt2",    8.0352160704321409E06,  CDC_Area ); // *** Square Pica Point (1/72 inch)
-    NEWD( "pica2",      5.58001116002232E04,    CDC_Area ); // *** Square Pica (1/6 inch)
     NEWD( "Morgen",     4.0000000000000000E-04, CDC_Area ); // *** Morgen
     NEWDP( "ar",        1.000000E-02,           CDC_Area ); // *** Ar
-    NEWD( "acre",       2.471053815E-04,        CDC_Area ); // *** Acre
     NEWD( "uk_acre",    2.4710538146716534E-04, CDC_Area ); // *** International acre
     NEWD( "us_acre",    2.4710439304662790E-04, CDC_Area ); // *** U.S. survey/statute acre
-    NEWD( "ly2",        1.1172985860549147E-32, CDC_Area ); // *** Square Light-year
+    NEWD( "ly2",        1.117250763128733E-32, CDC_Area ); // *** Square Light-year // weboffice: Excel
     NEWD( "ha",         1.000000E-04,           CDC_Area ); // *** Hectare
 
     // SPEED: 1 Meter per Second is...

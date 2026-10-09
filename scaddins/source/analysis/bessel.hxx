@@ -46,6 +46,14 @@ double BesselI(double x, sal_Int32 n);
 */
 double BesselY(double x, sal_Int32 n);
 
+/// weboffice: Excel's values (Numerical Recipes style approximations)
+/// @throws css::lang::IllegalArgumentException
+double ExcelBesselJ( double x, sal_Int32 n );
+/// @throws css::lang::IllegalArgumentException
+double ExcelBesselI( double x, sal_Int32 n );
+double ExcelBesselK( double x, sal_Int32 n );
+double ExcelBesselY( double x, sal_Int32 n );
+
 /** Returns the result for the modified BESSEL function of second kind (K), n-th order, at point x.
 
     @throws css::lang::IllegalArgumentException

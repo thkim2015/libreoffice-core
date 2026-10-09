@@ -649,13 +649,13 @@ double SAL_CALL AnalysisAddIn::getLcm( const uno::Reference< beans::XPropertySet
 
 double SAL_CALL AnalysisAddIn::getBesseli( double fNum, sal_Int32 nOrder )
 {
-    double fRet = sca::analysis::BesselI( fNum, nOrder );
+    double fRet = sca::analysis::ExcelBesselI( fNum, nOrder ); // weboffice: Excel's values
     return finiteOrThrow( fRet );
 }
 
 double SAL_CALL AnalysisAddIn::getBesselj( double fNum, sal_Int32 nOrder )
 {
-    double fRet = sca::analysis::BesselJ( fNum, nOrder );
+    double fRet = sca::analysis::ExcelBesselJ( fNum, nOrder ); // weboffice: Excel's values
     return finiteOrThrow( fRet );
 }
 
@@ -664,7 +664,7 @@ double SAL_CALL AnalysisAddIn::getBesselk( double fNum, sal_Int32 nOrder )
     if( nOrder < 0 || fNum <= 0.0 )
         throw lang::IllegalArgumentException();
 
-    double fRet = sca::analysis::BesselK( fNum, nOrder );
+    double fRet = sca::analysis::ExcelBesselK( fNum, nOrder ); // weboffice: Excel's values
     return finiteOrThrow( fRet );
 }
 
@@ -673,7 +673,7 @@ double SAL_CALL AnalysisAddIn::getBessely( double fNum, sal_Int32 nOrder )
     if( nOrder < 0 || fNum <= 0.0 )
         throw lang::IllegalArgumentException();
 
-    double fRet = sca::analysis::BesselY( fNum, nOrder );
+    double fRet = sca::analysis::ExcelBesselY( fNum, nOrder ); // weboffice: Excel's values
     return finiteOrThrow( fRet );
 }
 

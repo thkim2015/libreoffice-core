@@ -446,6 +446,254 @@ double BesselY( double fNum, sal_Int32 nOrder )
     }
 }
 
+// weboffice: Excel's BESSELJ/Y/I/K are the rational and polynomial approximations with Miller's
+// recurrence (as in Numerical Recipes); its results differ from the exact values in the 8th or
+// 9th digit (BESSELJ(0;0) is 1.0000000028), and these give Excel's values to the last digit.
+namespace {
+
+const double fExcelBesselAcc = 40.0;
+const double fExcelBesselBig = 1.0e10;
+const double fExcelBesselBigInv = 1.0e-10;
+
+double ExcelBesselJ0( double x )
+{
+    const double ax = std::fabs( x );
+    if (ax < 8.0)
+    {
+        const double y = x * x;
+        const double a1 = 57568490574.0 + y * (-13362590354.0 + y * (651619640.7 + y * (-11214424.18 + y * (77392.33017 + y * (-184.9052456)))));
+        const double a2 = 57568490411.0 + y * (1029532985.0 + y * (9494680.718 + y * (59272.64853 + y * (267.8532712 + y * 1.0))));
+        return a1 / a2;
+    }
+    const double z = 8.0 / ax, y = z * z, xx = ax - 0.785398164;
+    const double a1 = 1.0 + y * (-0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+    const double a2 = -0.1562499995e-1 + y * (0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7621095161e-6 - y * 0.934935152e-7)));
+    return std::sqrt( 0.636619772 / ax ) * (std::cos( xx ) * a1 - z * std::sin( xx ) * a2);
+}
+
+double ExcelBesselJ1( double x )
+{
+    const double ax = std::fabs( x );
+    if (ax < 8.0)
+    {
+        const double y = x * x;
+        const double a1 = x * (72362614232.0 + y * (-7895059235.0 + y * (242396853.1 + y * (-2972611.439 + y * (15704.48260 + y * (-30.16036606))))));
+        const double a2 = 144725228442.0 + y * (2300535178.0 + y * (18583304.74 + y * (99447.43394 + y * (376.9991397 + y * 1.0))));
+        return a1 / a2;
+    }
+    const double z = 8.0 / ax, y = z * z, xx = ax - 2.356194491;
+    const double a1 = 1.0 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * (-0.240337019e-6))));
+    const double a2 = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+    const double ans = std::sqrt( 0.636619772 / ax ) * (std::cos( xx ) * a1 - z * std::sin( xx ) * a2);
+    return x < 0.0 ? -ans : ans;
+}
+
+double ExcelBesselY0( double x )
+{
+    if (x < 8.0)
+    {
+        const double y = x * x;
+        const double a1 = -2957821389.0 + y * (7062834065.0 + y * (-512359803.6 + y * (10879881.29 + y * (-86327.92757 + y * 228.4622733))));
+        const double a2 = 40076544269.0 + y * (745249964.8 + y * (7189466.438 + y * (47447.26470 + y * (226.1030244 + y * 1.0))));
+        return a1 / a2 + 0.636619772 * ExcelBesselJ0( x ) * std::log( x );
+    }
+    const double z = 8.0 / x, y = z * z, xx = x - 0.785398164;
+    const double a1 = 1.0 + y * (-0.1098628627e-2 + y * (0.2734510407e-4 + y * (-0.2073370639e-5 + y * 0.2093887211e-6)));
+    const double a2 = -0.1562499995e-1 + y * (0.1430488765e-3 + y * (-0.6911147651e-5 + y * (0.7621095161e-6 + y * (-0.934945152e-7))));
+    return std::sqrt( 0.636619772 / x ) * (std::sin( xx ) * a1 + z * std::cos( xx ) * a2);
+}
+
+double ExcelBesselY1( double x )
+{
+    if (x < 8.0)
+    {
+        const double y = x * x;
+        const double a1 = x * (-0.4900604943e13 + y * (0.1275274390e13 + y * (-0.5153438139e11 + y * (0.7349264551e9 + y * (-0.4237922726e7 + y * 0.8511937935e4)))));
+        const double a2 = 0.2499580570e14 + y * (0.4244419664e12 + y * (0.3733650367e10 + y * (0.2245904002e8 + y * (0.1020426050e6 + y * (0.3549632885e3 + y)))));
+        return a1 / a2 + 0.636619772 * (ExcelBesselJ1( x ) * std::log( x ) - 1.0 / x);
+    }
+    const double z = 8.0 / x, y = z * z, xx = x - 2.356194491;
+    const double a1 = 1.0 + y * (0.183105e-2 + y * (-0.3516396496e-4 + y * (0.2457520174e-5 + y * (-0.240337019e-6))));
+    const double a2 = 0.04687499995 + y * (-0.2002690873e-3 + y * (0.8449199096e-5 + y * (-0.88228987e-6 + y * 0.105787412e-6)));
+    return std::sqrt( 0.636619772 / x ) * (std::sin( xx ) * a1 + z * std::cos( xx ) * a2);
+}
+
+double ExcelBesselI0( double x )
+{
+    const double ax = std::fabs( x );
+    if (ax < 3.75)
+    {
+        double y = x / 3.75;
+        y *= y;
+        return 1.0 + y * (3.5156229 + y * (3.0899424 + y * (1.2067492 + y * (0.2659732 + y * (0.360768e-1 + y * 0.45813e-2)))));
+    }
+    const double y = 3.75 / ax;
+    return (std::exp( ax ) / std::sqrt( ax )) * (0.39894228 + y * (0.1328592e-1 + y * (0.225319e-2 + y * (-0.157565e-2 + y * (0.916281e-2 + y * (-0.2057706e-1 + y * (0.2635537e-1 + y * (-0.1647633e-1 + y * 0.392377e-2))))))));
+}
+
+double ExcelBesselI1( double x )
+{
+    const double ax = std::fabs( x );
+    double ans;
+    if (ax < 3.75)
+    {
+        double y = x / 3.75;
+        y *= y;
+        ans = ax * (0.5 + y * (0.87890594 + y * (0.51498869 + y * (0.15084934 + y * (0.2658733e-1 + y * (0.301532e-2 + y * 0.32411e-3))))));
+    }
+    else
+    {
+        const double y = 3.75 / ax;
+        ans = 0.2282967e-1 + y * (-0.2895312e-1 + y * (0.1787654e-1 - y * 0.420059e-2));
+        ans = 0.39894228 + y * (-0.3988024e-1 + y * (-0.362018e-2 + y * (0.163801e-2 + y * (-0.1031555e-1 + y * ans))));
+        ans *= std::exp( ax ) / std::sqrt( ax );
+    }
+    return x < 0.0 ? -ans : ans;
+}
+
+double ExcelBesselK0( double x )
+{
+    if (x <= 2.0)
+    {
+        const double y = x * x / 4.0;
+        return (-std::log( x / 2.0 ) * ExcelBesselI0( x )) + (-0.57721566 + y * (0.42278420 + y * (0.23069756 + y * (0.3488590e-1 + y * (0.262698e-2 + y * (0.10750e-3 + y * 0.74e-5))))));
+    }
+    const double y = 2.0 / x;
+    return (std::exp( -x ) / std::sqrt( x )) * (1.25331414 + y * (-0.7832358e-1 + y * (0.2189568e-1 + y * (-0.1062446e-1 + y * (0.587872e-2 + y * (-0.251540e-2 + y * 0.53208e-3))))));
+}
+
+double ExcelBesselK1( double x )
+{
+    if (x <= 2.0)
+    {
+        const double y = x * x / 4.0;
+        return (std::log( x / 2.0 ) * ExcelBesselI1( x )) + (1.0 / x) * (1.0 + y * (0.15443144 + y * (-0.67278579 + y * (-0.18156897 + y * (-0.1919402e-1 + y * (-0.110404e-2 + y * (-0.4686e-4)))))));
+    }
+    const double y = 2.0 / x;
+    return (std::exp( -x ) / std::sqrt( x )) * (1.25331414 + y * (0.23498619 + y * (-0.3655620e-1 + y * (0.1504268e-1 + y * (-0.780353e-2 + y * (0.325614e-2 + y * (-0.68245e-3)))))));
+}
+
+}
+
+double ExcelBesselJ( double x, sal_Int32 n )
+{
+    if (n < 0)
+        throw IllegalArgumentException();
+    if (n == 0)
+        return ExcelBesselJ0( x );
+    if (n == 1)
+        return ExcelBesselJ1( x );
+    const double ax = std::fabs( x );
+    if (ax == 0.0)
+        return 0.0;
+    double ans;
+    if (ax > static_cast<double>(n))
+    {
+        const double tox = 2.0 / ax;
+        double bjm = ExcelBesselJ0( ax ), bj = ExcelBesselJ1( ax );
+        for (sal_Int32 j = 1; j < n; ++j)
+        {
+            const double bjp = j * tox * bj - bjm;
+            bjm = bj;
+            bj = bjp;
+        }
+        ans = bj;
+    }
+    else
+    {
+        const double tox = 2.0 / ax;
+        const sal_Int32 m = 2 * ((n + static_cast<sal_Int32>(std::sqrt( fExcelBesselAcc * n ))) / 2);
+        bool bSum = false;
+        double bjp = 0.0, sum = 0.0, bj = 1.0;
+        ans = 0.0;
+        for (sal_Int32 j = m; j > 0; --j)
+        {
+            const double bjm = j * tox * bj - bjp;
+            bjp = bj;
+            bj = bjm;
+            if (std::fabs( bj ) > fExcelBesselBig)
+            {
+                bj *= fExcelBesselBigInv;
+                bjp *= fExcelBesselBigInv;
+                ans *= fExcelBesselBigInv;
+                sum *= fExcelBesselBigInv;
+            }
+            if (bSum)
+                sum += bj;
+            bSum = !bSum;
+            if (j == n)
+                ans = bjp;
+        }
+        sum = 2.0 * sum - bj;
+        ans /= sum;
+    }
+    return (x < 0.0 && (n & 1)) ? -ans : ans;
+}
+
+double ExcelBesselI( double x, sal_Int32 n )
+{
+    if (n < 0)
+        throw IllegalArgumentException();
+    if (n == 0)
+        return ExcelBesselI0( x );
+    if (n == 1)
+        return ExcelBesselI1( x );
+    if (x == 0.0)
+        return 0.0;
+    const double tox = 2.0 / std::fabs( x );
+    double bip = 0.0, ans = 0.0, bi = 1.0;
+    for (sal_Int32 j = 2 * (n + static_cast<sal_Int32>(std::sqrt( fExcelBesselAcc * n ))); j > 0; --j)
+    {
+        const double bim = bip + j * tox * bi;
+        bip = bi;
+        bi = bim;
+        if (std::fabs( bi ) > fExcelBesselBig)
+        {
+            ans *= fExcelBesselBigInv;
+            bi *= fExcelBesselBigInv;
+            bip *= fExcelBesselBigInv;
+        }
+        if (j == n)
+            ans = bip;
+    }
+    ans *= ExcelBesselI0( x ) / bi;
+    return (x < 0.0 && (n & 1)) ? -ans : ans;
+}
+
+double ExcelBesselK( double x, sal_Int32 n )
+{
+    if (n == 0)
+        return ExcelBesselK0( x );
+    if (n == 1)
+        return ExcelBesselK1( x );
+    const double tox = 2.0 / x;
+    double bkm = ExcelBesselK0( x ), bk = ExcelBesselK1( x );
+    for (sal_Int32 j = 1; j < n; ++j)
+    {
+        const double bkp = bkm + j * tox * bk;
+        bkm = bk;
+        bk = bkp;
+    }
+    return bk;
+}
+
+double ExcelBesselY( double x, sal_Int32 n )
+{
+    if (n == 0)
+        return ExcelBesselY0( x );
+    if (n == 1)
+        return ExcelBesselY1( x );
+    const double tox = 2.0 / x;
+    double bym = ExcelBesselY0( x ), by = ExcelBesselY1( x );
+    for (sal_Int32 j = 1; j < n; ++j)
+    {
+        const double byp = j * tox * by - bym;
+        bym = by;
+        by = byp;
+    }
+    return by;
+}
+
 } // namespace sca::analysis
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

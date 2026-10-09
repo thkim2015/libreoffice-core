@@ -20,6 +20,7 @@
 #include <memory>
 #include <interpretercontext.hxx>
 #include <queryparam.hxx>
+#include <rtl/math.hxx>
 #include <queryentry.hxx>
 #include <scmatrix.hxx>
 
@@ -202,6 +203,14 @@ void ScQueryParamBase::Resize(size_t nNew)
     m_Entries.resize(nNew);
 }
 
+static bool lcl_IsNumberCriterion( const OUString& rStr )
+{
+    rtl_math_ConversionStatus eStatus;
+    sal_Int32 nEnd = 0;
+    rtl::math::stringToDouble( rStr.trim(), '.', ',', &eStatus, &nEnd );
+    return eStatus == rtl_math_ConversionStatus_Ok && nEnd == rStr.trim().getLength() && nEnd > 0;
+}
+
 void ScQueryParamBase::FillInExcelSyntax(
     svl::SharedStringPool& rPool, const OUString& rCellStr, SCSIZE nIndex, ScInterpreterContext* pContext )
 {
@@ -259,6 +268,12 @@ void ScQueryParamBase::FillInExcelSyntax(
                 rItem.maString = rPool.intern(rCellStr.copy(1));
                 if (rCellStr.getLength() == 1)
                     bByEmpty = true;
+            }
+            else if (!pContext && !lcl_IsNumberCriterion(rCellStr))
+            {
+                // weboffice: like Excel, a text criterion of a criteria range (database functions,
+                // advanced filter) without an operator matches the texts beginning with it
+                rItem.maString = rPool.intern(rCellStr.endsWith("*") ? rCellStr : OUString(rCellStr + "*"));
             }
             else
                 rItem.maString = rPool.intern(rCellStr);

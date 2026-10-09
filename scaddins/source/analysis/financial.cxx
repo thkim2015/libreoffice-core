@@ -20,6 +20,7 @@
 #include "analysisdefs.hxx"
 #include "analysis.hxx"
 #include "analysishelper.hxx"
+#include <cmath>
 #include <o3tl/temporary.hxx>
 #include <o3tl/untaint.hxx>
 
@@ -346,14 +347,22 @@ double SAL_CALL AnalysisAddIn::getYieldmat( const css::uno::Reference< css::bean
 double SAL_CALL AnalysisAddIn::getTbilleq( const css::uno::Reference< css::beans::XPropertySet >& xOpt,
     sal_Int32 nSettle, sal_Int32 nMat, double fDisc )
 {
-    nMat++;
-
-    sal_Int32   nDiff = GetDiffDate360( xOpt, nSettle, nMat, true );
-
-    if( fDisc <= 0.0 || nSettle >= nMat || nDiff > 360 )
+    // weboffice: like Excel - the actual days; up to 182 days the simple bond equivalent yield,
+    // above the solution of the quadratic for a bond with a coupon in between
+    (void) xOpt;
+    const sal_Int32 nDSM = nMat - nSettle;
+    if( fDisc <= 0.0 || nDSM <= 0 || nDSM > 365 )
         throw css::lang::IllegalArgumentException();
 
-    double fRet = ( 365 * fDisc ) / ( 360 - ( fDisc * double( nDiff ) ) );
+    double fRet;
+    if (nDSM <= 182)
+        fRet = ( 365 * fDisc ) / ( 360 - ( fDisc * double( nDSM ) ) );
+    else
+    {
+        const double fPrice = 1.0 - fDisc * nDSM / 360.0;
+        const double fA = nDSM / 365.0;
+        fRet = ( -fA + std::sqrt( fA * fA - ( 2.0 * fA - 1.0 ) * ( 1.0 - 1.0 / fPrice ) ) ) / ( fA - 0.5 );
+    }
     return finiteOrThrow( fRet );
 }
 

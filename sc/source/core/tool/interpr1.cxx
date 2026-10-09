@@ -3098,6 +3098,14 @@ void ScInterpreter::ScIsFormula()
     PushInt( int(bRes) );
 }
 
+// weboffice: FORMULATEXT shows the formula like Excel - Excel function names and Sheet!A1
+// references (the OOXML grammar without its _xlfn./_xlws. prefixes), not Calc's syntax
+static OUString lcl_ExcelFormulaText( ScFormulaCell& rCell, ScInterpreterContext& rContext )
+{
+    OUString aText = rCell.GetFormula(formula::FormulaGrammar::GRAM_OOXML, &rContext);
+    return aText.replaceAll(u"_xlfn._xlws.", u"").replaceAll(u"_xlfn.", u"").replaceAll(u"_xlws.", u"");
+}
+
 void ScInterpreter::ScFormula()
 {
     OUString aFormula;
@@ -3136,7 +3144,7 @@ void ScInterpreter::ScFormula()
                         switch (aCell.getType())
                         {
                             case CELLTYPE_FORMULA :
-                                aFormula = aCell.getFormula()->GetFormula(formula::FormulaGrammar::GRAM_UNSPECIFIED, &mrContext);
+                                aFormula = lcl_ExcelFormulaText(*aCell.getFormula(), mrContext);
                                 pResMat->PutString( mrStrPool.intern( aFormula), i,j);
                                 break;
                             default:
@@ -3162,7 +3170,7 @@ void ScInterpreter::ScFormula()
             switch (aCell.getType())
             {
                 case CELLTYPE_FORMULA :
-                    aFormula = aCell.getFormula()->GetFormula(formula::FormulaGrammar::GRAM_UNSPECIFIED, &mrContext);
+                    aFormula = lcl_ExcelFormulaText(*aCell.getFormula(), mrContext);
                 break;
                 default:
                     SetError( FormulaError::NotAvailable );
@@ -7883,6 +7891,67 @@ void ScInterpreter::ScHLookup()
     CalculateLookup(true);
 }
 
+// weboffice: the approximate match of Excel's VLOOKUP/HLOOKUP is a binary search over the cells
+// as they are, also when they are not sorted (Calc searched linearly and so found other rows).
+// The comparison returns -2 for another type (skipped), -1 when the looked up value is less than
+// the cell, 0 equal, 1 greater. Like Excel (and Apache POI, which reproduces it), cells of
+// another type are stepped over forwards and a run of equal values ends at its last one.
+namespace {
+template<typename Cmp>
+sal_Int32 lcl_ExcelApproximateSearch( sal_Int32 nSize, const Cmp& rCmp )
+{
+    sal_Int32 nLow = -1, nHigh = nSize;
+    while (true)
+    {
+        if (nHigh - nLow < 2)
+            return nLow;
+        sal_Int32 nMid = nLow + (nHigh - nLow) / 2;
+        int nRes = rCmp(nMid);
+        if (nRes == -2)
+        {
+            sal_Int32 nNew = nMid;
+            bool bNarrowed = false;
+            while (true)
+            {
+                ++nNew;
+                if (nNew == nHigh)
+                {
+                    nHigh = nMid; // all of the upper part has another type
+                    bNarrowed = true;
+                    break;
+                }
+                nRes = rCmp(nNew);
+                if (nRes == -2)
+                    continue;
+                if (nRes == -1 && nNew == nHigh - 1)
+                {
+                    nHigh = nMid;
+                    bNarrowed = true;
+                    break;
+                }
+                break;
+            }
+            if (bNarrowed)
+                continue;
+            nMid = nNew;
+        }
+        if (nRes == 0)
+        {
+            // the last of a run of equal values
+            sal_Int32 i = nMid + 1;
+            for (; i < nHigh; ++i)
+                if (rCmp(i) != 0)
+                    break;
+            return i - 1;
+        }
+        if (nRes == -1)
+            nHigh = nMid;
+        else
+            nLow = nMid;
+    }
+}
+}
+
 void ScInterpreter::CalculateLookup(bool bHLookup)
 {
     sal_uInt8 nParamCount = GetByte();
@@ -8000,10 +8069,22 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     rEntry.bDoQuery = true;
     if ( bSorted )
         rEntry.eOp = SC_LESS_EQUAL;
+    // weboffice: Excel's approximate lookup of a blank cell looks for 0
+    bool bBlankLookup = false;
+    if (bSorted && GetStackType() == svSingleRef)
+    {
+        const ScAddress aLookupAdr = static_cast<const ScSingleRefToken*>(pStack[sp - 1])->GetSingleRef().toAbs(mrDoc, aPos);
+        bBlankLookup = ScRefCellValue(mrDoc, aLookupAdr).isEmpty();
+    }
     if ( !FillEntry(rEntry) )
         return;
 
     ScQueryEntry::Item& rItem = rEntry.GetQueryItem();
+    if (bBlankLookup)
+    {
+        rItem.meType = ScQueryEntry::ByValue;
+        rItem.mfVal = 0.0;
+    }
     svl::SharedString aParamStr;
     if (rItem.meType == ScQueryEntry::ByString)
     {
@@ -8132,6 +8213,54 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     else
     {
         // not a matrix
+        if ( bSorted && (rItem.meType == ScQueryEntry::ByValue || rItem.meType == ScQueryEntry::ByString
+                         || rItem.meType == ScQueryEntry::ByEmpty) )
+        {
+            // weboffice: Excel's binary search (see lcl_ExcelApproximateSearch); a blank
+            // looked up value is 0
+            const bool bByString = rItem.meType == ScQueryEntry::ByString;
+            const double fLookup = rItem.meType == ScQueryEntry::ByValue ? rItem.mfVal : 0.0;
+            const OUString aLookupStr = bByString ? rItem.maString.getString() : OUString();
+            CollatorWrapper& rCollator = ScGlobal::GetCollator();
+            SCCOL nLastCol = nCol2;
+            SCROW nLastRow = nRow2;
+            if (bHLookup)
+            {
+                while (nLastCol > nCol1 && ScRefCellValue(mrDoc, ScAddress(nLastCol, nRow1, nTab1)).isEmpty())
+                    --nLastCol;
+            }
+            else
+                nLastRow = std::max<SCROW>(nRow1, std::min<SCROW>(nRow2, mrDoc.GetLastDataRow(nTab1, nCol1, nCol1, nRow2)));
+            const sal_Int32 nSize = bHLookup ? (nLastCol - nCol1 + 1) : (nLastRow - nRow1 + 1);
+            auto aCmp = [&](sal_Int32 i) -> int
+            {
+                const ScAddress aAdr = bHLookup ? ScAddress(nCol1 + i, nRow1, nTab1) : ScAddress(nCol1, nRow1 + i, nTab1);
+                ScRefCellValue aCell(mrDoc, aAdr);
+                if (aCell.isEmpty() || aCell.hasEmptyValue() || aCell.hasError())
+                    return -2;
+                if (bByString)
+                {
+                    if (!aCell.hasString())
+                        return -2;
+                    const sal_Int32 n = rCollator.compareString(aLookupStr, aCell.getString(mrDoc));
+                    return n < 0 ? -1 : (n > 0 ? 1 : 0);
+                }
+                if (!aCell.hasNumeric() || IsLogicalCell(aAdr, aCell))
+                    return -2;
+                const double f = aCell.getValue();
+                return fLookup < f ? -1 : (fLookup > f ? 1 : 0);
+            };
+            const sal_Int32 nIdx = lcl_ExcelApproximateSearch(nSize, aCmp);
+            if (nIdx < 0)
+                PushNA();
+            else
+            {
+                ScAddress aAdr = bHLookup ? ScAddress(nCol1 + nIdx, nZIndex, nTab1)
+                                          : ScAddress(nSpIndex, nRow1 + nIdx, nTab1);
+                PushCellResultToken( true, aAdr, nullptr, nullptr);
+            }
+            return;
+        }
         rEntry.nField = nCol1;
         bool bFound = false;
         SCCOL nCol = 0;

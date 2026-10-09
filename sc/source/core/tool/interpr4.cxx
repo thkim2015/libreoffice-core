@@ -2233,8 +2233,150 @@ void ScInterpreter::PushIllegalParameter()
     PushError( FormulaError::IllegalParameter);
 }
 
+// weboffice: Excel's error for an argument out of the domain of a mathematical, statistical or
+// financial function is #NUM! (text and lookup functions keep #VALUE!); measured against Excel
+static bool lcl_ExcelNumErrorOpCode( OpCode eOp )
+{
+    switch (eOp)
+    {
+        case ocArcCotHyp:
+        case ocBase:
+        case ocBetaDist:
+        case ocBetaDist_MS:
+        case ocBetaInv:
+        case ocBetaInv_MS:
+        case ocBinomDist:
+        case ocBinomDist_MS:
+        case ocBinomInv:
+        case ocBitAnd:
+        case ocBitLshift:
+        case ocBitOr:
+        case ocBitRshift:
+        case ocBitXor:
+        case ocChiDist:
+        case ocChiDist_MS:
+        case ocChiInv:
+        case ocChiInv_MS:
+        case ocChiSqDist_MS:
+        case ocChiSqInv_MS:
+        case ocChiTest:
+        case ocChiTest_MS:
+        case ocCombin:
+        case ocCombinA:
+        case ocConfidence:
+        case ocConfidence_N:
+        case ocConfidence_T:
+        case ocCritBinom:
+        case ocCumIpmt:
+        case ocCumPrinc:
+        case ocDB:
+        case ocDDB:
+        case ocDecimal:
+        case ocEffect:
+        case ocExpDist:
+        case ocExpDist_MS:
+        case ocFDist:
+        case ocFDist_LT:
+        case ocFDist_RT:
+        case ocFInv:
+        case ocFInv_LT:
+        case ocFInv_RT:
+        case ocFTest:
+        case ocFTest_MS:
+        case ocFV:
+        case ocFact:
+        case ocFisher:
+        case ocFisherInv:
+        case ocGCD:
+        case ocGamma:
+        case ocGammaDist:
+        case ocGammaDist_MS:
+        case ocGammaInv:
+        case ocGammaInv_MS:
+        case ocGammaLn:
+        case ocGammaLn_MS:
+        case ocGeoMean:
+        case ocGetDayOfWeek:
+        case ocGetTime:
+        case ocHarMean:
+        case ocHypGeomDist:
+        case ocHypGeomDist_MS:
+        case ocIRR:
+        case ocISPMT:
+        case ocIpmt:
+        case ocKurt:
+        case ocLCM:
+        case ocLarge:
+        case ocLogInv:
+        case ocLogInv_MS:
+        case ocLogNormDist:
+        case ocLogNormDist_MS:
+        case ocMIRR:
+        case ocNPV:
+        case ocNegBinomDist_MS:
+        case ocNegBinomVert:
+        case ocNetWorkdays_MS:
+        case ocNormDist:
+        case ocNormDist_MS:
+        case ocNormInv:
+        case ocNormInv_MS:
+        case ocNper:
+        case ocPDuration:
+        case ocPMT:
+        case ocPV:
+        case ocPercentile:
+        case ocPercentile_Exc:
+        case ocPercentile_Inc:
+        case ocPercentrank:
+        case ocPercentrank_Exc:
+        case ocPercentrank_Inc:
+        case ocPermut:
+        case ocPermutationA:
+        case ocPoissonDist:
+        case ocPoissonDist_MS:
+        case ocPpmt:
+        case ocProb:
+        case ocQuartile:
+        case ocQuartile_Exc:
+        case ocQuartile_Inc:
+        case ocRRI:
+        case ocSLN:
+        case ocSNormInv:
+        case ocSNormInv_MS:
+        case ocSYD:
+        case ocSkew:
+        case ocSkewp:
+        case ocSmall:
+        case ocStandard:
+        case ocTDist:
+        case ocTDist_2T:
+        case ocTDist_MS:
+        case ocTDist_RT:
+        case ocTInv:
+        case ocTInv_2T:
+        case ocTInv_MS:
+        case ocTTest:
+        case ocTTest_MS:
+        case ocTrimMean:
+        case ocWeibull:
+        case ocWeibull_MS:
+        case ocWorkday_MS:
+        case ocZTest:
+        case ocZTest_MS:
+        case ocDBGet: // more than one match
+            return true;
+        default:
+            return false;
+    }
+}
+
 void ScInterpreter::PushIllegalArgument()
 {
+    if (pCur && lcl_ExcelNumErrorOpCode( pCur->GetOpCode() ))
+    {
+        PushError( FormulaError::IllegalFPOperation );
+        return;
+    }
     PushError( FormulaError::IllegalArgument);
 }
 
