@@ -2238,11 +2238,12 @@ double ConvertDataList::Convert( double fVal, const OUString& rFrom, const OUStr
             break;
     }
 
+    // weboffice: an unknown unit or units of different kinds are #N/A in Excel
     if( !pFrom || !pTo )
-        throw lang::IllegalArgumentException();
+        throw lang::IllegalArgumentException(u"#N/A"_ustr, {}, 0);
 
     if (pFrom->Class() != pTo->Class())
-        throw lang::IllegalArgumentException();
+        throw lang::IllegalArgumentException(u"#N/A"_ustr, {}, 0);
 
     return pFrom->Convert( fVal, *pTo, nLevelFrom, nLevelTo );
 }

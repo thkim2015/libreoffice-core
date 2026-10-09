@@ -1545,6 +1545,8 @@ void ScUnoAddInCall::ExecuteCallWithArgs(uno::Sequence<uno::Any>& rCallArgs)
                 nErrCode = FormulaError::NoValue;
             else if (aIllegal.Message == "#DIV/0!")
                 nErrCode = FormulaError::DivisionByZero;
+            else if (aIllegal.Message == "#N/A")
+                nErrCode = FormulaError::NotAvailable;
             else
                 nErrCode = FormulaError::IllegalFPOperation;
         }
