@@ -232,7 +232,12 @@ void XclImpStringHelper::SetToDocument(
         const XclImpString& rString, sal_uInt16 nXFIndex )
 {
     if (rString.GetText().isEmpty())
+    {
+        // weboffice: an empty text cell is not a blank cell in Excel (ISBLANK is FALSE,
+        // COUNTA counts it, "*" matches it)
+        rDoc.setStringCell(rPos, OUString());
         return;
+    }
 
     ::std::optional< EditTextObject > pTextObj( lclCreateTextObject( rRoot, rString, XclFontItemType::Editeng, nXFIndex ) );
 

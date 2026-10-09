@@ -1112,6 +1112,24 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
             return aRes;
     }
 
+    // weboffice: the result of a comparison operator is TRUE/FALSE, not 1/0 - Excel's functions
+    // treat those as booleans (SUMPRODUCT(A1:A3=1;B1:B3=2) and SUM over them are 0, while
+    // arithmetic like --(A1:A3=1) still gives numbers)
+    if (aRes.mpMat && !pOptions)
+    {
+        SCSIZE nC, nR;
+        aRes.mpMat->GetDimensions(nC, nR);
+        for (SCSIZE c = 0; c < nC; ++c)
+            for (SCSIZE r = 0; r < nR; ++r)
+            {
+                if (!aRes.mpMat->IsValue(c, r) || aRes.mpMat->IsBoolean(c, r))
+                    continue;
+                const double f = aRes.mpMat->GetDouble(c, r);
+                if (GetDoubleErrorValue(f) == FormulaError::NONE)
+                    aRes.mpMat->PutBoolean(f != 0.0, c, r);
+            }
+    }
+
     nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
     return aRes;
 }
