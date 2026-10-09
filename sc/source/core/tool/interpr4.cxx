@@ -4030,6 +4030,7 @@ bool IsErrFunc(OpCode oc)
         case ocIfs_MS:
         case ocSwitch_MS:
         case ocXLookup:
+        case ocCountIf: // weboffice: COUNTIF(A1:A9;1/0) counts the #DIV/0! cells
             return true;
         default:
             return false;
