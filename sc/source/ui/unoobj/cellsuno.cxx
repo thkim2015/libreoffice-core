@@ -93,6 +93,12 @@
 #include <tokenuno.hxx>
 #include <eventuno.hxx>
 #include <docsh.hxx>
+#include <olinetab.hxx>
+#include <SparklineList.hxx>
+#include <SparklineGroup.hxx>
+#include <Sparkline.hxx>
+#include <SparklineAttributes.hxx>
+#include <docmodel/color/ComplexColor.hxx>
 #include <markdata.hxx>
 #include <patattr.hxx>
 #include <docpool.hxx>
@@ -792,6 +798,9 @@ static const SfxItemPropertySet* lcl_GetSheetPropertySet()
         { SC_UNO_SOLVERSETTINGS, SC_WID_UNO_SOLVERSETTINGS, cppu::UnoType<sheet::XSolverSettings>::get(), 0, 0 },
         { SC_UNONAME_TOTALBELOW, SC_WID_UNO_TOTALBELOW, cppu::UnoType<bool>::get(), 0, 0 },
         { u"ZetaEditRanges"_ustr, SC_WID_UNO_ZETAEDITRANGES, cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
+        // zeta: read-only JSON for the embedding app (outline groups, sparklines) - not exposed by UNO otherwise
+        { u"ZetaOutline"_ustr, SC_WID_UNO_ZETAOUTLINE, cppu::UnoType<OUString>::get(), beans::PropertyAttribute::READONLY, 0 },
+        { u"ZetaSparklines"_ustr, SC_WID_UNO_ZETASPARKLINES, cppu::UnoType<OUString>::get(), beans::PropertyAttribute::READONLY, 0 },
     };
     static SfxItemPropertySet aSheetPropertySet( aSheetPropertyMap_Impl );
     return &aSheetPropertySet;
@@ -8144,6 +8153,133 @@ void ScTableSheetObj::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
     else if ( pEntry->nWID == SC_WID_UNO_TABCOLOR )
     {
         rAny <<= rDoc.GetTabBgColor(nTab);
+    }
+    else if ( pEntry->nWID == SC_WID_UNO_ZETAOUTLINE )
+    {
+        // zeta: outline (group) structure as JSON {"rows":{"depth":n,"levels":[[{"s":..,"e":..,"hidden":b,"visible":b}]]},"cols":{...}}
+        OUStringBuffer aBuf;
+        const ScOutlineTable* pTable = rDoc.GetOutlineTable(nTab, false);
+        auto lcl_array = [&aBuf](const char* pName, const ScOutlineArray* pArray)
+        {
+            aBuf.appendAscii(pName);
+            size_t nDepth = pArray ? pArray->GetDepth() : 0;
+            aBuf.appendAscii(":{\"depth\":");
+            aBuf.append(static_cast<sal_Int32>(nDepth));
+            aBuf.appendAscii(",\"levels\":[");
+            for (size_t nLevel = 0; nLevel < nDepth; ++nLevel)
+            {
+                if (nLevel)
+                    aBuf.appendAscii(",");
+                aBuf.appendAscii("[");
+                size_t nCount = pArray->GetCount(nLevel);
+                bool bFirst = true;
+                for (size_t i = 0; i < nCount; ++i)
+                {
+                    const ScOutlineEntry* pE = pArray->GetEntry(nLevel, i);
+                    if (!pE)
+                        continue;
+                    if (!bFirst)
+                        aBuf.appendAscii(",");
+                    bFirst = false;
+                    aBuf.appendAscii("{\"s\":");
+                    aBuf.append(static_cast<sal_Int32>(pE->GetStart()));
+                    aBuf.appendAscii(",\"e\":");
+                    aBuf.append(static_cast<sal_Int32>(pE->GetEnd()));
+                    aBuf.appendAscii(pE->IsHidden() ? ",\"hidden\":true" : ",\"hidden\":false");
+                    aBuf.appendAscii(pE->IsVisible() ? ",\"visible\":true}" : ",\"visible\":false}");
+                }
+                aBuf.appendAscii("]");
+            }
+            aBuf.appendAscii("]}");
+        };
+        aBuf.appendAscii("{");
+        lcl_array("\"rows\"", pTable ? &pTable->GetRowArray() : nullptr);
+        aBuf.appendAscii(",");
+        lcl_array("\"cols\"", pTable ? &pTable->GetColArray() : nullptr);
+        aBuf.appendAscii("}");
+        rAny <<= aBuf.makeStringAndClear();
+    }
+    else if ( pEntry->nWID == SC_WID_UNO_ZETASPARKLINES )
+    {
+        // zeta: sparkline groups of this sheet as JSON (attributes, cells, input ranges and their values)
+        OUStringBuffer aBuf;
+        aBuf.appendAscii("{\"groups\":[");
+        sc::SparklineList* pList = rDoc.GetSparklineList(nTab);
+        bool bFirstGroup = true;
+        if (pList)
+        {
+            auto lcl_color = [](model::ComplexColor const& rColor) -> OUString { return "#" + rColor.getFinalColor().AsRGBHexString(); };
+            auto lcl_bool = [](bool b) -> OUString { return b ? u"true"_ustr : u"false"_ustr; };
+            auto lcl_axis = [](sc::AxisType e) -> OUString { return e == sc::AxisType::Individual ? u"individual"_ustr : e == sc::AxisType::Group ? u"group"_ustr : u"custom"_ustr; };
+            for (auto const& pGroup : pList->getSparklineGroups())
+            {
+                sc::SparklineAttributes const& rAttr = pGroup->getAttributes();
+                if (!bFirstGroup)
+                    aBuf.appendAscii(",");
+                bFirstGroup = false;
+                aBuf.append("{\"id\":\"" + pGroup->getID().getOUString() + "\",\"type\":\"");
+                switch (rAttr.getType())
+                {
+                    case sc::SparklineType::Line: aBuf.appendAscii("line"); break;
+                    case sc::SparklineType::Column: aBuf.appendAscii("column"); break;
+                    default: aBuf.appendAscii("stacked"); break;
+                }
+                aBuf.append("\",\"colors\":{\"series\":\"" + lcl_color(rAttr.getColorSeries()) + "\",\"negative\":\"" + lcl_color(rAttr.getColorNegative())
+                    + "\",\"axis\":\"" + lcl_color(rAttr.getColorAxis()) + "\",\"markers\":\"" + lcl_color(rAttr.getColorMarkers())
+                    + "\",\"first\":\"" + lcl_color(rAttr.getColorFirst()) + "\",\"last\":\"" + lcl_color(rAttr.getColorLast())
+                    + "\",\"high\":\"" + lcl_color(rAttr.getColorHigh()) + "\",\"low\":\"" + lcl_color(rAttr.getColorLow()) + "\"},");
+                aBuf.append("\"lineWeight\":" + OUString::number(rAttr.getLineWeight()) + ",\"minAxis\":\"" + lcl_axis(rAttr.getMinAxisType())
+                    + "\",\"maxAxis\":\"" + lcl_axis(rAttr.getMaxAxisType()) + "\",\"manualMin\":"
+                    + (rAttr.getManualMin() ? OUString::number(*rAttr.getManualMin()) : u"null"_ustr) + ",\"manualMax\":"
+                    + (rAttr.getManualMax() ? OUString::number(*rAttr.getManualMax()) : u"null"_ustr) + ",");
+                aBuf.append("\"show\":{\"markers\":" + lcl_bool(rAttr.isMarkers()) + ",\"high\":" + lcl_bool(rAttr.isHigh()) + ",\"low\":" + lcl_bool(rAttr.isLow())
+                    + ",\"first\":" + lcl_bool(rAttr.isFirst()) + ",\"last\":" + lcl_bool(rAttr.isLast()) + ",\"negative\":" + lcl_bool(rAttr.isNegative())
+                    + ",\"xAxis\":" + lcl_bool(rAttr.shouldDisplayXAxis()) + ",\"hidden\":" + lcl_bool(rAttr.shouldDisplayHidden())
+                    + ",\"rtl\":" + lcl_bool(rAttr.isRightToLeft()) + ",\"dateAxis\":" + lcl_bool(rAttr.isDateAxis()) + "},\"empty\":\"");
+                switch (rAttr.getDisplayEmptyCellsAs())
+                {
+                    case sc::DisplayEmptyCellsAs::Gap: aBuf.appendAscii("gap"); break;
+                    case sc::DisplayEmptyCellsAs::Zero: aBuf.appendAscii("zero"); break;
+                    default: aBuf.appendAscii("span"); break;
+                }
+                aBuf.appendAscii("\",\"sparklines\":[");
+                bool bFirst = true;
+                for (auto const& pSparkline : pList->getSparklinesFor(pGroup))
+                {
+                    if (!bFirst)
+                        aBuf.appendAscii(",");
+                    bFirst = false;
+                    OUString aRanges;
+                    pSparkline->getInputRange().Format(aRanges, ScRefFlags::VALID | ScRefFlags::TAB_3D, rDoc, formula::FormulaGrammar::CONV_XL_OOX, ' ');
+                    aBuf.append("{\"c\":" + OUString::number(static_cast<sal_Int32>(pSparkline->getColumn())) + ",\"r\":" + OUString::number(static_cast<sal_Int32>(pSparkline->getRow()))
+                        + ",\"input\":\"" + aRanges.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"") + "\",\"values\":[");
+                    bool bFirstValue = true;
+                    const ScRangeList& rList = pSparkline->getInputRange();
+                    for (size_t i = 0; i < rList.size(); ++i)
+                    {
+                        const ScRange& rRange = rList[i];
+                        for (SCROW nRow = rRange.aStart.Row(); nRow <= rRange.aEnd.Row(); ++nRow)
+                        {
+                            for (SCCOL nCol = rRange.aStart.Col(); nCol <= rRange.aEnd.Col(); ++nCol)
+                            {
+                                if (!bFirstValue)
+                                    aBuf.appendAscii(",");
+                                bFirstValue = false;
+                                ScAddress aPos(nCol, nRow, rRange.aStart.Tab());
+                                if (rDoc.HasValueData(aPos))
+                                    aBuf.append(OUString::number(rDoc.GetValue(aPos)));
+                                else
+                                    aBuf.appendAscii("null");
+                            }
+                        }
+                    }
+                    aBuf.appendAscii("]}");
+                }
+                aBuf.appendAscii("]}");
+            }
+        }
+        aBuf.appendAscii("]}");
+        rAny <<= aBuf.makeStringAndClear();
     }
     else if ( pEntry->nWID == SC_WID_UNO_ZETAEDITRANGES )
     {

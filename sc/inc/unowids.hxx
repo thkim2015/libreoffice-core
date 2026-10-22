@@ -77,7 +77,9 @@
 #define SC_WID_UNO_SOLVERSETTINGS   ( SC_WID_UNO_START + 48 )
 #define SC_WID_UNO_TOTALBELOW       ( SC_WID_UNO_START + 49 )
 #define SC_WID_UNO_ZETAEDITRANGES   ( SC_WID_UNO_START + 50 )
-#define SC_WID_UNO_END              ( SC_WID_UNO_START + 50 )
+#define SC_WID_UNO_ZETAOUTLINE      ( SC_WID_UNO_START + 51 )
+#define SC_WID_UNO_ZETASPARKLINES   ( SC_WID_UNO_START + 52 )
+#define SC_WID_UNO_END              ( SC_WID_UNO_START + 52 )
 
 inline bool IsScUnoWid( sal_uInt16 nWid )
 {
