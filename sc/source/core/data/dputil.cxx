@@ -383,9 +383,8 @@ OUString ScDPUtil::getDisplayedMeasureName(const OUString& rName, ScSubTotalFunc
     TranslateId pId = aFuncStrIds[eFunc];
     if (!pId)
         return rName;
-    return ScResId(pId) +        // function name
-            " - " +
-            rName;                   // field name
+    // zeta: Excel-style caption through a translatable format (ko "합계 : 금액", ja "合計 / 金額")
+    return ScResId(STR_PIVOT_MEASURE_FMT).replaceFirst("%1", ScResId(pId)).replaceFirst("%2", rName);
 }
 
 ScSubTotalFunc ScDPUtil::toSubTotalFunc(ScGeneralFunction eGenFunc)

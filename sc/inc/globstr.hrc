@@ -162,6 +162,8 @@
 #define STR_PIVOT_REMOVE_PIVOTCHART             NC_("STR_PIVOT_REMOVE_PIVOTCHART", "Deleting the pivot table will also remove any associated pivot charts.\nDo you want to proceed?")
 #define STR_DATAPILOT_SUBTOTAL                  NC_("STR_DATAPILOT_SUBTOTAL", "The source range contains subtotals which may distort the results. Use it anyway?")
 #define STR_PIVOT_TOTAL                         NC_("STR_PIVOT_TOTAL", "Total")
+// zeta: data field caption "<function> - <field>" (Excel: ko "합계 : 금액", ja "合計 / 金額") — translatable
+#define STR_PIVOT_MEASURE_FMT                   NC_("STR_PIVOT_MEASURE_FMT", "%1 - %2")
 #define STR_PIVOT_DATA                          NC_("STR_PIVOT_DATA", "Data")
 #define STR_PIVOT_FIELD                         NC_("STR_PIVOT_FIELD", "Field")
 #define STR_PIVOT_GROUP                         NC_("STR_PIVOT_GROUP", "Group")
