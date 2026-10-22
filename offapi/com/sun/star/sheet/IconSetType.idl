@@ -48,6 +48,9 @@ constants IconSetType
     const long ICONSET_5RATINGS = 17;
 
     const long ICONSET_5QUARTERS = 18;
+    const long ICONSET_3STARS = 19;
+    const long ICONSET_3TRIANGLES = 20;
+    const long ICONSET_5BOXES = 21;
 };
 
 

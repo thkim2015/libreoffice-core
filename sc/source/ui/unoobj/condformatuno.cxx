@@ -248,9 +248,12 @@ const IconSetTypeApiMap aIconSetApiMap[] =
     { IconSet_4RedToBlack, sheet::IconSetType::ICONSET_4RED_TO_BLACK },
     { IconSet_4TrafficLights, sheet::IconSetType::ICONSET_4TRAFFICLIGHTS },
     { IconSet_5Arrows, sheet::IconSetType::ICONSET_5ARROWS },
-    { IconSet_5ArrowsGray, sheet::IconSetType::ICONSET_4ARROWS_GRAY },
+    { IconSet_5ArrowsGray, sheet::IconSetType::ICONSET_5ARROWS_GRAY },
     { IconSet_5Ratings, sheet::IconSetType::ICONSET_5RATINGS },
     { IconSet_5Quarters, sheet::IconSetType::ICONSET_5QUARTERS },
+    { IconSet_3Stars, sheet::IconSetType::ICONSET_3STARS },
+    { IconSet_3Triangles, sheet::IconSetType::ICONSET_3TRIANGLES },
+    { IconSet_5Boxes, sheet::IconSetType::ICONSET_5BOXES },
 };
 
 struct IconSetEntryTypeApiMap
