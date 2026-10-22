@@ -1222,6 +1222,70 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                 rReq.Done();
                 break;
             }
+            // ZetaOffice: EditSparklineGroup with an Attributes argument ("key=value;key=value") changes the
+            // sparkline group at the cursor without the dialog. Keys: type(line|column|stacked),
+            // series|negative|axis|markers|first|last|high|low (RRGGBB), lineWeight, minAxis|maxAxis
+            // (individual|group|custom), manualMin|manualMax (number or empty), showMarkers|showHigh|showLow|
+            // showFirst|showLast|showNegative|xAxis|hidden|rtl|dateAxis (0|1), empty (gap|zero|span)
+            if (nSlot == SID_EDIT_SPARKLINE_GROUP && pReqArgs)
+            {
+                if (const SfxStringItem* pAttrsItem = pReqArgs->GetItem<SfxStringItem>(FN_PARAM_1, false))
+                {
+                    ScViewData& rViewData = GetViewData();
+                    ScDocument& rDoc = rViewData.GetDocument();
+                    bool bDone = false;
+                    auto pSparkline = rDoc.GetSparkline(ScAddress(rViewData.GetCurX(), rViewData.GetCurY(), rViewData.GetTabNo()));
+                    if (pSparkline)
+                    {
+                        auto pGroup = pSparkline->getSparklineGroup();
+                        sc::SparklineAttributes aAttributes = pGroup->getAttributes();
+                        const OUString aText = pAttrsItem->GetValue();
+                        sal_Int32 nPos = 0;
+                        while (nPos >= 0)
+                        {
+                            const OUString aPair = aText.getToken(0, ';', nPos);
+                            const sal_Int32 nEq = aPair.indexOf('=');
+                            if (nEq <= 0)
+                                continue;
+                            const OUString aKey = aPair.copy(0, nEq);
+                            const OUString aVal = aPair.copy(nEq + 1);
+                            auto lcl_color = [&aVal]() { return model::ComplexColor::createRGB(Color(ColorTransparency, aVal.toUInt32(16))); };
+                            auto lcl_axis = [&aVal]() { return aVal == "group" ? sc::AxisType::Group : aVal == "custom" ? sc::AxisType::Custom : sc::AxisType::Individual; };
+                            auto lcl_optional = [&aVal]() { return aVal.isEmpty() ? std::optional<double>() : std::optional<double>(aVal.toDouble()); };
+                            const bool bFlag = aVal == "1" || aVal == "true";
+                            if (aKey == "type") aAttributes.setType(aVal == "column" ? sc::SparklineType::Column : aVal == "stacked" ? sc::SparklineType::Stacked : sc::SparklineType::Line);
+                            else if (aKey == "series") aAttributes.setColorSeries(lcl_color());
+                            else if (aKey == "negative") aAttributes.setColorNegative(lcl_color());
+                            else if (aKey == "axis") aAttributes.setColorAxis(lcl_color());
+                            else if (aKey == "markers") aAttributes.setColorMarkers(lcl_color());
+                            else if (aKey == "first") aAttributes.setColorFirst(lcl_color());
+                            else if (aKey == "last") aAttributes.setColorLast(lcl_color());
+                            else if (aKey == "high") aAttributes.setColorHigh(lcl_color());
+                            else if (aKey == "low") aAttributes.setColorLow(lcl_color());
+                            else if (aKey == "lineWeight") aAttributes.setLineWeight(aVal.toDouble());
+                            else if (aKey == "minAxis") aAttributes.setMinAxisType(lcl_axis());
+                            else if (aKey == "maxAxis") aAttributes.setMaxAxisType(lcl_axis());
+                            else if (aKey == "manualMin") aAttributes.setManualMin(lcl_optional());
+                            else if (aKey == "manualMax") aAttributes.setManualMax(lcl_optional());
+                            else if (aKey == "showMarkers") aAttributes.setMarkers(bFlag);
+                            else if (aKey == "showHigh") aAttributes.setHigh(bFlag);
+                            else if (aKey == "showLow") aAttributes.setLow(bFlag);
+                            else if (aKey == "showFirst") aAttributes.setFirst(bFlag);
+                            else if (aKey == "showLast") aAttributes.setLast(bFlag);
+                            else if (aKey == "showNegative") aAttributes.setNegative(bFlag);
+                            else if (aKey == "xAxis") aAttributes.setDisplayXAxis(bFlag);
+                            else if (aKey == "hidden") aAttributes.setDisplayHidden(bFlag);
+                            else if (aKey == "rtl") aAttributes.setRightToLeft(bFlag);
+                            else if (aKey == "dateAxis") aAttributes.setDateAxis(bFlag);
+                            else if (aKey == "empty") aAttributes.setDisplayEmptyCellsAs(aVal == "zero" ? sc::DisplayEmptyCellsAs::Zero : aVal == "span" ? sc::DisplayEmptyCellsAs::Span : sc::DisplayEmptyCellsAs::Gap);
+                        }
+                        bDone = rViewData.GetDocShell()->GetDocFunc().ChangeSparklineGroupAttributes(pGroup, aAttributes);
+                    }
+                    rReq.SetReturnValue(SfxBoolItem(nSlot, bDone));
+                    rReq.Done();
+                    break;
+                }
+            }
 
             sal_uInt16 nId  = sc::SparklineDialogWrapper::GetChildWindowId();
             SfxViewFrame& rViewFrame = pTabViewShell->GetViewFrame();

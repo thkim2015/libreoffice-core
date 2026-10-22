@@ -2420,7 +2420,7 @@ SfxVoidItem EditSparkline SID_EDIT_SPARKLINE
 ]
 
 SfxVoidItem EditSparklineGroup SID_EDIT_SPARKLINE_GROUP
-()
+(SfxStringItem Attributes FN_PARAM_1)
 [
     AutoUpdate = FALSE,
     FastCall = FALSE,
