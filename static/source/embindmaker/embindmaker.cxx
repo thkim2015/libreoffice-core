@@ -1228,6 +1228,15 @@ SAL_IMPLEMENT_MAIN()
                 recordGenericTypes(mgr, meth.returnType, sequences, instantiations);
             }
         }
+        // zeta: sequences that only appear as properties of accumulation-based services
+        // (sc conditional formatting: ColorScale/DataBar/IconSet entries) are never recorded
+        // above, so JS could not read or create those entries ("unregistered UNO type").
+        for (auto const& extra : { u"[]com.sun.star.sheet.XColorScaleEntry"_ustr,
+                                   u"[]com.sun.star.sheet.XDataBarEntry"_ustr,
+                                   u"[]com.sun.star.sheet.XIconSetEntry"_ustr })
+        {
+            recordGenericTypes(mgr, extra, sequences, instantiations);
+        }
         for (auto const& ins : instantiations)
         {
             std::vector<OString> templArgs;
