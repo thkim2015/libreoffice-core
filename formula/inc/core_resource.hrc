@@ -699,6 +699,7 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH_OOXML[] =
     { "STDEVPA" , ocStDevPA },
     { "_xlfn.STDEV.P" , ocStDevP_MS },
     { "_xlfn.STDEV.S" , ocStDevS },
+    { "_xlfn.BINOM.DIST.RANGE" , ocB },  // ZetaOffice: xlsx export must write the Excel 2013 name (import already accepts it); "B" below stays as alias
     { "B" , ocB },
     { "NORMDIST" , ocNormDist },
     { "_xlfn.NORM.DIST" , ocNormDist_MS },
