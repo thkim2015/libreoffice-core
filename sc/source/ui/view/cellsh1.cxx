@@ -1234,7 +1234,7 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                     ScViewData& rViewData = GetViewData();
                     ScDocument& rDoc = rViewData.GetDocument();
                     bool bDone = false;
-                    auto pSparkline = rDoc.GetSparkline(ScAddress(rViewData.GetCurX(), rViewData.GetCurY(), rViewData.GetTabNo()));
+                    auto pSparkline = rDoc.GetSparkline(rViewData.GetCurPos());
                     if (pSparkline)
                     {
                         auto pGroup = pSparkline->getSparklineGroup();
