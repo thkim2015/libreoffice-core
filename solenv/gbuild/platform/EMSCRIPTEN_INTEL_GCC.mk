@@ -22,7 +22,10 @@ gb_EMSCRIPTEN_LDFLAGS += -sPTHREAD_POOL_SIZE=7
 endif
 
 # Double the main thread stack size, but keep the default value for other threads:
-gb_EMSCRIPTEN_LDFLAGS += -sSTACK_SIZE=131072 -sDEFAULT_PTHREAD_STACK_SIZE=65536
+# weboffice: PROXY_TO_PTHREAD runs soffice main on a pthread whose stack is STACK_SIZE; nested
+# event loops left ~100 KB in use, and a chart insert (~35 KB) then overran into the TLS block
+# below the stack (QThread::currentThread trapped with unaligned access). 8 MB main, 1 MB pool.
+gb_EMSCRIPTEN_LDFLAGS += -sSTACK_SIZE=8388608 -sDEFAULT_PTHREAD_STACK_SIZE=1048576
 
 # To keep the link time (and memory) down, prevent all rewriting options from wasm-emscripten-finalize
 # See emscripten.py, finalize_wasm, modify_wasm = True
