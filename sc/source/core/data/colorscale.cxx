@@ -1592,8 +1592,17 @@ void ScIconSetFormat::EnsureSize()
     {
         if (i.eType == eType)
         {
-            // size_t nElements = aIconSetMap[i].nElements;
-            // TODO: implement
+            // zeta: create the missing threshold entries (UNO createEntry(ICONSET) made an
+            // empty format, so setting IconSetEntries had nothing to write into)
+            size_t nElements = static_cast<size_t>(i.nElements);
+            while (mpFormatData->m_Entries.size() < nElements)
+            {
+                size_t nPos = mpFormatData->m_Entries.size();
+                ScColorScaleEntry* pEntry = new ScColorScaleEntry();
+                pEntry->SetType(nPos == 0 ? COLORSCALE_MIN : COLORSCALE_PERCENT);
+                pEntry->SetValue(nPos == 0 ? 0.0 : std::floor(100.0 * nPos / nElements));
+                mpFormatData->m_Entries.emplace_back(pEntry);
+            }
             break;
         }
     }

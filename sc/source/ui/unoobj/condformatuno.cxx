@@ -959,6 +959,9 @@ void SAL_CALL ScColorScaleFormatObj::setPropertyValue(
             size_t n = size_t(aEntries.getLength());
             for (size_t i = 0; i < n; ++i)
             {
+                // zeta: createEntry(COLORSCALE) makes an empty format — add missing entries
+                if (i >= getCoreObject()->size())
+                    getCoreObject()->AddEntry(new ScColorScaleEntry());
                 setColorScaleEntry(getCoreObject()->GetEntry(i), aEntries[i]);
             }
 
@@ -1622,6 +1625,13 @@ void SAL_CALL ScIconSetFormatObj::setPropertyValue(
             // TODO: we need to check that the number of entries
             // corresponds to the icon type
             sal_Int32 nLength = aEntries.getLength();
+            // zeta: the sequence defines the number of thresholds (the format may be empty
+            // or sized for another icon set)
+            ScIconSetFormatData::Entries_t& rEntries = getCoreObject()->GetIconSetData()->m_Entries;
+            while (rEntries.size() < o3tl::make_unsigned(nLength))
+                rEntries.emplace_back(new ScColorScaleEntry());
+            while (rEntries.size() > o3tl::make_unsigned(nLength))
+                rEntries.pop_back();
             for (size_t i = 0; i < o3tl::make_unsigned(nLength); ++i)
             {
                 setIconSetEntry(getCoreObject(), aEntries[i], i);
