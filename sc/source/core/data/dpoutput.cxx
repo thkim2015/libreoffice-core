@@ -766,7 +766,8 @@ void ScDPOutput::outputColumnHeaders(SCTAB nTab)
 
         if (mnMemberStartRow > mnTabStartRow)
         {
-            if (!mbHasCompactRowField || nNumColFields == 1)
+            // zeta: Excel compact form always writes "Column Labels"/"Row Labels", even for one field
+        if (!mbHasCompactRowField)
                 FieldCell(nHeaderCol, mnTabStartRow, nTab, mpColFields[nField], true);
             else if (!nField)
                 MultiFieldCell(nHeaderCol, mnTabStartRow, nTab, false /* bRowField */);
@@ -817,7 +818,7 @@ void ScDPOutput::outputRowHeader(SCTAB nTab)
         const bool bCompactField = maRowCompactFlags[nField];
         SCCOL nHdrCol = mnTabStartCol + SCCOL(nField); //TODO: check for overflow
         SCROW nHdrRow = mnDataStartRow - 1;
-        if (!mbHasCompactRowField || nNumRowFields == 1)
+        if (!mbHasCompactRowField)
             FieldCell(nHdrCol, nHdrRow, nTab, mpRowFields[nField], true);
         else if (!nField)
             MultiFieldCell(nHdrCol, nHdrRow, nTab, true /* bRowField */);
