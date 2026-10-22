@@ -311,6 +311,31 @@ void OpCodeList::putDefaultOpCode( const FormulaCompiler::NonConstOpCodeMapPtr& 
         sKey = ForResId(pKey);
     }
     xMap->putOpCode(sKey, OpCode(nOp), pCharClass);
+    // ZetaOffice: further table entries with the same OpCode are input aliases
+    // (the LibreOffice names listed after the Excel display names, e.g. FORMULA
+    // after FORMULATEXT). OpCodeMap::putOpCode keeps the first spelling for
+    // output and only registers the alias for input.
+    bool bFirst = true;
+    if (mpSymbols1)
+    {
+        for (const std::pair<const char*, int>* pSymbol = mpSymbols1; pSymbol->first; ++pSymbol)
+        {
+            if (nOp != pSymbol->second)
+                continue;
+            if (bFirst) { bFirst = false; continue; }
+            xMap->putOpCode(OUString::createFromAscii(pSymbol->first), OpCode(nOp), pCharClass);
+        }
+    }
+    else if (mpSymbols2)
+    {
+        for (const std::pair<TranslateId, int>* pSymbol = mpSymbols2; pSymbol->first; ++pSymbol)
+        {
+            if (nOp != pSymbol->second)
+                continue;
+            if (bFirst) { bFirst = false; continue; }
+            xMap->putOpCode(ForResId(pSymbol->first), OpCode(nOp), pCharClass);
+        }
+    }
 }
 
 // static
