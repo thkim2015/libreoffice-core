@@ -115,6 +115,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         { SC_UNO_DP_SERVICEARG,   0,  cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get(), 0, 0 },
         { SC_UNO_DP_SHOWFILTER,     0,  cppu::UnoType<bool>::get(),  0, 0 },
         { SC_UNO_DP_SOURCESERVICE,   0,  cppu::UnoType<OUString>::get(), 0, 0 },
+        // ZetaOffice: Excel pivot table style info "name|rowHeaders|colHeaders|rowStripes|colStripes|lastColumn" (flags 0/1)
+        { u"ZetaStyleInfo"_ustr,     0,  cppu::UnoType<OUString>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -740,6 +742,23 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
             if ( aValue >>= aStrVal )
                 aNewData.SetGrandTotalName(aStrVal);
         }
+        else if ( aPropertyName == u"ZetaStyleInfo"_ustr )
+        {
+            // ZetaOffice: per-pivot Excel style (written to xlsx pivotTableStyleInfo)
+            OUString aStrVal;
+            if ( aValue >>= aStrVal )
+            {
+                sc::PivotTableStyleInfo aInfo;
+                sal_Int32 nIdx = 0;
+                aInfo.maName = aStrVal.getToken(0, '|', nIdx);
+                aInfo.mbShowRowHeaders = aStrVal.getToken(0, '|', nIdx) == "1";
+                aInfo.mbShowColHeaders = aStrVal.getToken(0, '|', nIdx) == "1";
+                aInfo.mbShowRowStripes = aStrVal.getToken(0, '|', nIdx) == "1";
+                aInfo.mbShowColStripes = aStrVal.getToken(0, '|', nIdx) == "1";
+                aInfo.mbShowLastColumn = aStrVal.getToken(0, '|', nIdx) == "1";
+                pDPObject->setStyleInfo(aInfo);
+            }
+        }
         else if ( aPropertyName == SC_UNO_DP_IMPORTDESC )
         {
             uno::Sequence<beans::PropertyValue> aArgSeq;
@@ -881,6 +900,12 @@ Any SAL_CALL ScDataPilotDescriptorBase::getPropertyValue( const OUString& aPrope
                 const std::optional<OUString> & pGrandTotalName = aNewData.GetGrandTotalName();
                 if (pGrandTotalName)
                     aRet <<= *pGrandTotalName;      // same behavior as in ScDPSource
+            }
+            else if ( aPropertyName == u"ZetaStyleInfo"_ustr )
+            {
+                sc::PivotTableStyleInfo const& rInfo = pDPObject->getStyleInfo();
+                aRet <<= OUString(rInfo.maName + "|" + (rInfo.mbShowRowHeaders ? u"1" : u"0") + "|" + (rInfo.mbShowColHeaders ? u"1" : u"0")
+                    + "|" + (rInfo.mbShowRowStripes ? u"1" : u"0") + "|" + (rInfo.mbShowColStripes ? u"1" : u"0") + "|" + (rInfo.mbShowLastColumn ? u"1" : u"0"));
             }
             else if ( aPropertyName == SC_UNO_DP_IMPORTDESC )
             {
