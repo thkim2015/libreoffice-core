@@ -139,6 +139,9 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotFieldMap()
         { SC_UNONAME_SELPAGE,      0,  cppu::UnoType<OUString>::get(),                     0, 0 },
         { SC_UNONAME_SHOWEMPTY,    0,  cppu::UnoType<bool>::get(),                          0, 0 },
         { SC_UNONAME_REPEATITEMLABELS,    0,  cppu::UnoType<bool>::get(),                          0, 0 },
+        // zeta: Excel captions (data field layout name, field subtotal name) through UNO
+        { SC_UNO_DP_LAYOUTNAME,    0,  cppu::UnoType<OUString>::get(),                     MAYBEVOID, 0 },
+        { SC_UNO_DP_FIELD_SUBTOTALNAME, 0, cppu::UnoType<OUString>::get(),                MAYBEVOID, 0 },
         { SC_UNONAME_SORTINFO,     0,  cppu::UnoType<DataPilotFieldSortInfo>::get(),       MAYBEVOID, 0 },
         { SC_UNONAME_SUBTOTALS,    0,  cppu::UnoType<Sequence<GeneralFunction>>::get(),    0, 0 },
         { SC_UNONAME_SUBTOTALS2,   0,  cppu::UnoType<Sequence<sal_Int16>>::get(),   0, 0 },
@@ -1838,6 +1841,21 @@ void SAL_CALL ScDataPilotFieldObj::setPropertyValue( const OUString& aPropertyNa
     {
         setRepeatItemLabels(cppu::any2bool(aValue));
     }
+    else if ( aPropertyName == SC_UNO_DP_LAYOUTNAME || aPropertyName == SC_UNO_DP_FIELD_SUBTOTALNAME )
+    {
+        // zeta: caption shown for a data field ("Sum : Amount") / subtotal row ("? Summary")
+        OUString aName;
+        aValue >>= aName;
+        ScDPObject* pDPObj = nullptr;
+        if( ScDPSaveDimension* pDim = GetDPDimension( &pDPObj ) )
+        {
+            if (aPropertyName == SC_UNO_DP_LAYOUTNAME)
+                pDim->SetLayoutName( aName );
+            else
+                pDim->SetSubtotalName( aName );
+            SetDPObject( pDPObj );
+        }
+    }
     else if (aPropertyName == SC_UNONAME_NAME)
     {
         OUString sName;
@@ -1931,6 +1949,13 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
         aRet <<= getShowEmpty();
     else if ( aPropertyName == SC_UNONAME_REPEATITEMLABELS )
         aRet <<= getRepeatItemLabels();
+    else if ( aPropertyName == SC_UNO_DP_LAYOUTNAME || aPropertyName == SC_UNO_DP_FIELD_SUBTOTALNAME )
+    {
+        ScDPSaveDimension* pDim = GetDPDimension();
+        const std::optional<OUString>* pName = pDim ? (aPropertyName == SC_UNO_DP_LAYOUTNAME ? &pDim->GetLayoutName() : &pDim->GetSubtotalName()) : nullptr;
+        if (pName && *pName)
+            aRet <<= **pName;
+    }
     else if (aPropertyName == SC_UNONAME_NAME)
         aRet <<= getName();
 
