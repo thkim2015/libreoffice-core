@@ -85,7 +85,13 @@ bool UpdatePivotTableOperation::runImplementation()
     // Use spill checking output if the destination range has non-empty cells,
     // write #SPILL! into the origin cell instead of overwriting.
     // Skip the spill check during XML import
+#ifdef EMSCRIPTEN
+    // zeta: the web app places pivot tables itself and rebuilds them through the API
+    // many times per change; a spill check there leaves #SPILL! in the origin cell
+    pDPObject->Output(aNewOut.aStart, !rDoc.IsImportingXML() && !mbApi);
+#else
     pDPObject->Output(aNewOut.aStart, !rDoc.IsImportingXML());
+#endif
     mrDocShell.PostPaintGridAll();
 
     if (mbRecord)
