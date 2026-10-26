@@ -1590,8 +1590,12 @@ bool rpnTopIsImplicitIntersection(const ScTokenArray& rCode)
 // function known to return a matrix (UNIQUE, TRANSPOSE, MMULT ...) pushes
 // an array, every other function reduces to a scalar. Returns false if
 // the walk cannot decide: jump commands, arity mismatch, null tokens.
+// ZetaOffice: pArrayOperation (optional) is set when an element-wise operator gets an array
+// operand anywhere in the formula, e.g. SUM(A1:A3*B1:B3). Excel 365 evaluates such formulas in
+// array context even though the final result is a scalar.
 bool intendsArrayResultInRange(formula::FormulaToken* const* pRpn,
-                               sal_uInt16 nStart, sal_uInt16 nEnd)
+                               sal_uInt16 nStart, sal_uInt16 nEnd,
+                               bool* pArrayOperation = nullptr)
 {
     std::vector<bool> aStackIsArray;
     for (sal_uInt16 i = nStart; i < nEnd; ++i)
@@ -1630,7 +1634,7 @@ bool intendsArrayResultInRange(formula::FormulaToken* const* pRpn,
                 const sal_uInt16 nBranchEnd = pJump[nBranch + 1];
                 if (nBranchEnd <= nBranchStart || nBranchEnd > nEnd)
                     continue;
-                if (intendsArrayResultInRange(pRpn, nBranchStart, nBranchEnd))
+                if (intendsArrayResultInRange(pRpn, nBranchStart, nBranchEnd, pArrayOperation))
                     bAnyBranchArray = true;
             }
             aStackIsArray.push_back(bAnyBranchArray);
@@ -1655,7 +1659,7 @@ bool intendsArrayResultInRange(formula::FormulaToken* const* pRpn,
             const sal_uInt16 nBranchStart = pJump[nBranch] + 1;
             const sal_uInt16 nBranchEnd = pJump[nBranch + 1];
             if (nBranchEnd > nBranchStart && nBranchEnd <= nEnd)
-                aStackIsArray.push_back(intendsArrayResultInRange(pRpn, nBranchStart, nBranchEnd));
+                aStackIsArray.push_back(intendsArrayResultInRange(pRpn, nBranchStart, nBranchEnd, pArrayOperation));
             else
                 aStackIsArray.push_back(false);
             i = pJump[nJumpCount];
@@ -1712,6 +1716,9 @@ bool intendsArrayResultInRange(formula::FormulaToken* const* pRpn,
             bResultArray = bAnyArrayArgument;
         else if (isUnaryOperatorOpCode(eOp))
             bResultArray = bAnyArrayArgument;
+        if (bResultArray && pArrayOperation
+            && ((isBinaryOperatorOpCode(eOp) && eOp != ocAnd && eOp != ocOr) || isUnaryOperatorOpCode(eOp)))
+            *pArrayOperation = true;
         aStackIsArray.push_back(bResultArray);
     }
     return !aStackIsArray.empty() && aStackIsArray.back();
@@ -1723,6 +1730,24 @@ bool rpnIntendsArrayResult(const ScTokenArray& rCode)
     if (nRpnLength == 0)
         return false;
     return intendsArrayResultInRange(rCode.GetCode(), 0, nRpnLength);
+}
+
+// ZetaOffice: a typed formula is evaluated in array context like Excel 365 when it intends an
+// array result or when array arithmetic is nested inside a function (=SUM(A1:A3*B1:B3) is the
+// sum of the products, not the implicit intersection of the ranges). Loaded formulas keep using
+// rpnIntendsArrayResult, so they do not get an @ prepended for nested arithmetic.
+bool rpnNeedsArrayEvaluation(const ScTokenArray& rCode)
+{
+    const sal_uInt16 nRpnLength = rCode.GetCodeLen();
+    if (nRpnLength == 0)
+        return false;
+    bool bArrayOperation = false;
+    const bool bArray = intendsArrayResultInRange(rCode.GetCode(), 0, nRpnLength, &bArrayOperation);
+#ifdef EMSCRIPTEN
+    return bArray || bArrayOperation;
+#else
+    return bArray;
+#endif
 }
 
 // Prepend @ to a token array. The parse array gets it at index 0 (a
@@ -2193,7 +2218,7 @@ void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTa
             && !mxGroup)
         {
             if (!rpnTopIsImplicitIntersection(*pCode)
-                && rpnIntendsArrayResult(*pCode))
+                && rpnNeedsArrayEvaluation(*pCode))
             {
                 cMatrixFlag = ScMatrixMode::Formula;
                 SetMatColsRows(1, 1);
