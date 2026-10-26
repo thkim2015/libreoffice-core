@@ -8313,6 +8313,10 @@ void ScTableSheetObj::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
     {
         rAny <<= uno::Reference<sheet::XSolverSettings>(new ScSolverSettings(pDocSh, this));
     }
+    else if (pEntry->nWID == SC_WID_UNO_TOTALBELOW)
+    {
+        rAny <<= pDocSh->GetDocument().GetTotalsRowBelow(nTab);
+    }
     else
         ScCellRangeObj::GetOnePropertyValue(pEntry, rAny);
 }
