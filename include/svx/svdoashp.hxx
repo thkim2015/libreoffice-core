@@ -26,6 +26,8 @@
 #include <com/sun/star/uno/Reference.h>
 #include <com/sun/star/drawing/XCustomShapeHandle.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeAdjustmentValue.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <string_view>
 #include <svx/svxdllapi.h>
 #include <o3tl/typed_flags_set.hxx>
 
@@ -150,6 +152,12 @@ public:
     is NULL then the type is being taken from the "Type" property of the SdrCustomShapeGeometryItem.
     MergeDefaultAttributes is called when creating CustomShapes via UI and after importing */
     void MergeDefaultAttributes( const OUString* pType = nullptr );
+
+    /* ZetaOffice: geometry of a DrawingML preset ("heptagon" for the type "ooxml-heptagon").
+    oox registers it, so shapes of DrawingML-only presets drawn from the UI get their path
+    (svx itself only knows the MS binary shape types). */
+    typedef css::uno::Sequence<css::beans::PropertyValue> (*OoxmlPresetGeometryFn)(std::u16string_view rPresetName);
+    static void SetOoxmlPresetGeometryResolver(OoxmlPresetGeometryFn pFn);
 
     /* the method is checking if the geometry data is unchanged/default, in this case the data might not be stored */
     enum class DefaultType

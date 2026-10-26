@@ -26,6 +26,9 @@
 #include <com/sun/star/drawing/EnhancedCustomShapeParameterPair.hpp>
 #include <com/sun/star/drawing/EnhancedCustomShapeSegment.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
+#include <string_view>
 #include <oox/helper/helper.hxx>
 #include <oox/helper/propertymap.hxx>
 #include <oox/token/tokens.hxx>
@@ -171,6 +174,10 @@ private:
     std::optional< sal_Int32 >      moTextAreaRotateAngle; // TextRotateAngle
 
     typedef std::unordered_map< sal_Int32, PropertyMap > PresetDataMap;
+public:
+    /// ZetaOffice: CustomShapeGeometry of a preset ("heptagon"), empty if unknown
+    static css::uno::Sequence< css::beans::PropertyValue > getPresetGeometry(std::u16string_view rPresetName);
+private:
 
     static PresetDataMap maPresetDataMap;
     static void initializePresetDataMap();

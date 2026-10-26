@@ -811,6 +811,16 @@ SdrObjCustomShape::~SdrObjCustomShape()
     InvalidateRenderGeometry();
 }
 
+namespace
+{
+SdrObjCustomShape::OoxmlPresetGeometryFn s_pOoxmlPresetGeometry = nullptr;
+}
+
+void SdrObjCustomShape::SetOoxmlPresetGeometryResolver(OoxmlPresetGeometryFn pFn)
+{
+    s_pOoxmlPresetGeometry = pFn;
+}
+
 void SdrObjCustomShape::MergeDefaultAttributes( const OUString* pType )
 {
     beans::PropertyValue aPropVal;
@@ -836,6 +846,19 @@ void SdrObjCustomShape::MergeDefaultAttributes( const OUString* pType )
             *pAny >>= sShapeType;
     }
     MSO_SPT eSpType = EnhancedCustomShapeTypeNames::Get( sShapeType );
+
+    // ZetaOffice: a DrawingML-only preset (ooxml-heptagon ...) created from the UI has no path yet;
+    // take the preset geometry from oox. Imported shapes already carry their path and are left alone.
+    if (s_pOoxmlPresetGeometry && sShapeType.startsWith("ooxml-")
+        && !aGeometryItem.GetPropertyValueByName(u"Path"_ustr))
+    {
+        const uno::Sequence<beans::PropertyValue> aPreset = s_pOoxmlPresetGeometry(sShapeType.subView(6));
+        for (const beans::PropertyValue& rProp : aPreset)
+        {
+            if (rProp.Name != sType)
+                aGeometryItem.SetPropertyValue(rProp);
+        }
+    }
 
     const sal_Int32* pDefData = nullptr;
     const mso_CustomShape* pDefCustomShape = GetCustomShapeContent( eSpType );

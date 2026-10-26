@@ -33,6 +33,7 @@
 #include <comphelper/sequence.hxx>
 #include <o3tl/string_view.hxx>
 #include <sal/log.hxx>
+#include <svx/svdoashp.hxx>
 
 #include <algorithm>
 
@@ -128,6 +129,32 @@ bool CustomShapeProperties::representsDefaultShape() const
 }
 
 CustomShapeProperties::PresetDataMap CustomShapeProperties::maPresetDataMap;
+
+Sequence< PropertyValue > CustomShapeProperties::getPresetGeometry(std::u16string_view rPresetName)
+{
+    const sal_Int32 nToken = TokenMap::getTokenFromUnicode(rPresetName);
+    if (nToken == XML_TOKEN_INVALID)
+        return {};
+    if (maPresetDataMap.empty())
+        initializePresetDataMap();
+    auto it = maPresetDataMap.find(nToken);
+    if (it == maPresetDataMap.end())
+        return {};
+    return it->second.makePropertyValueSequence();
+}
+
+namespace
+{
+// Let svx fill DrawingML-only presets drawn from the UI (SdrObjCustomShape::MergeDefaultAttributes)
+struct PresetGeometryRegistration
+{
+    PresetGeometryRegistration()
+    {
+        SdrObjCustomShape::SetOoxmlPresetGeometryResolver(&CustomShapeProperties::getPresetGeometry);
+    }
+};
+const PresetGeometryRegistration aPresetGeometryRegistration;
+}
 
 void CustomShapeProperties::pushToPropSet(
     const Reference < XPropertySet >& xPropSet, const awt::Size &aSize )
