@@ -4533,6 +4533,80 @@ const TranslateId ocARRAYTOTEXT_ARY[] =
     NC_("ocARRAYTOTEXT", "The format of the returned text. 0 or omitted - concise format, the values separated by commas (default). 1 - strict format, an array constant in braces with quoted text, comma column separators and semicolon row separators.")
 };
 
+// -=*# Resource for function REGEXTEST #*=-
+const TranslateId ocREGEXTEST_ARY[] =
+{
+    NC_("ocREGEXTEST", "Checks whether any part of the text matches a regular expression."),
+    NC_("ocREGEXTEST", "Text"),
+    NC_("ocREGEXTEST", "The text to be searched."),
+    NC_("ocREGEXTEST", "Pattern"),
+    NC_("ocREGEXTEST", "The regular expression pattern to be matched."),
+    NC_("ocREGEXTEST", "Case sensitivity"),
+    NC_("ocREGEXTEST", "0 or omitted - case sensitive (default). 1 - case insensitive.")
+};
+
+// -=*# Resource for function REGEXEXTRACT #*=-
+const TranslateId ocREGEXEXTRACT_ARY[] =
+{
+    NC_("ocREGEXEXTRACT", "Extracts the parts of the text that match a regular expression."),
+    NC_("ocREGEXEXTRACT", "Text"),
+    NC_("ocREGEXEXTRACT", "The text to extract from."),
+    NC_("ocREGEXEXTRACT", "Pattern"),
+    NC_("ocREGEXEXTRACT", "The regular expression pattern to be matched."),
+    NC_("ocREGEXEXTRACT", "Return mode"),
+    NC_("ocREGEXEXTRACT", "0 or omitted - the first match (default). 1 - all matches as an array. 2 - the capture groups of the first match as an array."),
+    NC_("ocREGEXEXTRACT", "Case sensitivity"),
+    NC_("ocREGEXEXTRACT", "0 or omitted - case sensitive (default). 1 - case insensitive.")
+};
+
+// -=*# Resource for function REGEXREPLACE #*=-
+const TranslateId ocREGEXREPLACE_ARY[] =
+{
+    NC_("ocREGEXREPLACE", "Replaces the parts of the text that match a regular expression."),
+    NC_("ocREGEXREPLACE", "Text"),
+    NC_("ocREGEXREPLACE", "The text in which to replace."),
+    NC_("ocREGEXREPLACE", "Pattern"),
+    NC_("ocREGEXREPLACE", "The regular expression pattern to be matched."),
+    NC_("ocREGEXREPLACE", "Replacement"),
+    NC_("ocREGEXREPLACE", "The replacement text, $1 and so on refer to capture groups."),
+    NC_("ocREGEXREPLACE", "Occurrence"),
+    NC_("ocREGEXREPLACE", "0 or omitted - replace all matches (default). A positive number n replaces the n-th match, a negative number the n-th match from the end."),
+    NC_("ocREGEXREPLACE", "Case sensitivity"),
+    NC_("ocREGEXREPLACE", "0 or omitted - case sensitive (default). 1 - case insensitive.")
+};
+
+// -=*# Resource for function VALUETOTEXT #*=-
+const TranslateId ocVALUETOTEXT_ARY[] =
+{
+    NC_("ocVALUETOTEXT", "Returns a value as text."),
+    NC_("ocVALUETOTEXT", "Value"),
+    NC_("ocVALUETOTEXT", "The value to return as text."),
+    NC_("ocVALUETOTEXT", "Format"),
+    NC_("ocVALUETOTEXT", "The format of the returned text. 0 or omitted - concise format (default). 1 - strict format, text is enclosed in quotes.")
+};
+
+// -=*# Resource for function PERCENTOF #*=-
+const TranslateId ocPERCENTOF_ARY[] =
+{
+    NC_("ocPERCENTOF", "Returns the sum of a subset of data as a fraction of the sum of all the data."),
+    NC_("ocPERCENTOF", "Data subset"),
+    NC_("ocPERCENTOF", "The values that are part of the data."),
+    NC_("ocPERCENTOF", "Data all"),
+    NC_("ocPERCENTOF", "All the values.")
+};
+
+// -=*# Resource for function TRIMRANGE #*=-
+const TranslateId ocTRIMRANGE_ARY[] =
+{
+    NC_("ocTRIMRANGE", "Excludes the blank rows and columns at the edges of a range or array."),
+    NC_("ocTRIMRANGE", "Range"),
+    NC_("ocTRIMRANGE", "The range or array to trim."),
+    NC_("ocTRIMRANGE", "Trim rows"),
+    NC_("ocTRIMRANGE", "0 - none. 1 - leading blank rows. 2 - trailing blank rows. 3 or omitted - both (default)."),
+    NC_("ocTRIMRANGE", "Trim columns"),
+    NC_("ocTRIMRANGE", "0 - none. 1 - leading blank columns. 2 - trailing blank columns. 3 or omitted - both (default).")
+};
+
 // -=*# Resource for function LAMBDA #*=-
 const TranslateId ocLAMBDA_ARY[] =
 {

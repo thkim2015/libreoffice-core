@@ -790,6 +790,9 @@ private:
     void ScTextBefore();
     void ScTextSplit();
     void ScArrayToText();
+    void ScValueToText();
+    void ScPercentOf();
+    void ScTrimRange();
     void ScToCol();
     void ScToRow();
     void ScUnique();
@@ -858,6 +861,10 @@ public:
     void ScSubstitute();
     void ScRept();
     void ScRegex();
+    bool GetExcelRegexCaseInsensitive( bool& rbCaseInsensitive );
+    void ScRegexTest();
+    void ScRegexExtract();
+    void ScRegexReplace();
     void ScConcat();
     void ScConcat_MS();
     void ScTextJoin_MS();

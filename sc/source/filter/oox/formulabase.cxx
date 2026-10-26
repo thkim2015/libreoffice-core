@@ -918,6 +918,12 @@ const FunctionData saFuncTable2024[] =
     { "COM.MICROSOFT.TOROW",               "TOROW",               NOID,   NOID,   1,  3,  A, { VO }, FuncFlags::MACROCALL_NEW },
     { "COM.MICROSOFT.WRAPCOLS",            "WRAPCOLS",            NOID,   NOID,   2,  3,  A, { VO }, FuncFlags::MACROCALL_NEW },
     { "COM.MICROSOFT.WRAPROWS",            "WRAPROWS",            NOID,   NOID,   2,  3,  A, { VO }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.REGEXTEST",           "REGEXTEST",           NOID,   NOID,   2,  3,  V, { VR }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.REGEXEXTRACT",        "REGEXEXTRACT",        NOID,   NOID,   2,  4,  A, { VR }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.REGEXREPLACE",        "REGEXREPLACE",        NOID,   NOID,   3,  5,  V, { VR }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.VALUETOTEXT",         "VALUETOTEXT",         NOID,   NOID,   1,  2,  V, { VR }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.PERCENTOF",           "PERCENTOF",           NOID,   NOID,   2,  2,  V, { RO }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.TRIMRANGE",           "TRIMRANGE",           NOID,   NOID,   1,  3,  R, { RO, VR }, FuncFlags::MACROCALL_NEW },
 };
 
 

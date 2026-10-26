@@ -624,6 +624,12 @@ inline constexpr OUString HID_FUNC_LET_MS = u"SC_HID_FUNC_LET_MS"_ustr;
 inline constexpr OUString HID_FUNC_WRAPCOLS_MS = u"SC_HID_FUNC_WRAPCOLS_MS"_ustr;
 inline constexpr OUString HID_FUNC_WRAPROWS_MS = u"SC_HID_FUNC_WRAPROWS_MS"_ustr;
 inline constexpr OUString HID_FUNC_ARRAYTOTEXT_MS = u"SC_HID_FUNC_ARRAYTOTEXT_MS"_ustr;
+inline constexpr OUString HID_FUNC_REGEXTEST_MS = u"SC_HID_FUNC_REGEXTEST_MS"_ustr;
+inline constexpr OUString HID_FUNC_REGEXEXTRACT_MS = u"SC_HID_FUNC_REGEXEXTRACT_MS"_ustr;
+inline constexpr OUString HID_FUNC_REGEXREPLACE_MS = u"SC_HID_FUNC_REGEXREPLACE_MS"_ustr;
+inline constexpr OUString HID_FUNC_VALUETOTEXT_MS = u"SC_HID_FUNC_VALUETOTEXT_MS"_ustr;
+inline constexpr OUString HID_FUNC_PERCENTOF_MS = u"SC_HID_FUNC_PERCENTOF_MS"_ustr;
+inline constexpr OUString HID_FUNC_TRIMRANGE_MS = u"SC_HID_FUNC_TRIMRANGE_MS"_ustr;
 inline constexpr OUString HID_FUNC_LAMBDA_MS = u"SC_HID_FUNC_LAMBDA_MS"_ustr;
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

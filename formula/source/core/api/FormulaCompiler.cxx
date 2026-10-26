@@ -379,6 +379,8 @@ bool isRangeResultFunction( OpCode eOp )
     {
         case ocIndirect:
         case ocOffset:
+        // TRIMRANGE returns a part of the range it was given.
+        case ocTrimRange:
         // In OOXML the # is written before its operand, so there it is the first opcode of a
         // sub-expression that yields a reference.
         case ocSpill:
@@ -398,6 +400,7 @@ bool isRangeResultOpCode( OpCode eOp )
         case ocIndirect:
         case ocOffset:
         case ocIndex:
+        case ocTrimRange:
         // The # postfix operator gives the spill range of the master cell before it, which
         // is a reference just like the operators above.
         case ocSpill:
@@ -1403,6 +1406,8 @@ bool FormulaCompiler::IsMatrixFunction( OpCode eOpCode )
         case ocWrapCols :
         case ocWrapRows :
         case ocMakeArray :
+        case ocRegexExtract :
+        case ocTrimRange :
             return true;
         default:
         {
@@ -1914,6 +1919,8 @@ void FormulaCompiler::Factor()
                     case ocMakeArray:
                     case ocMap:
                     case ocScan:
+                    case ocRegexExtract:
+                    case ocTrimRange:
                         mpArr->SetDynamicArrayFunction( true);
                     break;
                     default:

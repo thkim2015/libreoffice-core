@@ -4098,6 +4098,9 @@ void ScInterpreter::DispatchOpCode( OpCode eOp )
         case ocTextBefore       : ScTextBefore();               break;
         case ocTextSplit        : ScTextSplit();                break;
         case ocArrayToText      : ScArrayToText();              break;
+        case ocValueToText      : ScValueToText();              break;
+        case ocPercentOf        : ScPercentOf();                break;
+        case ocTrimRange        : ScTrimRange();                break;
         case ocToCol            : ScToCol();                    break;
         case ocToRow            : ScToRow();                    break;
         case ocUnique           : ScUnique();                   break;
@@ -4324,6 +4327,9 @@ void ScInterpreter::DispatchOpCode( OpCode eOp )
         case ocText             : ScText();                     break;
         case ocSubstitute       : ScSubstitute();               break;
         case ocRegex            : ScRegex();                    break;
+        case ocRegexTest        : ScRegexTest();                break;
+        case ocRegexExtract     : ScRegexExtract();             break;
+        case ocRegexReplace     : ScRegexReplace();             break;
         case ocRept             : ScRept();                     break;
         case ocConcat           : ScConcat();                   break;
         case ocConcat_MS        : ScConcat_MS();                break;

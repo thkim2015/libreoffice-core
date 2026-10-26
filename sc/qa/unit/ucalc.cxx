@@ -2948,6 +2948,7 @@ CPPUNIT_TEST_FIXTURE(Test, testFunctionLists)
         "LOG10",
         "MOD",
         "ODD",
+        "PERCENTOF",
         "PI",
         "POWER",
         "PRODUCT",
@@ -3195,6 +3196,7 @@ CPPUNIT_TEST_FIXTURE(Test, testFunctionLists)
         "TEXTSPLIT",
         "TOCOL",
         "TOROW",
+        "TRIMRANGE",
         "UNIQUE",
         "VLOOKUP",
         "VSTACK",
@@ -3235,6 +3237,9 @@ CPPUNIT_TEST_FIXTURE(Test, testFunctionLists)
         "NUMBERVALUE",
         "PROPER",
         "REGEX",
+        "REGEXEXTRACT",
+        "REGEXREPLACE",
+        "REGEXTEST",
         "REPLACE",
         "REPLACEB",
         "REPT",
@@ -3255,6 +3260,7 @@ CPPUNIT_TEST_FIXTURE(Test, testFunctionLists)
         "UNICODE",
         "UPPER",
         "VALUE",
+        "VALUETOTEXT",
         "WEBSERVICE",
         nullptr
     };

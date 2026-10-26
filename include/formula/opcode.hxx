@@ -572,7 +572,13 @@ enum OpCode : sal_uInt16
         ocReduce            = 525,
         ocScan              = 526,
         ocArrayToText       = 527,
-        ocStopTwoParameters = 528, /* last function with two or more parameters' OpCode + 1 */
+        ocRegexTest         = 528,
+        ocRegexExtract      = 529,
+        ocRegexReplace      = 530,
+        ocValueToText       = 531,
+        ocPercentOf         = 532,
+        ocTrimRange         = 533,
+        ocStopTwoParameters = 534, /* last function with two or more parameters' OpCode + 1 */
 
         ocStopFunction      = ocStopTwoParameters,  /* last function's OpCode + 1 */
         ocLastOpcodeId      = ocStopFunction - 1, /* last OpCode */
@@ -1106,6 +1112,12 @@ inline std::string OpCodeEnumToString(OpCode eCode)
     case ocReduce: return "Reduce";
     case ocScan: return "Scan";
     case ocArrayToText: return "ArrayToText";
+    case ocRegexTest: return "RegexTest";
+    case ocRegexExtract: return "RegexExtract";
+    case ocRegexReplace: return "RegexReplace";
+    case ocValueToText: return "ValueToText";
+    case ocPercentOf: return "PercentOf";
+    case ocTrimRange: return "TrimRange";
     case ocTTT: return "TTT";
     case ocDebugVar: return "DebugVar";
     case ocDataToken1: return "DataToken1";

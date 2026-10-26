@@ -11091,6 +11091,454 @@ void ScInterpreter::ScArrayToText()
     PushString(aResult.makeStringAndClear());
 }
 
+void ScInterpreter::ScValueToText()
+{
+    // VALUETOTEXT(value, [format])
+    sal_uInt8 nParameterCount = GetByte();
+    if (!MustHaveParamCount(nParameterCount, 1, 2))
+        return;
+
+    // 2nd argument optional - Format: 0 = concise (default), 1 = strict
+    sal_Int32 nFormat = 0;
+    if (nParameterCount == 2)
+    {
+        nFormat = GetInt32WithDefault(0);
+        if (nGlobalError != FormulaError::NONE)
+        {
+            PushError(nGlobalError);
+            return;
+        }
+        if (nFormat < 0 || nFormat > 1)
+        {
+            PushError(FormulaError::NoValue);
+            return;
+        }
+    }
+    const bool bStrict = (nFormat == 1);
+
+    // The value converts like one element of ARRAYTOTEXT: the strict format
+    // quotes text (doubling inner quotes), numbers, booleans and errors are
+    // never quoted. A range or array converts element by element to an
+    // array of the same size.
+    auto textOf = [bStrict](const OUString& rStr) -> OUString
+    {
+        if (bStrict)
+            return "\"" + rStr.replaceAll(u"\"", u"\"\"") + "\"";
+        return rStr;
+    };
+    const sal_uInt32 nLogicalKey = mrContext.NFGetStandardFormat( SvNumFormatType::LOGICAL, ScGlobal::eLnge);
+    auto logicalOf = [this, nLogicalKey](double fValue) -> OUString
+    {
+        OUString aString;
+        const Color* pColor = nullptr;
+        mrContext.NFGetOutputString(fValue, nLogicalKey, aString, &pColor);
+        return aString;
+    };
+    auto numberOf = [this](double fValue) -> OUString
+    {
+        return GetStringFromDouble(fValue).getString();
+    };
+
+    switch (GetStackType())
+    {
+        case svSingleRef:
+        case svDoubleRef:
+        {
+            SCCOL nColumn1;
+            SCCOL nColumn2;
+            SCROW nRow1;
+            SCROW nRow2;
+            SCTAB nTable1;
+            SCTAB nTable2;
+            if (GetStackType() == svSingleRef)
+            {
+                ScAddress aAddress;
+                PopSingleRef(aAddress);
+                nColumn1 = nColumn2 = aAddress.Col();
+                nRow1 = nRow2 = aAddress.Row();
+                nTable1 = nTable2 = aAddress.Tab();
+            }
+            else
+            {
+                PopDoubleRef(nColumn1, nRow1, nTable1, nColumn2, nRow2, nTable2);
+            }
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError(nGlobalError);
+                return;
+            }
+            if (nTable1 != nTable2)
+            {
+                PushIllegalParameter();
+                return;
+            }
+
+            // A cell reads directly from the document so that a number cell
+            // formatted as boolean converts to TRUE or FALSE.
+            auto cellText = [&](const ScAddress& rAddress) -> OUString
+            {
+                ScRefCellValue aCell(mrDoc, rAddress);
+                if (aCell.isEmpty())
+                    return OUString();
+                if (aCell.hasError())
+                    return ScGlobal::GetErrorString(aCell.getFormula()->GetErrCode());
+                if (aCell.hasNumeric())
+                {
+                    SvNumFormatType eCellFormat;
+                    if (aCell.getType() == CELLTYPE_FORMULA)
+                        eCellFormat = aCell.getFormula()->GetFormatType();
+                    else
+                        eCellFormat = mrContext.NFGetType(mrDoc.GetNumberFormat(mrContext, rAddress));
+                    if (eCellFormat == SvNumFormatType::LOGICAL)
+                        return logicalOf(aCell.getValue());
+                    return numberOf(aCell.getValue());
+                }
+                svl::SharedString aSharedString;
+                GetCellString(aSharedString, aCell);
+                return textOf(aSharedString.getString());
+            };
+
+            if (nColumn1 == nColumn2 && nRow1 == nRow2)
+            {
+                PushString(cellText(ScAddress(nColumn1, nRow1, nTable1)));
+                return;
+            }
+            const SCSIZE nColumns = static_cast<SCSIZE>(nColumn2 - nColumn1 + 1);
+            const SCSIZE nRows = static_cast<SCSIZE>(nRow2 - nRow1 + 1);
+            ScMatrixRef pResMat = GetNewMat(nColumns, nRows, /*bEmpty*/ true);
+            if (!pResMat)
+            {
+                PushIllegalArgument();
+                return;
+            }
+            for (SCROW nRow = nRow1; nRow <= nRow2; ++nRow)
+            {
+                for (SCCOL nColumn = nColumn1; nColumn <= nColumn2; ++nColumn)
+                {
+                    pResMat->PutString(
+                        mrStrPool.intern(cellText(ScAddress(nColumn, nRow, nTable1))),
+                        static_cast<SCSIZE>(nColumn - nColumn1), static_cast<SCSIZE>(nRow - nRow1));
+                }
+            }
+            PushMatrix(pResMat);
+            return;
+        }
+        case svDouble:
+        case svError:
+        {
+            // A scalar error converts to its error text like an error
+            // element of ARRAYTOTEXT does.
+            const double fValue = GetDouble();
+            if (nGlobalError != FormulaError::NONE)
+            {
+                const FormulaError nError = nGlobalError;
+                nGlobalError = FormulaError::NONE;
+                PushString(ScGlobal::GetErrorString(nError));
+                return;
+            }
+            if (nCurFmtType == SvNumFormatType::LOGICAL)
+                PushString(logicalOf(fValue));
+            else
+                PushString(numberOf(fValue));
+            return;
+        }
+        case svString:
+        {
+            const OUString aStr = GetString().getString();
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError(nGlobalError);
+                return;
+            }
+            PushString(textOf(aStr));
+            return;
+        }
+        case svMissing:
+        case svEmptyCell:
+        {
+            Pop();
+            PushString(OUString());
+            return;
+        }
+        default:
+            break;
+    }
+
+    ScMatrixRef pMatrix = GetMatrix();
+    if (!pMatrix)
+    {
+        PushIllegalParameter();
+        return;
+    }
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    SCSIZE nColumns = 0;
+    SCSIZE nRows = 0;
+    pMatrix->GetDimensions(nColumns, nRows);
+    ScMatrixRef pResMat = GetNewMat(nColumns, nRows, /*bEmpty*/ true);
+    if (!pResMat)
+    {
+        PushIllegalArgument();
+        return;
+    }
+    for (SCSIZE nRow = 0; nRow < nRows; ++nRow)
+    {
+        for (SCSIZE nColumn = 0; nColumn < nColumns; ++nColumn)
+        {
+            const ScMatrixValue aValue = pMatrix->Get(nColumn, nRow);
+            OUString aText;
+            switch (aValue.nType)
+            {
+                case ScMatValType::String:
+                    aText = textOf(aValue.aStr.getString());
+                    break;
+                case ScMatValType::Boolean:
+                    aText = logicalOf(aValue.fVal);
+                    break;
+                case ScMatValType::Value:
+                {
+                    const FormulaError nError = aValue.GetError();
+                    if (nError != FormulaError::NONE)
+                        aText = ScGlobal::GetErrorString(nError);
+                    else
+                        aText = numberOf(aValue.fVal);
+                    break;
+                }
+                default:
+                    // An empty element converts to empty text.
+                    break;
+            }
+            pResMat->PutString(mrStrPool.intern(aText), nColumn, nRow);
+        }
+    }
+    if (nColumns == 1 && nRows == 1)
+        PushString(pResMat->GetString(0, 0).getString());
+    else
+        PushMatrix(pResMat);
+}
+
+void ScInterpreter::ScPercentOf()
+{
+    // PERCENTOF(data_subset, data_all) = SUM(data_subset) / SUM(data_all)
+    if (!MustHaveParamCount(GetByte(), 2))
+        return;
+
+    // Sum each argument on its own like SUM() with one parameter does, the
+    // last argument is on top of the stack.
+    const sal_uInt8 nSavedPar = cPar;
+    cPar = 1;
+    IterateParameters(ifSUM);
+    const double fAll = GetDouble();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        cPar = nSavedPar;
+        PushError(nGlobalError);
+        return;
+    }
+    cPar = 1;
+    IterateParameters(ifSUM);
+    const double fSubset = GetDouble();
+    cPar = nSavedPar;
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    if (fAll == 0.0)
+    {
+        PushError(FormulaError::DivisionByZero);
+        return;
+    }
+    PushDouble(fSubset / fAll);
+}
+
+void ScInterpreter::ScTrimRange()
+{
+    // TRIMRANGE(range, [trim_rows], [trim_cols]) with 0 = none, 1 = leading,
+    // 2 = trailing, 3 = both (default) blank rows or columns.
+    const sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount(nParamCount, 1, 3))
+        return;
+
+    sal_Int32 nTrimCols = 3;
+    sal_Int32 nTrimRows = 3;
+    if (nParamCount == 3)
+        nTrimCols = GetInt32WithDefault(3);
+    if (nParamCount >= 2)
+        nTrimRows = GetInt32WithDefault(3);
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    if (nTrimRows < 0 || nTrimRows > 3 || nTrimCols < 0 || nTrimCols > 3)
+    {
+        PushNoValue();
+        return;
+    }
+    const bool bTrimTop = (nTrimRows & 1) != 0;
+    const bool bTrimBottom = (nTrimRows & 2) != 0;
+    const bool bTrimLeft = (nTrimCols & 1) != 0;
+    const bool bTrimRight = (nTrimCols & 2) != 0;
+
+    switch (GetStackType())
+    {
+        case svSingleRef:
+        {
+            // One cell has nothing to trim.
+            ScAddress aAddress;
+            PopSingleRef(aAddress);
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError(nGlobalError);
+                return;
+            }
+            PushSingleRef(aAddress.Col(), aAddress.Row(), aAddress.Tab());
+            return;
+        }
+        case svDoubleRef:
+        {
+            SCCOL nCol1;
+            SCCOL nCol2;
+            SCROW nRow1;
+            SCROW nRow2;
+            SCTAB nTab1;
+            SCTAB nTab2;
+            PopDoubleRef(nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError(nGlobalError);
+                return;
+            }
+            if (nTab1 != nTab2)
+            {
+                PushIllegalParameter();
+                return;
+            }
+
+            // The bounding box of the cells with content. Each of its edges
+            // is independent of the others, so the edges not to be trimmed
+            // are simply taken from the original range.
+            SCCOL nDataCol1 = nCol1;
+            SCCOL nDataCol2 = nCol2;
+            SCROW nDataRow1 = nRow1;
+            SCROW nDataRow2 = nRow2;
+            bool bShrunk = false;
+            bool bData = mrDoc.ShrinkToUsedDataArea(bShrunk, nTab1, nDataCol1, nDataRow1,
+                    nDataCol2, nDataRow2, /*bColumnsOnly*/ false);
+            // The start column is clamped to the allocated columns, a range
+            // entirely right of those has no content.
+            if (bData && (nDataCol1 < nCol1 || nDataCol2 > nCol2 || nDataRow1 < nRow1 || nDataRow2 > nRow2))
+                bData = false;
+            if (!bData)
+            {
+                // All blank: keep one cell, the first one unless only the
+                // leading blanks are trimmed.
+                nDataCol1 = nDataCol2 = (bTrimLeft && !bTrimRight) ? nCol2 : nCol1;
+                nDataRow1 = nDataRow2 = (bTrimTop && !bTrimBottom) ? nRow2 : nRow1;
+            }
+            const SCCOL nResCol1 = bTrimLeft ? nDataCol1 : nCol1;
+            const SCCOL nResCol2 = bTrimRight ? nDataCol2 : nCol2;
+            const SCROW nResRow1 = bTrimTop ? nDataRow1 : nRow1;
+            const SCROW nResRow2 = bTrimBottom ? nDataRow2 : nRow2;
+            if (nResCol1 == nResCol2 && nResRow1 == nResRow2)
+                PushSingleRef(nResCol1, nResRow1, nTab1);
+            else
+                PushDoubleRef(nResCol1, nResRow1, nTab1, nResCol2, nResRow2, nTab1);
+            return;
+        }
+        default:
+            break;
+    }
+
+    // An array trims its empty elements the same way.
+    ScMatrixRef pMatrix = GetMatrix();
+    if (!pMatrix)
+    {
+        PushIllegalParameter();
+        return;
+    }
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    SCSIZE nColumns = 0;
+    SCSIZE nRows = 0;
+    pMatrix->GetDimensions(nColumns, nRows);
+    if (nColumns == 0 || nRows == 0)
+    {
+        PushIllegalParameter();
+        return;
+    }
+    SCSIZE nFirstCol = nColumns;
+    SCSIZE nLastCol = 0;
+    SCSIZE nFirstRow = nRows;
+    SCSIZE nLastRow = 0;
+    for (SCSIZE nRow = 0; nRow < nRows; ++nRow)
+    {
+        for (SCSIZE nColumn = 0; nColumn < nColumns; ++nColumn)
+        {
+            if (pMatrix->IsEmpty(nColumn, nRow))
+                continue;
+            nFirstCol = std::min(nFirstCol, nColumn);
+            nLastCol = std::max(nLastCol, nColumn);
+            nFirstRow = std::min(nFirstRow, nRow);
+            nLastRow = std::max(nLastRow, nRow);
+        }
+    }
+    if (nFirstCol == nColumns)
+    {
+        // All empty: keep one element as for a range.
+        nFirstCol = nLastCol = (bTrimLeft && !bTrimRight) ? nColumns - 1 : 0;
+        nFirstRow = nLastRow = (bTrimTop && !bTrimBottom) ? nRows - 1 : 0;
+    }
+    const SCSIZE nResCol1 = bTrimLeft ? nFirstCol : 0;
+    const SCSIZE nResCol2 = bTrimRight ? nLastCol : nColumns - 1;
+    const SCSIZE nResRow1 = bTrimTop ? nFirstRow : 0;
+    const SCSIZE nResRow2 = bTrimBottom ? nLastRow : nRows - 1;
+    if (nResCol1 == 0 && nResRow1 == 0 && nResCol2 == nColumns - 1 && nResRow2 == nRows - 1)
+    {
+        PushMatrix(pMatrix);
+        return;
+    }
+    ScMatrixRef pResMat = GetNewMat(nResCol2 - nResCol1 + 1, nResRow2 - nResRow1 + 1, /*bEmpty*/ true);
+    if (!pResMat)
+    {
+        PushIllegalArgument();
+        return;
+    }
+    for (SCSIZE nRow = nResRow1; nRow <= nResRow2; ++nRow)
+    {
+        for (SCSIZE nColumn = nResCol1; nColumn <= nResCol2; ++nColumn)
+        {
+            const ScMatrixValue aValue = pMatrix->Get(nColumn, nRow);
+            const SCSIZE nC = nColumn - nResCol1;
+            const SCSIZE nR = nRow - nResRow1;
+            switch (aValue.nType)
+            {
+                case ScMatValType::String:
+                    pResMat->PutString(aValue.aStr, nC, nR);
+                    break;
+                case ScMatValType::Boolean:
+                    pResMat->PutBoolean(aValue.fVal != 0.0, nC, nR);
+                    break;
+                case ScMatValType::Value:
+                    // An error element stays an error, it is a coded double.
+                    pResMat->PutDouble(aValue.fVal, nC, nR);
+                    break;
+                default:
+                    // Empty stays empty.
+                    break;
+            }
+        }
+    }
+    PushMatrix(pResMat);
+}
+
 void ScInterpreter::ScUnique()
 {
     sal_uInt8 nParamCount = GetByte();
@@ -14360,6 +14808,311 @@ void ScInterpreter::ScRegex()
     }
     OUString aResult( reinterpret_cast<const sal_Unicode*>(aReplaced.getBuffer()), aReplaced.length());
     PushString( aResult);
+}
+
+namespace {
+
+/** Creates the ICU matcher for the Excel REGEXTEST, REGEXEXTRACT and
+    REGEXREPLACE functions. Returns nullptr for an invalid pattern.
+ */
+std::unique_ptr<icu::RegexMatcher> lcl_CreateExcelRegexMatcher( const OUString& rPattern, bool bCaseInsensitive )
+{
+    const icu::UnicodeString aIcuPattern(
+        false, reinterpret_cast<const UChar*>(rPattern.getStr()), rPattern.getLength());
+    UErrorCode status = U_ZERO_ERROR;
+    auto pMatcher = std::make_unique<icu::RegexMatcher>(
+        aIcuPattern, bCaseInsensitive ? UREGEX_CASE_INSENSITIVE : 0, status);
+    if (U_FAILURE(status))
+        return nullptr;
+    // Guard against pathological patterns like ScRegex() does.
+    pMatcher->setTimeLimit( 23*1000, status);
+    if (U_FAILURE(status))
+        return nullptr;
+    return pMatcher;
+}
+
+OUString lcl_IcuToOUString( const icu::UnicodeString& rStr )
+{
+    return OUString( reinterpret_cast<const sal_Unicode*>(rStr.getBuffer()), rStr.length());
+}
+
+}
+
+/** Reads the optional Excel case_sensitivity argument of the REGEX*
+    functions: 0 or omitted is case sensitive, 1 is case insensitive. Any
+    other value sets an error and returns false.
+ */
+bool ScInterpreter::GetExcelRegexCaseInsensitive( bool& rbCaseInsensitive )
+{
+    const sal_Int32 nCase = GetInt32WithDefault(0);
+    if (nGlobalError != FormulaError::NONE)
+        return false;
+    if (nCase != 0 && nCase != 1)
+    {
+        SetError( FormulaError::NoValue);
+        return false;
+    }
+    rbCaseInsensitive = (nCase == 1);
+    return true;
+}
+
+void ScInterpreter::ScRegexTest()
+{
+    // REGEXTEST(text, pattern, [case_sensitivity])
+    const sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount( nParamCount, 2, 3))
+        return;
+
+    bool bCaseInsensitive = false;
+    if (nParamCount == 3 && !GetExcelRegexCaseInsensitive( bCaseInsensitive))
+    {
+        PushError( nGlobalError);
+        return;
+    }
+    const OUString aPattern = GetString().getString();
+    const OUString aText = GetString().getString();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;
+    }
+
+    std::unique_ptr<icu::RegexMatcher> pMatcher = lcl_CreateExcelRegexMatcher( aPattern, bCaseInsensitive);
+    if (!pMatcher)
+    {
+        // Invalid pattern, Excel gives #VALUE!
+        PushNoValue();
+        return;
+    }
+    const icu::UnicodeString aIcuText( false, reinterpret_cast<const UChar*>(aText.getStr()), aText.getLength());
+    pMatcher->reset( aIcuText);
+    UErrorCode status = U_ZERO_ERROR;
+    const bool bFound = pMatcher->find( status);
+    if (U_FAILURE(status))
+    {
+        PushNoValue();
+        return;
+    }
+    nFuncFmtType = SvNumFormatType::LOGICAL;
+    PushInt( bFound ? 1 : 0);
+}
+
+void ScInterpreter::ScRegexExtract()
+{
+    // REGEXEXTRACT(text, pattern, [return_mode], [case_sensitivity])
+    const sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount( nParamCount, 2, 4))
+        return;
+
+    bool bCaseInsensitive = false;
+    if (nParamCount == 4 && !GetExcelRegexCaseInsensitive( bCaseInsensitive))
+    {
+        PushError( nGlobalError);
+        return;
+    }
+    // 0 = first match (default), 1 = all matches, 2 = capture groups of
+    // the first match.
+    sal_Int32 nReturnMode = 0;
+    if (nParamCount >= 3)
+        nReturnMode = GetInt32WithDefault(0);
+    const OUString aPattern = GetString().getString();
+    const OUString aText = GetString().getString();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;
+    }
+    if (nReturnMode < 0 || nReturnMode > 2)
+    {
+        PushNoValue();
+        return;
+    }
+
+    std::unique_ptr<icu::RegexMatcher> pMatcher = lcl_CreateExcelRegexMatcher( aPattern, bCaseInsensitive);
+    if (!pMatcher)
+    {
+        PushNoValue();
+        return;
+    }
+    const icu::UnicodeString aIcuText( false, reinterpret_cast<const UChar*>(aText.getStr()), aText.getLength());
+    pMatcher->reset( aIcuText);
+    UErrorCode status = U_ZERO_ERROR;
+
+    if (nReturnMode == 1)
+    {
+        // All matches, as a row like Excel spills them.
+        std::vector<OUString> aMatches;
+        while (pMatcher->find( status) && U_SUCCESS(status))
+        {
+            aMatches.push_back( lcl_IcuToOUString( pMatcher->group( status)));
+            if (U_FAILURE(status))
+                break;
+        }
+        if (U_FAILURE(status))
+        {
+            PushNoValue();
+            return;
+        }
+        if (aMatches.empty())
+        {
+            PushNA();
+            return;
+        }
+        if (aMatches.size() == 1)
+        {
+            PushString( aMatches[0]);
+            return;
+        }
+        ScMatrixRef pResMat = GetNewMat( aMatches.size(), 1, /*bEmpty*/ true);
+        if (!pResMat)
+        {
+            PushIllegalArgument();
+            return;
+        }
+        for (size_t i = 0; i < aMatches.size(); ++i)
+            pResMat->PutString( mrStrPool.intern( aMatches[i]), i, 0);
+        PushMatrix( pResMat);
+        return;
+    }
+
+    const bool bFound = pMatcher->find( status);
+    if (U_FAILURE(status))
+    {
+        PushNoValue();
+        return;
+    }
+    if (!bFound)
+    {
+        PushNA();
+        return;
+    }
+
+    const sal_Int32 nGroups = pMatcher->groupCount();
+    if (nReturnMode == 0 || nGroups == 0)
+    {
+        // The whole match. A pattern without capture groups in mode 2 also
+        // returns the whole match.
+        OUString aMatch = lcl_IcuToOUString( pMatcher->group( status));
+        if (U_FAILURE(status))
+        {
+            PushNoValue();
+            return;
+        }
+        PushString( aMatch);
+        return;
+    }
+
+    // Capture groups of the first match, as a row. A group that took no
+    // part in the match is an empty text.
+    ScMatrixRef pResMat = GetNewMat( static_cast<SCSIZE>(nGroups), 1, /*bEmpty*/ true);
+    if (!pResMat)
+    {
+        PushIllegalArgument();
+        return;
+    }
+    for (sal_Int32 i = 1; i <= nGroups; ++i)
+    {
+        OUString aGroup;
+        if (pMatcher->start( i, status) >= 0)
+            aGroup = lcl_IcuToOUString( pMatcher->group( i, status));
+        if (U_FAILURE(status))
+        {
+            PushNoValue();
+            return;
+        }
+        pResMat->PutString( mrStrPool.intern( aGroup), static_cast<SCSIZE>(i - 1), 0);
+    }
+    if (nGroups == 1)
+    {
+        PushString( pResMat->GetString( 0, 0).getString());
+        return;
+    }
+    PushMatrix( pResMat);
+}
+
+void ScInterpreter::ScRegexReplace()
+{
+    // REGEXREPLACE(text, pattern, replacement, [occurrence], [case_sensitivity])
+    const sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount( nParamCount, 3, 5))
+        return;
+
+    bool bCaseInsensitive = false;
+    if (nParamCount == 5 && !GetExcelRegexCaseInsensitive( bCaseInsensitive))
+    {
+        PushError( nGlobalError);
+        return;
+    }
+    // 0 = all occurrences (default), n = n-th, -n = n-th from the end.
+    sal_Int32 nOccurrence = 0;
+    if (nParamCount >= 4)
+        nOccurrence = GetInt32WithDefault(0);
+    const OUString aReplacement = GetString().getString();
+    const OUString aPattern = GetString().getString();
+    const OUString aText = GetString().getString();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;
+    }
+
+    std::unique_ptr<icu::RegexMatcher> pMatcher = lcl_CreateExcelRegexMatcher( aPattern, bCaseInsensitive);
+    if (!pMatcher)
+    {
+        PushNoValue();
+        return;
+    }
+    const icu::UnicodeString aIcuText( false, reinterpret_cast<const UChar*>(aText.getStr()), aText.getLength());
+    const icu::UnicodeString aIcuReplacement(
+        false, reinterpret_cast<const UChar*>(aReplacement.getStr()), aReplacement.getLength());
+    pMatcher->reset( aIcuText);
+    UErrorCode status = U_ZERO_ERROR;
+
+    icu::UnicodeString aReplaced;
+    if (nOccurrence == 0)
+        aReplaced = pMatcher->replaceAll( aIcuReplacement, status);
+    else
+    {
+        sal_Int32 nTarget = nOccurrence;
+        if (nOccurrence < 0)
+        {
+            // Count the matches to find the n-th one from the end.
+            sal_Int32 nMatches = 0;
+            while (pMatcher->find( status) && U_SUCCESS(status))
+                ++nMatches;
+            if (U_FAILURE(status))
+            {
+                PushNoValue();
+                return;
+            }
+            nTarget = nMatches + nOccurrence + 1;
+            if (nTarget < 1)
+            {
+                // No such occurrence, the text stays as it is.
+                PushString( aText);
+                return;
+            }
+            pMatcher->reset();
+        }
+        sal_Int32 nCount = 0;
+        while (pMatcher->find( status) && U_SUCCESS(status))
+        {
+            if (++nCount == nTarget)
+            {
+                pMatcher->appendReplacement( aReplaced, aIcuReplacement, status);
+                break;
+            }
+        }
+        // Without the n-th occurrence this copies the whole text.
+        pMatcher->appendTail( aReplaced);
+    }
+    if (U_FAILURE(status))
+    {
+        // For example $1 without a group.
+        PushNoValue();
+        return;
+    }
+    PushString( lcl_IcuToOUString( aReplaced));
 }
 
 void ScInterpreter::ScMid()
