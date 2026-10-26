@@ -639,7 +639,7 @@ bool XclExpAutofilter::HasCondition() const
     return !aCond[0].IsEmpty();
 }
 
-bool XclExpAutofilter::AddEntry( const ScQueryEntry& rEntry )
+bool XclExpAutofilter::AddEntry( const ScQueryEntry& rEntry, bool bWildcards )
 {
     const ScQueryEntry::QueryItemsType& rItems = rEntry.GetQueryItems();
 
@@ -742,7 +742,8 @@ bool XclExpAutofilter::AddEntry( const ScQueryEntry& rEntry )
             // normal condition
             else
             {
-                if (GetOutput() != EXC_OUTPUT_BINARY && rEntry.eOp == SC_EQUAL)
+                const bool bWildcardValue = bWildcards && (sText.indexOf('*') >= 0 || sText.indexOf('?') >= 0);
+                if (GetOutput() != EXC_OUTPUT_BINARY && rEntry.eOp == SC_EQUAL && !bWildcardValue)
                 {
                     AddMultiValueEntry(rEntry);
                     return false;
@@ -988,7 +989,7 @@ ExcAutoFilterRecs::ExcAutoFilterRecs( const XclExpRoot& rRoot, SCTAB nTab, const
                     bConflict = (nEntry == 1) && (rEntry.eConnect == SC_OR) &&
                                 (nFirstField != rEntry.nField);
                 if( !bConflict )
-                    bConflict = pFilter->AddEntry( rEntry );
+                    bConflict = pFilter->AddEntry( rEntry, aParam.eSearchType == utl::SearchParam::SearchType::Wildcard );
             }
         }
 

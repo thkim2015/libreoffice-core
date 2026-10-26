@@ -388,7 +388,8 @@ public:
     bool             HasTop10() const        { return ::get_flag( nFlags, EXC_AFFLAG_TOP10 ); }
 
     bool                    HasCondition() const;
-    bool                    AddEntry( const ScQueryEntry& rEntry );
+    // bWildcards: the filter uses wildcard search, an "equal" value with * or ? is a custom filter
+    bool                    AddEntry( const ScQueryEntry& rEntry, bool bWildcards = false );
     void                    AddMultiValueEntry( const ScQueryEntry& rEntry );
     void                    SetButtonHidden(bool bValue) { bIsButtonHidden = bValue; }
     void AddColorEntry( const ScQueryEntry& rEntry );
