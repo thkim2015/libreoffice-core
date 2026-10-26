@@ -17,6 +17,24 @@
 #include "scdllapi.h"
 #include "global.hxx"
 
+#include <com/sun/star/sheet/DataPilotFieldLayoutMode.hpp>
+
+// ZetaOffice: compact layout with the subtotals below each group (Excel compact form with
+// subtotalTop="0"). Not part of the UNO constants group; LayoutInfo.LayoutMode takes it as a plain value.
+inline constexpr sal_Int32 SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM = 4;
+
+inline bool ScDPIsCompactLayout(sal_Int32 nMode)
+{
+    return nMode == css::sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT
+           || nMode == SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM;
+}
+
+inline bool ScDPIsSubtotalsBottom(sal_Int32 nMode)
+{
+    return nMode == css::sheet::DataPilotFieldLayoutMode::OUTLINE_SUBTOTALS_BOTTOM
+           || nMode == SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM;
+}
+
 class SvNumberFormatter;
 struct ScDPNumGroupInfo;
 enum class ScGeneralFunction;

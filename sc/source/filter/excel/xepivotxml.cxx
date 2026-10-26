@@ -1226,7 +1226,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         {
             const auto eLayoutMode = rDim.GetLayoutInfo()->LayoutMode;
             bTabularMode |= (eLayoutMode == sheet::DataPilotFieldLayoutMode::TABULAR_LAYOUT);
-            bCompactMode &= (eLayoutMode == sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT);
+            bCompactMode &= ScDPIsCompactLayout(eLayoutMode);
         }
     }
 
@@ -1309,11 +1309,13 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
         bool bDimInTabularMode = false;
         bool bDimInCompactMode = false;
+        bool bDimSubtotalsBottom = false;
         if(pDim->GetLayoutInfo())
         {
             const auto eLayoutMode = pDim->GetLayoutInfo()->LayoutMode;
             bDimInTabularMode = (eLayoutMode == sheet::DataPilotFieldLayoutMode::TABULAR_LAYOUT);
-            bDimInCompactMode = (eLayoutMode == sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT);
+            bDimInCompactMode = ScDPIsCompactLayout(eLayoutMode);
+            bDimSubtotalsBottom = ScDPIsSubtotalsBottom(eLayoutMode);
         }
 
         sheet::DataPilotFieldOrientation eOrient = pDim->GetOrientation();
@@ -1496,6 +1498,10 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
         if(bDimInTabularMode)
             pAttList->add(XML_outline, ToPsz10(false));
+
+        // subtotals below the group (outline or compact form); Excel's default is on top
+        if (bDimSubtotalsBottom)
+            pAttList->add(XML_subtotalTop, ToPsz10(false));
 
         pAttList->add(XML_showAll, ToPsz10(false));
 

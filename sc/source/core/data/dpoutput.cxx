@@ -372,7 +372,7 @@ ScDPOutput::ScDPOutput(ScDocument* pDocument, uno::Reference<sheet::XDimensionsS
                                             {
                                                 sheet::DataPilotFieldLayoutInfo aLayoutInfo;
                                                 xPropSet->getPropertyValue( SC_UNO_DP_LAYOUT ) >>= aLayoutInfo;
-                                                bFieldCompact = (aLayoutInfo.LayoutMode == sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT);
+                                                bFieldCompact = ScDPIsCompactLayout(aLayoutInfo.LayoutMode);
                                             }
                                             catch (uno::Exception&)
                                             {

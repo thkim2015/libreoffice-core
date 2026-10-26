@@ -18,6 +18,7 @@
  */
 
 #include <pivottablebuffer.hxx>
+#include <dputil.hxx>
 
 #include <set>
 #include <com/sun/star/container/XIndexAccess.hpp>
@@ -811,7 +812,11 @@ rtl::Reference< ScDataPilotFieldObj > PivotTableField::convertRowColPageField( s
             DataPilotFieldLayoutInfo aLayoutInfo;
             if (maModel.mbCompact)
             {
-                aLayoutInfo.LayoutMode = DataPilotFieldLayoutMode::COMPACT_LAYOUT;
+                // compact form with subtotals below the group (subtotalTop="0") only matters in outline form
+                if (maModel.mbOutline && !maModel.mbSubtotalTop)
+                    aLayoutInfo.LayoutMode = SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM;
+                else
+                    aLayoutInfo.LayoutMode = DataPilotFieldLayoutMode::COMPACT_LAYOUT;
             }
             else if (maModel.mbOutline)
             {

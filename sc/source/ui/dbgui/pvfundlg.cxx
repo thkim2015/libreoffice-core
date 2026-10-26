@@ -604,6 +604,7 @@ namespace
             case DataPilotFieldLayoutMode::OUTLINE_SUBTOTALS_BOTTOM:
                 return 2;
             case DataPilotFieldLayoutMode::COMPACT_LAYOUT:
+            case 4: // ZetaOffice compact + subtotals at the bottom (SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM)
                 return 3;
         }
         return -1;

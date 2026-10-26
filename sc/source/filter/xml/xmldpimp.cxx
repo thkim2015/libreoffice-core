@@ -30,6 +30,7 @@
 #include <formula/errorcodes.hxx>
 #include <rangeutl.hxx>
 #include <dpoutputgeometry.hxx>
+#include <dputil.hxx>
 #include <generalfunction.hxx>
 
 #include "pivotsource.hxx"
@@ -957,7 +958,7 @@ void ScXMLDataPilotFieldContext::SetLayoutInfo(const css::sheet::DataPilotFieldL
     if (xDim)
         xDim->SetLayoutInfo(&aInfo);
 
-    if (pDataPilotTable && aInfo.LayoutMode == sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT)
+    if (pDataPilotTable && ScDPIsCompactLayout(aInfo.LayoutMode))
         pDataPilotTable->SetHasCompactField();
 }
 
@@ -1234,6 +1235,7 @@ ScXMLDataPilotLayoutInfoContext::ScXMLDataPilotLayoutInfoContext( ScXMLImport& r
 {
     sheet::DataPilotFieldLayoutInfo aInfo;
     aInfo.LayoutMode = sheet::DataPilotFieldLayoutMode::TABULAR_LAYOUT;
+    bool bTableSubtotalsBottom = false;
 
     if ( rAttrList.is() )
     {
@@ -1249,6 +1251,8 @@ ScXMLDataPilotLayoutInfoContext::ScXMLDataPilotLayoutInfoContext( ScXMLImport& r
                 break;
                 case XML_ELEMENT( TABLE, XML_LAYOUT_MODE ):
                 case XML_ELEMENT( LO_EXT, XML_LAYOUT_MODE ):
+                    if (IsXMLToken(aIter, XML_OUTLINE_SUBTOTALS_BOTTOM))
+                        bTableSubtotalsBottom = true;
                     // Ensure that loext:layout-mode="compact" is not overwritten by any
                     // value of table:layout-mode.
                     if (aInfo.LayoutMode != sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT)
@@ -1266,6 +1270,8 @@ ScXMLDataPilotLayoutInfoContext::ScXMLDataPilotLayoutInfoContext( ScXMLImport& r
             }
         }
     }
+    if (aInfo.LayoutMode == sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT && bTableSubtotalsBottom)
+        aInfo.LayoutMode = SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM;
     pDataPilotField->SetLayoutInfo(aInfo);}
 
 ScXMLDataPilotLayoutInfoContext::~ScXMLDataPilotLayoutInfoContext()

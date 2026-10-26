@@ -422,12 +422,15 @@ void ScXMLExportDataPilot::WriteLayoutInfo(const ScDPSaveDimension* pDim)
         case sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT:
         sValueStr = GetXMLToken(XML_TABULAR_LAYOUT);
         break;
+        case SC_DP_LAYOUT_COMPACT_SUBTOTALS_BOTTOM:
+        sValueStr = GetXMLToken(XML_OUTLINE_SUBTOTALS_BOTTOM);
+        break;
     }
 
     if (!sValueStr.isEmpty())
         rExport.AddAttribute(XML_NAMESPACE_TABLE, XML_LAYOUT_MODE, sValueStr);
 
-    if (pLayoutInfo->LayoutMode == sheet::DataPilotFieldLayoutMode::COMPACT_LAYOUT)
+    if (ScDPIsCompactLayout(pLayoutInfo->LayoutMode))
         rExport.AddAttribute(XML_NAMESPACE_LO_EXT, XML_LAYOUT_MODE, GetXMLToken(XML_COMPACT_LAYOUT));
 
     SvXMLElementExport aElemDPLLI(rExport, XML_NAMESPACE_TABLE, XML_DATA_PILOT_LAYOUT_INFO, true, true);
