@@ -22,6 +22,8 @@ class SC_DLLPUBLIC SparklineGroup
 private:
     SparklineAttributes m_aAttributes;
     tools::Guid m_aGUID;
+    // Date axis range as an OOXML reference ("Sheet1!A1:E1"), x14:sparklineGroup/xm:f; empty = none
+    OUString m_aDateRange;
 
 public:
     SparklineAttributes& getAttributes() { return m_aAttributes; }
@@ -32,6 +34,9 @@ public:
     tools::Guid& getID() { return m_aGUID; }
 
     void setID(tools::Guid const& rGuid) { m_aGUID = rGuid; }
+
+    OUString const& getDateRange() const { return m_aDateRange; }
+    void setDateRange(OUString const& rRange) { m_aDateRange = rRange; }
 
     SparklineGroup();
     SparklineGroup(SparklineGroup const& pOtherSparkline);

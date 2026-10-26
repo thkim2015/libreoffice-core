@@ -8242,7 +8242,7 @@ void ScTableSheetObj::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
                     case sc::DisplayEmptyCellsAs::Zero: aBuf.appendAscii("zero"); break;
                     default: aBuf.appendAscii("span"); break;
                 }
-                aBuf.appendAscii("\",\"sparklines\":[");
+                aBuf.append("\",\"dateRange\":\"" + pGroup->getDateRange().replaceAll("\\", "\\\\").replaceAll("\"", "\\\"") + "\",\"sparklines\":[");
                 bool bFirst = true;
                 for (auto const& pSparkline : pList->getSparklinesFor(pGroup))
                 {

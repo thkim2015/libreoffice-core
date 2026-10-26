@@ -163,6 +163,14 @@ void SparklineExt::addSparklineGroup(XclExpXmlStream& rStream, sc::SparklineGrou
 
     addSparklineGroupColors(rStream, rSparklineGroup.getAttributes());
 
+    // Date axis range (CT_SparklineGroup: after the colours, before the sparklines)
+    if (!rSparklineGroup.getDateRange().isEmpty())
+    {
+        rWorksheet->startElementNS(XML_xm, XML_f);
+        rWorksheet->writeEscaped(rSparklineGroup.getDateRange());
+        rWorksheet->endElementNS(XML_xm, XML_f);
+    }
+
     // Sparklines
 
     rWorksheet->startElementNS(XML_x14, XML_sparklines);

@@ -1240,6 +1240,7 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                         auto pGroup = pSparkline->getSparklineGroup();
                         sc::SparklineAttributes aAttributes = pGroup->getAttributes();
                         const OUString aText = pAttrsItem->GetValue();
+                        bool bDateRange = false;
                         sal_Int32 nPos = 0;
                         while (nPos >= 0)
                         {
@@ -1277,9 +1278,13 @@ void ScCellShell::ExecuteEdit( SfxRequest& rReq )
                             else if (aKey == "hidden") aAttributes.setDisplayHidden(bFlag);
                             else if (aKey == "rtl") aAttributes.setRightToLeft(bFlag);
                             else if (aKey == "dateAxis") aAttributes.setDateAxis(bFlag);
+                            // date axis range: OOXML reference ("Sheet1!A1:E1"), empty = none
+                            else if (aKey == "dateRange") { pGroup->setDateRange(aVal); bDateRange = true; }
                             else if (aKey == "empty") aAttributes.setDisplayEmptyCellsAs(aVal == "zero" ? sc::DisplayEmptyCellsAs::Zero : aVal == "span" ? sc::DisplayEmptyCellsAs::Span : sc::DisplayEmptyCellsAs::Gap);
                         }
-                        bDone = rViewData.GetDocShell()->GetDocFunc().ChangeSparklineGroupAttributes(pGroup, aAttributes);
+                        bDone = rViewData.GetDocShell()->GetDocFunc().ChangeSparklineGroupAttributes(pGroup, aAttributes) || bDateRange;
+                        if (bDateRange)
+                            rViewData.GetDocShell()->SetDocumentModified();
                     }
                     rReq.SetReturnValue(SfxBoolItem(nSlot, bDone));
                     rReq.Done();

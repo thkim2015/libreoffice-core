@@ -231,6 +231,8 @@ void SparklineGroupsContext::onCharacters(const OUString& rChars)
         auto& rLastGroup = m_aSparklineGroups.back();
         if (rLastGroup.getSparklines().empty())
         {
+            if (getCurrentElement() == XM_TOKEN(f))
+                rLastGroup.getSparklineGroup()->setDateRange(rChars.trim());
             return;
         }
         auto& rLastSparkline = rLastGroup.getSparklines().back();

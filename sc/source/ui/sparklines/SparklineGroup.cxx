@@ -27,6 +27,7 @@ SparklineGroup::SparklineGroup()
 SparklineGroup::SparklineGroup(SparklineGroup const& pOtherSparkline)
     : m_aAttributes(pOtherSparkline.m_aAttributes)
     , m_aGUID(pOtherSparkline.m_aGUID)
+    , m_aDateRange(pOtherSparkline.m_aDateRange)
 {
 }
 
