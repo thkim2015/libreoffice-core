@@ -849,9 +849,17 @@ void SdrObjCustomShape::MergeDefaultAttributes( const OUString* pType )
 
     // ZetaOffice: a DrawingML-only preset (ooxml-heptagon ...) created from the UI has no path yet;
     // take the preset geometry from oox. Imported shapes already carry their path and are left alone.
+    // An explicit type (UI creation) may inherit the geometry of the previously drawn shape from the
+    // view defaults, so drop that first.
     if (s_pOoxmlPresetGeometry && sShapeType.startsWith("ooxml-")
-        && !aGeometryItem.GetPropertyValueByName(u"Path"_ustr))
+        && (pType || !aGeometryItem.GetPropertyValueByName(u"Path"_ustr)))
     {
+        if (pType)
+        {
+            for (const OUString& rName : { u"Path"_ustr, u"Equations"_ustr, u"Handles"_ustr,
+                                           u"AdjustmentValues"_ustr, u"ViewBox"_ustr })
+                aGeometryItem.ClearPropertyValue(rName);
+        }
         const uno::Sequence<beans::PropertyValue> aPreset = s_pOoxmlPresetGeometry(sShapeType.subView(6));
         for (const beans::PropertyValue& rProp : aPreset)
         {
