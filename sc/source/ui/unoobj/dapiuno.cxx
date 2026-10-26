@@ -137,6 +137,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotFieldMap()
         { SC_UNONAME_ISGROUP,      0,  cppu::UnoType<bool>::get(),                          0, 0 },
         { SC_UNONAME_LAYOUTINFO,   0,  cppu::UnoType<DataPilotFieldLayoutInfo>::get(),     MAYBEVOID, 0 },
         { SC_UNONAME_ORIENT,       0,  cppu::UnoType<DataPilotFieldOrientation>::get(),    MAYBEVOID, 0 },
+        // zeta: position of the field within its orientation (save data order), read-only
+        { SC_UNONAME_POS,          0,  cppu::UnoType<sal_Int32>::get(),                    READONLY, 0 },
         { SC_UNONAME_REFERENCE,    0,  cppu::UnoType<DataPilotFieldReference>::get(),      MAYBEVOID, 0 },
         { SC_UNONAME_SELPAGE,      0,  cppu::UnoType<OUString>::get(),                     0, 0 },
         { SC_UNONAME_SHOWEMPTY,    0,  cppu::UnoType<bool>::get(),                          0, 0 },
@@ -1983,6 +1985,23 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
     }
     else if (aPropertyName == SC_UNONAME_NAME)
         aRet <<= getName();
+    else if (aPropertyName == SC_UNONAME_POS)
+    {
+        // zeta: getRowFields() etc. enumerate in source order, so expose the layout order
+        ScDPObject* pDPObj = nullptr;
+        if (ScDPSaveDimension* pDim = GetDPDimension(&pDPObj))
+        {
+            sal_Int32 nPos = 0;
+            for (auto const& it : pDPObj->GetSaveData()->GetDimensions())
+            {
+                if (it.get() == pDim)
+                    break;
+                if (!it->IsDataLayout() && it->GetOrientation() == pDim->GetOrientation())
+                    ++nPos;
+            }
+            aRet <<= nPos;
+        }
+    }
 
     return aRet;
 }
