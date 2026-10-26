@@ -106,6 +106,7 @@ static std::span<const SfxItemPropertyMapEntry> lcl_GetFilterPropertyMap()
         { SC_UNONAME_SAVEOUT,  0,  cppu::UnoType<bool>::get(),                      0, 0},
         { SC_UNONAME_SKIPDUP,  0,  cppu::UnoType<bool>::get(),                      0, 0},
         { SC_UNONAME_USEREGEX, 0,  cppu::UnoType<bool>::get(),                      0, 0},
+        { SC_UNONAME_USEWILDCARDS, 0,  cppu::UnoType<bool>::get(),                  0, 0},
     };
     return aFilterPropertyMap_Impl;
 }
@@ -1401,6 +1402,14 @@ void SAL_CALL ScFilterDescriptorBase::setPropertyValue(
     else if (aPropertyName == SC_UNONAME_USEREGEX)
         aParam.eSearchType = ScUnoHelpFunctions::GetBoolFromAny( aValue ) ? utl::SearchParam::SearchType::Regexp :
             utl::SearchParam::SearchType::Normal;
+    else if (aPropertyName == SC_UNONAME_USEWILDCARDS)
+    {
+        bool bWild = ScUnoHelpFunctions::GetBoolFromAny( aValue );
+        if (bWild)
+            aParam.eSearchType = utl::SearchParam::SearchType::Wildcard;
+        else if (aParam.eSearchType == utl::SearchParam::SearchType::Wildcard)
+            aParam.eSearchType = utl::SearchParam::SearchType::Normal;
+    }
 
     PutData(aParam);
 }
@@ -1441,6 +1450,8 @@ uno::Any SAL_CALL ScFilterDescriptorBase::getPropertyValue( const OUString& aPro
         aRet <<= !(aParam.bDuplicate);
     else if (aPropertyName == SC_UNONAME_USEREGEX )
         aRet <<= (aParam.eSearchType == utl::SearchParam::SearchType::Regexp);
+    else if (aPropertyName == SC_UNONAME_USEWILDCARDS )
+        aRet <<= (aParam.eSearchType == utl::SearchParam::SearchType::Wildcard);
 
     return aRet;
 }

@@ -121,42 +121,6 @@ bool lclTrimTrailingAsterisks( OUString& rValue )
     return false;
 }
 
-/** Converts wildcard characters '*' and '?' to regular expressions and quotes
-    RE meta characters.
-    @return  True = passed string has been changed (RE needs to be enabled). */
-bool lclConvertWildcardsToRegExp( OUString& rValue )
-{
-    // check existence of the wildcard characters '*' and '?'
-    if( !rValue.isEmpty() && ((rValue.indexOf( '*' ) >= 0) || (rValue.indexOf( '?' ) >= 0)) )
-    {
-        OUStringBuffer aBuffer;
-        aBuffer.ensureCapacity( rValue.getLength() + 5 );
-        const sal_Unicode* pcChar = rValue.getStr();
-        const sal_Unicode* pcEnd = pcChar + rValue.getLength();
-        for( ; pcChar < pcEnd; ++pcChar )
-        {
-            switch( *pcChar )
-            {
-                case '?':
-                    aBuffer.append( '.' );
-                break;
-                case '*':
-                    aBuffer.append( ".*" );
-                break;
-                case '\\': case '.': case '|': case '(': case ')': case '^': case '$':
-                    // quote RE meta characters
-                    aBuffer.append( "\\" + OUStringChar(*pcChar) );
-                break;
-                default:
-                    aBuffer.append( *pcChar );
-            }
-        }
-        rValue = aBuffer.makeStringAndClear();
-        return true;
-    }
-    return false;
-}
-
 } // namespace
 
 ApiFilterSettings::ApiFilterSettings()
@@ -597,8 +561,9 @@ ApiFilterSettings CustomFilter::finalizeImport()
 
                 if( bValidOperator )
                 {
-                    // if wildcards are present, require RE mode, otherwise keep don't care state
-                    if( lclConvertWildcardsToRegExp( aValue ) )
+                    // if wildcards are present, require wildcard mode, otherwise keep don't care state
+                    // (was: convert to a regular expression, which xlsx export then wrote back as RE text)
+                    if( aValue.indexOf( '*' ) >= 0 || aValue.indexOf( '?' ) >= 0 )
                         aSettings.mobNeedsRegExp = true;
                     // create a new UNO API filter field
                     aSettings.appendField( mbAnd, nOperator, aValue );
@@ -846,8 +811,8 @@ void AutoFilter::finalizeImport(const rtl::Reference<ScDatabaseRangeObj>& rxData
         xFilterDesc->setFilterFields3( comphelper::containerToSequence( aFilterFields ) );
 
     // regular expressions
-    bool bUseRegExp = obNeedsRegExp.value_or( false );
-    xFilterDesc->setPropertyValue(u"RegularExpressions"_ustr, css::uno::Any(bUseRegExp));
+    bool bUseWildcards = obNeedsRegExp.value_or( false );
+    xFilterDesc->setPropertyValue(u"UseWildcards"_ustr, css::uno::Any(bUseWildcards));
 
     // sort
     if (maSortConditions.empty())

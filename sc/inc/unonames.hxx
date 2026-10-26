@@ -305,6 +305,8 @@ inline constexpr OUString SC_UNONAME_SRCOBJ           = u"SourceObject"_ustr;
 inline constexpr OUString SC_UNONAME_SRCTYPE          = u"SourceType"_ustr;
 inline constexpr OUString SC_UNONAME_STRIPDAT         = u"StripData"_ustr;
 inline constexpr OUString SC_UNONAME_USEREGEX         = u"UseRegularExpressions"_ustr;
+// Excel-style wildcards (* ? ~) in filter values
+inline constexpr OUString SC_UNONAME_USEWILDCARDS     = u"UseWildcards"_ustr;
 inline constexpr OUString SC_UNONAME_ULIST            = u"UserListEnabled"_ustr;
 inline constexpr OUString SC_UNONAME_UINDEX           = u"UserListIndex"_ustr;
 inline constexpr OUString SC_UNONAME_BINDFMT          = u"BindFormatsToContent"_ustr;
