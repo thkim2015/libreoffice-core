@@ -17,6 +17,9 @@
 #include <comphelper/string.hxx>
 #include <unotools/localedatawrapper.hxx>
 #include <unotools/calendarwrapper.hxx>
+#include <unotools/syslocale.hxx>
+#include <tools/date.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <svl/numformat.hxx>
 #include <svl/zforlist.hxx>
 #include <rtl/math.hxx>
@@ -46,12 +49,94 @@ void appendDateStr(OUStringBuffer& rBuffer, double fValue, SvNumberFormatter* pF
     rBuffer.append(pFormatter->GetInputLineString(fValue, nFormat));
 }
 
+// ZetaOffice: date group item names as Excel writes them for its UI language (ko, ja, else English),
+// so pivot tables look like Excel and the xlsx group items match what Excel itself produces.
+enum class ExcelNames { None, Korean, Japanese, English };
+
+ExcelNames getExcelNames()
+{
+#ifdef EMSCRIPTEN
+    const OUString aLang = SvtSysLocale().GetUILanguageTag().getLanguage();
+    if (aLang == "ko")
+        return ExcelNames::Korean;
+    if (aLang == "ja")
+        return ExcelNames::Japanese;
+    return ExcelNames::English;
+#else
+    return ExcelNames::None;
+#endif
+}
+
 OUString getSpecialDateName(double fValue, bool bFirst, SvNumberFormatter* pFormatter)
 {
     OUStringBuffer aBuffer;
     aBuffer.append( bFirst ? '<' : '>' );
+    const ExcelNames eNames = getExcelNames();
+    if (eNames != ExcelNames::None)
+    {
+        // Excel: <2026-01-05 (ko), <2026/1/5 (ja), <1/5/2026 (en)
+        Date aDate = pFormatter->GetNullDate();
+        aDate.AddDays(static_cast<sal_Int32>(rtl::math::approxFloor(fValue)));
+        const OUString aY = OUString::number(aDate.GetYear());
+        const OUString aM = OUString::number(aDate.GetMonth());
+        const OUString aD = OUString::number(aDate.GetDay());
+        if (eNames == ExcelNames::Korean)
+            aBuffer.append(aY + "-" + getTwoDigitString(aDate.GetMonth()) + "-" + getTwoDigitString(aDate.GetDay()));
+        else if (eNames == ExcelNames::Japanese)
+            aBuffer.append(aY + "/" + aM + "/" + aD);
+        else
+            aBuffer.append(aM + "/" + aD + "/" + aY);
+        return aBuffer.makeStringAndClear();
+    }
     appendDateStr(aBuffer, fValue, pFormatter);
     return aBuffer.makeStringAndClear();
+}
+
+OUString getExcelDateGroupName(ExcelNames eNames, sal_Int32 nDatePart, sal_Int32 nValue)
+{
+    static constexpr const char* aEnMonths[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    switch (nDatePart)
+    {
+        case sheet::DataPilotFieldGroupBy::YEARS:
+            // 2024년 / 2024年 / 2024
+            if (eNames == ExcelNames::Korean)
+                return OUString::number(nValue) + u"년";
+            if (eNames == ExcelNames::Japanese)
+                return OUString::number(nValue) + u"年";
+            return OUString::number(nValue);
+        case sheet::DataPilotFieldGroupBy::QUARTERS:
+            // 1사분기 / 第1四半期 / Qtr1
+            if (eNames == ExcelNames::Korean)
+                return OUString::number(nValue) + u"사분기";
+            if (eNames == ExcelNames::Japanese)
+                return u"第"_ustr + OUString::number(nValue) + u"四半期";
+            return "Qtr" + OUString::number(nValue);
+        case sheet::DataPilotFieldGroupBy::MONTHS:
+            // 1월 / 1月 / Jan
+            if (nValue < 1 || nValue > 12)
+                break;
+            if (eNames == ExcelNames::Korean)
+                return OUString::number(nValue) + u"월";
+            if (eNames == ExcelNames::Japanese)
+                return OUString::number(nValue) + u"月";
+            return OUString::createFromAscii(aEnMonths[nValue - 1]);
+        case sheet::DataPilotFieldGroupBy::DAYS:
+        {
+            // 1월1일 / 1月1日 / 1-Jan
+            Date aDate(1, 1, SC_DP_LEAPYEAR);
+            aDate.AddDays(nValue - 1);            // nValue is 1-based
+            const sal_uInt16 nMonth = aDate.GetMonth();
+            const sal_uInt16 nDay = aDate.GetDay();
+            if (eNames == ExcelNames::Korean)
+                return OUString::number(nMonth) + u"월" + OUString::number(nDay) + u"일";
+            if (eNames == ExcelNames::Japanese)
+                return OUString::number(nMonth) + u"月" + OUString::number(nDay) + u"日";
+            return OUString::number(nDay) + "-" + OUString::createFromAscii(aEnMonths[nMonth - 1]);
+        }
+        default:
+            break;
+    }
+    return OUString();
 }
 
 }
@@ -107,6 +192,13 @@ OUString ScDPUtil::getDateGroupName(
         return getSpecialDateName(fStart, true, pFormatter);
     if (nValue == ScDPItemData::DateLast)
         return getSpecialDateName(fEnd, false, pFormatter);
+
+    if (const ExcelNames eNames = getExcelNames(); eNames != ExcelNames::None)
+    {
+        OUString aExcel = getExcelDateGroupName(eNames, nDatePart, nValue);
+        if (!aExcel.isEmpty())
+            return aExcel;
+    }
 
     switch ( nDatePart )
     {
