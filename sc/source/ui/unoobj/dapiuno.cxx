@@ -1753,6 +1753,23 @@ Reference<XPropertySetInfo> SAL_CALL ScDataPilotFieldObj::getPropertySetInfo()
 void SAL_CALL ScDataPilotFieldObj::setPropertyValue( const OUString& aPropertyName, const Any& aValue )
 {
     SolarMutexGuard aGuard;
+    // zeta: set ShowDetail of many items with a single table update
+    // (setting it per item through getItems() rebuilds the table every time)
+    if ( aPropertyName == "ZetaHideDetails" || aPropertyName == "ZetaShowDetails" )
+    {
+        Sequence< OUString > aNames;
+        ScDPObject* pDPObj = nullptr;
+        ScDPSaveDimension* pDim = (aValue >>= aNames) ? GetDPDimension( &pDPObj ) : nullptr;
+        if ( pDim && aNames.hasElements() )
+        {
+            const bool bShow = aPropertyName == "ZetaShowDetails";
+            for ( const OUString& rName : aNames )
+                if ( ScDPSaveMember* pMember = pDim->GetMemberByName( rName ) )
+                    pMember->SetShowDetails( bShow );
+            SetDPObject( pDPObj );
+        }
+        return;
+    }
     if ( aPropertyName == SC_UNONAME_FUNCTION )
     {
         // #i109350# use GetEnumFromAny because it also allows sal_Int32
@@ -1985,6 +2002,8 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
     }
     else if (aPropertyName == SC_UNONAME_NAME)
         aRet <<= getName();
+    else if ( aPropertyName == "ZetaHideDetails" || aPropertyName == "ZetaShowDetails" )
+        aRet <<= Sequence< OUString >(); // lets clients detect the batch setter
     else if (aPropertyName == SC_UNONAME_POS)
     {
         // zeta: getRowFields() etc. enumerate in source order, so expose the layout order
