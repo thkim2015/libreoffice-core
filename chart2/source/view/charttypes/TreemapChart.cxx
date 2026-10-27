@@ -209,7 +209,8 @@ void TreemapChart::createShapes()
             sal_Int32 nGroup = 0;
             for (const ComplexCategory& rCategory : *pCategories)
             {
-                for (sal_Int32 k = 0; k < std::max<sal_Int32>(1, rCategory.Count); ++k, ++nPos)
+                // the list starts with an empty entry of count 0; it covers no point
+                for (sal_Int32 k = 0; k < rCategory.Count; ++k, ++nPos)
                     if (nPos < nPoints)
                         aPaths[nPos].emplace_back(nGroup, rCategory.Text);
                 ++nGroup;
