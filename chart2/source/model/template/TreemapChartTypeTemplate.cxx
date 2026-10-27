@@ -74,6 +74,8 @@ TreemapChartTypeTemplate::~TreemapChartTypeTemplate() {}
 
 sal_Int32 TreemapChartTypeTemplate::getDimension() const { return m_nDim; }
 
+sal_Int32 TreemapChartTypeTemplate::getAxisCountByDimension(sal_Int32 /*nDimension*/) { return 0; }
+
 // ____ ChartTypeTemplate ____
 bool TreemapChartTypeTemplate::matchesTemplate2(const rtl::Reference<::chart::Diagram>& xDiagram,
                                                 bool bAdaptProperties)

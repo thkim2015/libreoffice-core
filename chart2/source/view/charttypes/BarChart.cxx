@@ -36,6 +36,11 @@
 #include <com/sun/star/chart2/DataPointGeometry3D.hpp>
 #include <rtl/math.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <VLineProperties.hxx>
+#include <servicenames_charttypes.hxx>
+
+#include <algorithm>
+#include <limits>
 
 namespace chart
 {
@@ -56,6 +61,7 @@ BarChart::BarChart( const rtl::Reference<ChartType>& xChartTypeModel
         {
             m_xChartTypeModel->getPropertyValue( u"OverlapSequence"_ustr ) >>= m_aOverlapSequence;
             m_xChartTypeModel->getPropertyValue( u"GapwidthSequence"_ustr ) >>= m_aGapwidthSequence;
+            m_bWaterfall = m_xChartTypeModel->getChartType().equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_WATERFALL );
         }
     }
     catch( const uno::Exception& )
@@ -66,6 +72,46 @@ BarChart::BarChart( const rtl::Reference<ChartType>& xChartTypeModel
 
 BarChart::~BarChart()
 {
+}
+
+std::pair<double, double> BarChart::getMinimumAndMaximumYInRange( double fMinimumX, double fMaximumX, sal_Int32 nAxisIndex )
+{
+    if( !m_bWaterfall )
+        return VSeriesPlotter::getMinimumAndMaximumYInRange( fMinimumX, fMaximumX, nAxisIndex );
+
+    // Waterfall: the bars span the running totals, so the value axis has to
+    // cover every running total (and the base line), not the point values.
+    double fMinimum = 0.0;
+    double fMaximum = 0.0;
+    const sal_Int32 nFirst = static_cast<sal_Int32>( fMinimumX - 1.0 ); // category index 0 is at 1.0
+    const sal_Int32 nLast = static_cast<sal_Int32>( fMaximumX - 1.0 );
+    for( auto const& rZSlot : m_aZSlots )
+        for( auto const& rXSlot : rZSlot )
+            for( std::unique_ptr<VDataSeries> const & pSeries : rXSlot.m_aSeriesVector )
+            {
+                if( !pSeries || pSeries->getAttachedAxisIndex() != nAxisIndex )
+                    continue;
+                double fRunning = 0.0;
+                for( sal_Int32 i = 0, n = pSeries->getTotalPointCount(); i < n; ++i )
+                {
+                    double fValue = pSeries->getYValue( i );
+                    if( std::isnan( fValue ) )
+                        continue;
+                    double fLower = fRunning;
+                    if( isWaterfallTotal( *pSeries, i ) )
+                    {
+                        fLower = 0.0;
+                        fRunning = fValue;
+                    }
+                    else
+                        fRunning += fValue;
+                    if( i < nFirst || i > nLast )
+                        continue;
+                    fMinimum = std::min( { fMinimum, fLower, fRunning } );
+                    fMaximum = std::max( { fMaximum, fLower, fRunning } );
+                }
+            }
+    return { fMinimum, fMaximum };
 }
 
 PlottingPositionHelper& BarChart::getPlottingPositionHelper( sal_Int32 nAxisIndex ) const
@@ -460,6 +506,9 @@ void BarChart::createShapes()
 
     adaptOverlapAndGapwidthForGroupBarsPerAxis();
 
+    m_aWaterfallTotals.clear();
+    m_aWaterfallSteps.clear();
+
     //better performance for big data
     std::map< VDataSeries*, FormerBarPoint > aSeriesFormerPointMap;
     m_bPointsWereSkipped = false;
@@ -549,8 +598,81 @@ void BarChart::createShapes()
         }
     }
 
+    if( m_bWaterfall && m_nDimension == 2 )
+        createWaterfallConnectorLines( xSeriesTarget );
+
     /* @todo remove series shapes if empty
     */
+}
+
+bool BarChart::isWaterfallTotal( const VDataSeries& rSeries, sal_Int32 nPointIndex )
+{
+    uno::Sequence< sal_Int32 > aSubtotalIndices;
+    try
+    {
+        const uno::Reference< beans::XPropertySet >& xSeriesProperties = rSeries.getPropertiesOfSeries();
+        if( xSeriesProperties.is() )
+            xSeriesProperties->getPropertyValue(u"SubtotalIndices"_ustr) >>= aSubtotalIndices;
+    }
+    catch( const uno::Exception& )
+    {
+    }
+    return std::find( aSubtotalIndices.begin(), aSubtotalIndices.end(), nPointIndex ) != aSubtotalIndices.end();
+}
+
+void BarChart::createWaterfallConnectorLines( const rtl::Reference<SvxShapeGroupAnyD>& xSeriesTarget )
+{
+    for( auto const& rZSlot : m_aZSlots )
+    {
+        for( auto const& rXSlot : rZSlot )
+        {
+            for( std::unique_ptr<VDataSeries> const & pSeries : rXSlot.m_aSeriesVector )
+            {
+                if( !pSeries )
+                    continue;
+                // Connector lines are shown unless the file switches them off (cx:visibility connectorLines="0")
+                bool bConnectorLines = true;
+                try
+                {
+                    const uno::Reference< beans::XPropertySet >& xSeriesProperties = pSeries->getPropertiesOfSeries();
+                    if( xSeriesProperties.is() )
+                        xSeriesProperties->getPropertyValue(u"ConnectorLines"_ustr) >>= bConnectorLines;
+                }
+                catch( const uno::Exception& )
+                {
+                }
+                auto aFound = m_aWaterfallSteps.find( pSeries.get() );
+                if( !bConnectorLines || aFound == m_aWaterfallSteps.end() || aFound->second.size() < 2 )
+                    continue;
+
+                BarPositionHelper* pPosHelper = dynamic_cast<BarPositionHelper*>(
+                    &getPlottingPositionHelper( pSeries->getAttachedAxisIndex() ) );
+                if( !pPosHelper )
+                    pPosHelper = &m_aMainPosHelper;
+
+                std::vector<std::vector<css::drawing::Position3D>> aLines;
+                const std::vector< WaterfallStep >& rSteps = aFound->second;
+                for( size_t i = 0; i + 1 < rSteps.size(); ++i )
+                {
+                    double fLevel = rSteps[i].m_fLevel;
+                    pPosHelper->doLogicScaling( nullptr, &fLevel, nullptr );
+                    aLines.push_back( { drawing::Position3D( rSteps[i].m_fRightX, fLevel, 1.0 ),
+                                        drawing::Position3D( rSteps[i + 1].m_fLeftX, fLevel, 1.0 ) } );
+                }
+                std::vector<std::vector<css::drawing::Position3D>> aClipped;
+                Clipping::clipPolygonAtRectangle( aLines, pPosHelper->getScaledLogicClipDoubleRect(), aClipped );
+                if( !ShapeFactory::hasPolygonAnyLines( aClipped ) )
+                    continue;
+                pPosHelper->transformScaledLogicToScene( aClipped );
+
+                VLineProperties aLineProperties;
+                aLineProperties.Color <<= sal_Int32( 0x7F7F7F );
+                rtl::Reference<SvxShapeGroupAnyD> xSeriesGroupShape_Shapes(
+                    getSeriesGroupShape( pSeries.get(), xSeriesTarget ) );
+                ShapeFactory::createLine2D( xSeriesGroupShape_Shapes, aClipped, &aLineProperties );
+            }
+        }
+    }
 }
 
 void BarChart::doZSlot(
@@ -748,14 +870,46 @@ void BarChart::doXSlot(
         if( fLogicBarHeight == 0.0 )
             fLogicBarHeight = DBL_MIN;
 
-        //sort negative and positive values, to display them on different sides of the x axis
-        bool bPositive = fLogicBarHeight >= 0.0;
-        double fLowerYValue = bPositive ? fPositiveLogicYForNextSeries : fNegativeLogicYForNextSeries;
-        double fUpperYValue = fLowerYValue+fLogicBarHeight;
-        if( bPositive )
-            fPositiveLogicYForNextSeries += fLogicBarHeight;
+        bool bPositive;
+        double fLowerYValue;
+        double fUpperYValue;
+        bool bWaterfallTotal = false;
+        if( m_bWaterfall )
+        {
+            // The bar starts at the running total (or at the base line for a
+            // total point) and the running total moves on by the point value.
+            double& rRunningTotal = m_aWaterfallTotals[pSeries.get()];
+            bWaterfallTotal = isWaterfallTotal( *pSeries, nPointIndex );
+            if( bWaterfallTotal )
+            {
+                fLowerYValue = fBaseValue;
+                fUpperYValue = fLogicValueForLabeDisplay;
+                rRunningTotal = fLogicValueForLabeDisplay;
+            }
+            else
+            {
+                fLowerYValue = rRunningTotal;
+                fUpperYValue = rRunningTotal + fLogicValueForLabeDisplay;
+                rRunningTotal = fUpperYValue;
+            }
+            if( approxEqual( fLowerYValue, fUpperYValue ) )
+                fUpperYValue = fLowerYValue + DBL_MIN;
+            bPositive = fUpperYValue >= fLowerYValue;
+            // the level is scaled when the connector lines are drawn
+            m_aWaterfallSteps[pSeries.get()].push_back(
+                { fLogicX - fLogicBaseWidth / 2.0, fLogicX + fLogicBaseWidth / 2.0, rRunningTotal } );
+        }
         else
-            fNegativeLogicYForNextSeries += fLogicBarHeight;
+        {
+            //sort negative and positive values, to display them on different sides of the x axis
+            bPositive = fLogicBarHeight >= 0.0;
+            fLowerYValue = bPositive ? fPositiveLogicYForNextSeries : fNegativeLogicYForNextSeries;
+            fUpperYValue = fLowerYValue+fLogicBarHeight;
+            if( bPositive )
+                fPositiveLogicYForNextSeries += fLogicBarHeight;
+            else
+                fNegativeLogicYForNextSeries += fLogicBarHeight;
+        }
 
         double fLogicZ        = 1.0;//as defined
         if(m_nDimension==3)
@@ -944,6 +1098,14 @@ void BarChart::doXSlot(
                     PropertyMapper::setMappedProperties( *xShape, xDataPointProperties, PropertyMapper::getPropertyNameMapForFilledSeriesProperties() );
                 }
 
+                // Waterfall: points without their own formatting take the Office
+                // colours for increase, decrease and total (accent 1-3)
+                if( m_bWaterfall && !pSeries->isAttributedDataPoint( nPointIndex ) )
+                {
+                    sal_Int32 nColor = bWaterfallTotal ? 0xA5A5A5 : ( bPositive ? 0x4472C4 : 0xED7D31 );
+                    xShape->setPropertyValue(u"FillColor"_ustr, uno::Any(nColor));
+                }
+
                 if(bHasFillColorMapping)
                 {
                     double nPropVal = pSeries->getValueByProperty(nPointIndex, u"FillColor"_ustr);
@@ -980,7 +1142,7 @@ void BarChart::doXSlot(
 
                 awt::Point aScreenPosition2D = getLabelScreenPositionAndAlignment(
                     eAlignment, nLabelPlacement, fLogicX, fLowerYValue, fUpperYValue, fLogicZ,
-                    fLowerBarDepth, fUpperBarDepth, fBaseValue, pPosHelper);
+                    fLowerBarDepth, fUpperBarDepth, m_bWaterfall ? fLowerYValue : fBaseValue, pPosHelper);
                 sal_Int32 nOffset = 0;
                 if(eAlignment!=LABEL_ALIGN_CENTER)
                 {

@@ -48,6 +48,8 @@ protected:
 
     // ____ ChartTypeTemplate ____
     virtual sal_Int32 getDimension() const override;
+    // A treemap fills the plot area with tiles: no axes, no grid
+    virtual sal_Int32 getAxisCountByDimension(sal_Int32 nDimension) override;
 
     virtual rtl::Reference<::chart::ChartType>
     getChartTypeForIndex(sal_Int32 nChartTypeIndex) override;

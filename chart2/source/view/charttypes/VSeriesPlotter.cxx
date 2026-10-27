@@ -61,6 +61,7 @@
 #include "CorrelationCircleChart.hxx"
 #include "NetChart.hxx"
 #include "FunnelChart.hxx"
+#include "TreemapChart.hxx"
 #include "UnsupportedChart.hxx"
 #include <unonames.hxx>
 #include <SpecialCharacters.hxx>
@@ -2886,6 +2887,8 @@ VSeriesPlotter* VSeriesPlotter::createSeriesPlotter(
         pRet = new BarChart(xChartTypeModel,nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_BAR ) )
         pRet = new BarChart(xChartTypeModel,nDimensionCount);
+    else if( aChartType.equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_WATERFALL ) )
+        pRet = new BarChart(xChartTypeModel,nDimensionCount); // floating bars on the running total
     else if (aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_HISTOGRAM))
         pRet = new HistogramChart(xChartTypeModel, nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_AREA ) )
@@ -2908,6 +2911,8 @@ VSeriesPlotter* VSeriesPlotter::createSeriesPlotter(
         pRet = new CandleStickChart(xChartTypeModel,nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_FUNNEL) )
         pRet = new FunnelChart(xChartTypeModel,nDimensionCount);
+    else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_TREEMAP) )
+        pRet = new TreemapChart(xChartTypeModel);
     else
         pRet = new UnsupportedChart(xChartTypeModel);
     return pRet;

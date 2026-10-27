@@ -39,6 +39,7 @@ public:
     virtual void addSeries( std::unique_ptr<VDataSeries> pSeries, sal_Int32 zSlot, sal_Int32 xSlot, sal_Int32 ySlot ) override;
 
     virtual css::drawing::Direction3D  getPreferredDiagramAspectRatio() const override;
+    virtual std::pair<double, double> getMinimumAndMaximumYInRange( double fMinimumX, double fMaximumX, sal_Int32 nAxisIndex ) override;
 
 private: //methods
     static rtl::Reference< SvxShape >
@@ -109,6 +110,22 @@ private: //methods
 
 protected:
     bool                                 m_bAlignCenter = false; // Center the bars, as for funnel charts
+
+    // Waterfall charts: each bar floats on the running total of the previous
+    // points; points listed in the series "SubtotalIndices" are totals drawn
+    // from the base line. Steps are kept in scaled logic coordinates so that
+    // the connector lines can be drawn after all bars.
+    struct WaterfallStep
+    {
+        double m_fLeftX;
+        double m_fRightX;
+        double m_fLevel;
+    };
+    bool                                 m_bWaterfall = false;
+    std::map< const VDataSeries*, double > m_aWaterfallTotals;
+    std::map< const VDataSeries*, std::vector< WaterfallStep > > m_aWaterfallSteps;
+    static bool isWaterfallTotal( const VDataSeries& rSeries, sal_Int32 nPointIndex );
+    void createWaterfallConnectorLines( const rtl::Reference<SvxShapeGroupAnyD>& xSeriesTarget );
 
 private: //member
     BarPositionHelper                    m_aMainPosHelper;
