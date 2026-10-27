@@ -76,6 +76,8 @@ public:
 
     /** Returns the original name as imported from or exported to the file. */
     const OUString& getUpcaseModelName() const;
+    /** Returns the formula string as imported from the file. */
+    const OUString& getModelFormula() const { return maModel.maFormula; }
 
 protected:
     DefinedNameModel    maModel;        /// Model data for this defined name.

@@ -49,6 +49,8 @@ constexpr sal_Int32 nTileBorder = 35;
 constexpr double fBannerHeight = 450.0;
 // Inner padding of a tile label
 constexpr sal_Int32 nLabelPadding = 80;
+// one line of the 12pt overlapping parent label (1/100 mm)
+constexpr double fParentLabelHeight = 12.0 * 2540.0 / 72.0 * 1.25;
 
 struct Node
 {
@@ -355,7 +357,8 @@ void TreemapChart::createShapes()
 
     // parent labels are drawn after all tiles so that they stay on top
     std::vector<std::pair<Rect, size_t>> aParentLabels;
-    std::function<void(size_t, const Rect&)> aLayout = [&](size_t nNode, const Rect& rArea) {
+    // fCornerSkip: height of the parent label covering the top left corner of rArea
+    std::function<void(size_t, const Rect&, double)> aLayout = [&](size_t nNode, const Rect& rArea, double fCornerSkip) {
         std::vector<size_t> aChildren = aNodes[nNode].aChildren;
         std::stable_sort(aChildren.begin(), aChildren.end(),
                          [&](size_t a, size_t b) { return aNodes[a].fValue > aNodes[b].fValue; });
@@ -367,10 +370,13 @@ void TreemapChart::createShapes()
         {
             const Node& rChild = aNodes[aChildren[k]];
             Rect r = aRects[k];
+            const bool bAtCorner = std::fabs(r.fX - rArea.fX) < 1.0 && std::fabs(r.fY - rArea.fY) < 1.0;
+            const double fSkip = bAtCorner ? fCornerSkip : 0.0;
             if (rChild.aChildren.empty())
             {
                 aCreateTile(r, aTileColor(rChild), rChild.nPoint);
-                aCreateLabel(r, aLeafText(rChild), aTileColor(rChild), 9.0f, false);
+                // keep the leaf label below a parent label in the same corner
+                aCreateLabel(Rect{ r.fX, r.fY + fSkip, r.fW, r.fH - fSkip }, aLeafText(rChild), aTileColor(rChild), 9.0f, false);
                 continue;
             }
             if (bBanner && r.fH > 2 * fBannerHeight)
@@ -382,11 +388,15 @@ void TreemapChart::createShapes()
                 r.fH -= fBannerHeight;
             }
             else if (bOverlapping)
-                aParentLabels.emplace_back(r, aChildren[k]);
-            aLayout(aChildren[k], r);
+            {
+                aParentLabels.emplace_back(Rect{ r.fX, r.fY + fSkip, r.fW, r.fH - fSkip }, aChildren[k]);
+                aLayout(aChildren[k], r, fSkip + fParentLabelHeight);
+                continue;
+            }
+            aLayout(aChildren[k], r, 0.0);
         }
     };
-    aLayout(0, aPlot);
+    aLayout(0, aPlot, 0.0);
     for (const auto& [r, nNode] : aParentLabels)
         aCreateLabel(r, aNodes[nNode].aLabel, aTileColor(aNodes[nNode]), 12.0f, true);
 }

@@ -30,6 +30,7 @@
 #include <oox/drawingml/chart/datasourcemodel.hxx>
 #include <oox/helper/containerhelper.hxx>
 #include <formulaparser.hxx>
+#include <defnamesbuffer.hxx>
 
 namespace oox::xls {
 
@@ -80,7 +81,16 @@ Reference< XDataSequence > ExcelChartConverter::createDataSequence(
         // parse the formula string, create a token sequence
         FormulaParser& rParser = getFormulaParser();
         ScAddress aBaseAddr( SCCOL( 0 ), SCROW( 0 ), SCTAB( getCurrentSheetIndex() ) );
-        ApiTokenSequence aTokens = rParser.importFormula( aBaseAddr, rDataSeq.maFormula );
+        // chartex data refers to hidden "_xlchart.v1.N" names; use the range they
+        // stand for, so the chart works on cells (multi-level categories, editing)
+        OUString aFormula = rDataSeq.maFormula;
+        if (aFormula.startsWith("_xlchart."))
+        {
+            DefinedNameRef xName = getDefinedNames().getByModelName(aFormula);
+            if (xName && !xName->getModelFormula().isEmpty())
+                aFormula = xName->getModelFormula();
+        }
+        ApiTokenSequence aTokens = rParser.importFormula( aBaseAddr, aFormula );
 
         try
         {
