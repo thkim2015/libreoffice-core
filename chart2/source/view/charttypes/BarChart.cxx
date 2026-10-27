@@ -55,13 +55,16 @@ BarChart::BarChart( const rtl::Reference<ChartType>& xChartTypeModel
     PlotterBase::m_pPosHelper = &m_aMainPosHelper;
     VSeriesPlotter::m_pMainPosHelper = &m_aMainPosHelper;
 
+    // before the properties below: the waterfall chart type has no OverlapSequence
+    if( m_xChartTypeModel.is() )
+        m_bWaterfall = m_xChartTypeModel->getChartType().equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_WATERFALL );
+
     try
     {
         if( m_xChartTypeModel.is() )
         {
             m_xChartTypeModel->getPropertyValue( u"OverlapSequence"_ustr ) >>= m_aOverlapSequence;
             m_xChartTypeModel->getPropertyValue( u"GapwidthSequence"_ustr ) >>= m_aGapwidthSequence;
-            m_bWaterfall = m_xChartTypeModel->getChartType().equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_WATERFALL );
         }
     }
     catch( const uno::Exception& )

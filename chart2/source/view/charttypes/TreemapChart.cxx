@@ -197,6 +197,8 @@ void TreemapChart::createShapes()
     std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths(nPoints); // (group, text)
     if (m_pExplicitCategoriesProvider)
     {
+        // getSimpleCategories() builds the complex categories that getCategoriesByLevel() returns
+        const uno::Sequence<OUString>& rSimple = m_pExplicitCategoriesProvider->getSimpleCategories();
         const sal_Int32 nLevels = m_pExplicitCategoriesProvider->getCategoryLevelCount();
         for (sal_Int32 nLevel = nLevels - 1; nLevel >= 0; --nLevel)
         {
@@ -215,7 +217,6 @@ void TreemapChart::createShapes()
         }
         if (std::all_of(aPaths.begin(), aPaths.end(), [](const auto& r) { return r.empty(); }))
         {
-            const uno::Sequence<OUString>& rSimple = m_pExplicitCategoriesProvider->getSimpleCategories();
             for (sal_Int32 i = 0; i < nPoints && i < rSimple.getLength(); ++i)
                 aPaths[i].emplace_back(i, rSimple[i]);
         }
