@@ -39,6 +39,9 @@
 #include <VLineProperties.hxx>
 #include <servicenames_charttypes.hxx>
 
+#include <ResId.hxx>
+#include <strings.hrc>
+
 #include <algorithm>
 #include <limits>
 
@@ -47,6 +50,30 @@ namespace chart
 using namespace ::com::sun::star;
 using namespace ::rtl::math;
 using namespace ::com::sun::star::chart2;
+
+namespace
+{
+// Office accent 1-3, used by Excel for waterfall increase, decrease and total
+constexpr sal_Int32 nWaterfallIncreaseColor = 0x4472C4;
+constexpr sal_Int32 nWaterfallDecreaseColor = 0xED7D31;
+constexpr sal_Int32 nWaterfallTotalColor = 0xA5A5A5;
+}
+
+std::vector< ViewLegendEntry > BarChart::createLegendEntriesForSeries(
+            const awt::Size& rEntryKeyAspectRatio,
+            const VDataSeries& rSeries,
+            const uno::Reference< beans::XPropertySet >& xTextProperties,
+            const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
+            const uno::Reference< uno::XComponentContext >& xContext )
+{
+    if( !m_bWaterfall || !xTarget.is() )
+        return VSeriesPlotter::createLegendEntriesForSeries( rEntryKeyAspectRatio, rSeries, xTextProperties, xTarget, xContext );
+    return {
+        createBoxLegendEntry( rEntryKeyAspectRatio, SchResId( STR_WATERFALL_INCREASE ), nWaterfallIncreaseColor, xTextProperties, xTarget ),
+        createBoxLegendEntry( rEntryKeyAspectRatio, SchResId( STR_WATERFALL_DECREASE ), nWaterfallDecreaseColor, xTextProperties, xTarget ),
+        createBoxLegendEntry( rEntryKeyAspectRatio, SchResId( STR_WATERFALL_TOTAL ), nWaterfallTotalColor, xTextProperties, xTarget )
+    };
+}
 
 BarChart::BarChart( const rtl::Reference<ChartType>& xChartTypeModel
                     , sal_Int32 nDimensionCount )
@@ -1105,7 +1132,7 @@ void BarChart::doXSlot(
                 // colours for increase, decrease and total (accent 1-3)
                 if( m_bWaterfall && !pSeries->isAttributedDataPoint( nPointIndex ) )
                 {
-                    sal_Int32 nColor = bWaterfallTotal ? 0xA5A5A5 : ( bPositive ? 0x4472C4 : 0xED7D31 );
+                    sal_Int32 nColor = bWaterfallTotal ? nWaterfallTotalColor : ( bPositive ? nWaterfallIncreaseColor : nWaterfallDecreaseColor );
                     xShape->setPropertyValue(u"FillColor"_ustr, uno::Any(nColor));
                 }
 

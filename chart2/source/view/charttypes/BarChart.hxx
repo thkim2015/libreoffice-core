@@ -41,6 +41,14 @@ public:
     virtual css::drawing::Direction3D  getPreferredDiagramAspectRatio() const override;
     virtual std::pair<double, double> getMinimumAndMaximumYInRange( double fMinimumX, double fMaximumX, sal_Int32 nAxisIndex ) override;
 
+    /// Waterfall: Increase, Decrease and Total entries like Excel
+    virtual std::vector< ViewLegendEntry > createLegendEntriesForSeries(
+            const css::awt::Size& rEntryKeyAspectRatio,
+            const VDataSeries& rSeries,
+            const css::uno::Reference< css::beans::XPropertySet >& xTextProperties,
+            const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
+            const css::uno::Reference< css::uno::XComponentContext >& xContext ) override;
+
 private: //methods
     static rtl::Reference< SvxShape >
         createDataPoint3D_Bar(

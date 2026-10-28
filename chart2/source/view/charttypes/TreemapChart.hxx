@@ -47,7 +47,20 @@ public:
     /// Squarified layout of rItems (sorted by value, largest first) in rArea
     static std::vector<Rect> squarify(const std::vector<Item>& rItems, const Rect& rArea);
 
+    /// One entry per top level group (Excel), coloured like its tiles
+    virtual std::vector<ViewLegendEntry> createLegendEntriesForSeries(
+        const css::awt::Size& rEntryKeyAspectRatio, const VDataSeries& rSeries,
+        const css::uno::Reference<css::beans::XPropertySet>& xTextProperties,
+        const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
+        const css::uno::Reference<css::uno::XComponentContext>& xContext) override;
+
 private:
+    /// Per point, the (group, text) path through the category levels, outermost first
+    std::vector<std::vector<std::pair<sal_Int32, OUString>>> categoryPaths(sal_Int32 nPoints);
+    /// Top level node key of point nPoint: shared by the points of one group
+    static sal_Int32 topKey(const std::vector<std::pair<sal_Int32, OUString>>& rPath,
+                            sal_Int32 nPoint);
+
     BarPositionHelper m_aMainPosHelper;
 };
 

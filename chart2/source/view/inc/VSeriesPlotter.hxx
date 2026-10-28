@@ -204,13 +204,21 @@ public:
                 , sal_Int32 nPointIndex
                 , const rtl::Reference<SvxShapeGroupAnyD>& xTarget );
 
-    std::vector< ViewLegendEntry > createLegendEntriesForSeries(
+    virtual std::vector< ViewLegendEntry > createLegendEntriesForSeries(
             const css::awt::Size& rEntryKeyAspectRatio,
             const VDataSeries& rSeries,
             const css::uno::Reference< css::beans::XPropertySet >& xTextProperties,
             const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
             const css::uno::Reference< css::uno::XComponentContext >& xContext
                 );
+
+    /** A legend entry with a plain filled box, for plotters that pick their own
+        colors (waterfall increase/decrease/total, treemap top level groups). */
+    static ViewLegendEntry createBoxLegendEntry(
+            const css::awt::Size& rEntryKeyAspectRatio,
+            const OUString& rText, sal_Int32 nColor,
+            const css::uno::Reference< css::beans::XPropertySet >& xTextProperties,
+            const rtl::Reference<SvxShapeGroupAnyD>& xTarget );
 
     std::vector<ViewLegendSymbol> createSymbols(
               const css::awt::Size& rEntryKeyAspectRatio

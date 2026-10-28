@@ -79,6 +79,7 @@
 #include <rtl/ustrbuf.hxx>
 #include <rtl/math.hxx>
 #include <basegfx/vector/b2dvector.hxx>
+#include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
 
@@ -2671,6 +2672,28 @@ rtl::Reference< SvxShapeGroup > VSeriesPlotter::createLegendSymbolForPoint(
         xTarget, eLegendSymbolStyle, xPointSet, ePropType, aExplicitSymbol );
 
     return xShape;
+}
+
+ViewLegendEntry VSeriesPlotter::createBoxLegendEntry(
+              const awt::Size& rEntryKeyAspectRatio
+            , const OUString& rText, sal_Int32 nColor
+            , const Reference< beans::XPropertySet >& xTextProperties
+            , const rtl::Reference<SvxShapeGroupAnyD>& xTarget )
+{
+    ViewLegendEntry aEntry;
+    rtl::Reference< SvxShapeGroup > xSymbolGroup( ShapeFactory::createGroup2D( xTarget ));
+    rtl::Reference< SvxShapeGroupAnyD > xSymbol( ShapeFactory::createGroup2D( xSymbolGroup ));
+    if( xSymbol.is() )
+    {
+        // keep the aspect ratio like VLegendSymbolFactory does
+        ShapeFactory::createInvisibleRectangle( xSymbol, rEntryKeyAspectRatio );
+        tNameSequence aNames{ u"FillStyle"_ustr, u"FillColor"_ustr, u"LineStyle"_ustr };
+        tAnySequence aValues{ uno::Any( drawing::FillStyle_SOLID ), uno::Any( nColor ), uno::Any( drawing::LineStyle_NONE ) };
+        ShapeFactory::createRectangle( xSymbol, rEntryKeyAspectRatio, awt::Point( 0, 0 ), aNames, aValues );
+        aEntry.xSymbol = std::move( xSymbolGroup );
+    }
+    aEntry.xLabel = FormattedStringHelper::createFormattedString( rText, xTextProperties );
+    return aEntry;
 }
 
 std::vector< ViewLegendEntry > VSeriesPlotter::createLegendEntriesForSeries(

@@ -73,6 +73,10 @@
 #define STR_OBJECT_ERROR_BARS_Z                     NC_("STR_OBJECT_ERROR_BARS_Z", "Z Error Bars")
 #define STR_OBJECT_STOCK_LOSS                       NC_("STR_OBJECT_STOCK_LOSS", "Stock Loss")
 #define STR_OBJECT_STOCK_GAIN                       NC_("STR_OBJECT_STOCK_GAIN", "Stock Gain")
+// waterfall chart legend entries
+#define STR_WATERFALL_INCREASE                      NC_("STR_WATERFALL_INCREASE", "Increase")
+#define STR_WATERFALL_DECREASE                      NC_("STR_WATERFALL_DECREASE", "Decrease")
+#define STR_WATERFALL_TOTAL                         NC_("STR_WATERFALL_TOTAL", "Total")
 #define STR_OBJECT_PAGE                             NC_("STR_OBJECT_PAGE", "Chart Area")
 #define STR_OBJECT_DIAGRAM                          NC_("STR_OBJECT_DIAGRAM", "Chart")
 #define STR_OBJECT_DIAGRAM_WALL                     NC_("STR_OBJECT_DIAGRAM_WALL", "Chart Wall")

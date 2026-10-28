@@ -89,6 +89,82 @@ TreemapChart::TreemapChart(const rtl::Reference<ChartType>& xChartTypeModel)
 
 TreemapChart::~TreemapChart() {}
 
+std::vector<std::vector<std::pair<sal_Int32, OUString>>> TreemapChart::categoryPaths(sal_Int32 nPoints)
+{
+    std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths(nPoints); // (group, text)
+    if (m_pExplicitCategoriesProvider)
+    {
+        // getSimpleCategories() builds the complex categories that getCategoriesByLevel() returns
+        const uno::Sequence<OUString>& rSimple = m_pExplicitCategoriesProvider->getSimpleCategories();
+        const sal_Int32 nLevels = m_pExplicitCategoriesProvider->getCategoryLevelCount();
+        for (sal_Int32 nLevel = nLevels - 1; nLevel >= 0; --nLevel)
+        {
+            const std::vector<ComplexCategory>* pCategories = m_pExplicitCategoriesProvider->getCategoriesByLevel(nLevel);
+            if (!pCategories)
+                continue;
+            sal_Int32 nPos = 0;
+            sal_Int32 nGroup = 0;
+            for (const ComplexCategory& rCategory : *pCategories)
+            {
+                // the list starts with an empty entry of count 0; it covers no point
+                for (sal_Int32 k = 0; k < rCategory.Count; ++k, ++nPos)
+                    if (nPos < nPoints)
+                        aPaths[nPos].emplace_back(nGroup, rCategory.Text);
+                ++nGroup;
+            }
+        }
+        if (std::all_of(aPaths.begin(), aPaths.end(), [](const auto& r) { return r.empty(); }))
+        {
+            for (sal_Int32 i = 0; i < nPoints && i < rSimple.getLength(); ++i)
+                aPaths[i].emplace_back(i, rSimple[i]);
+        }
+    }
+    for (sal_Int32 i = 0; i < nPoints; ++i)
+    {
+        std::vector<std::pair<sal_Int32, OUString>>& rPath = aPaths[i];
+        if (rPath.empty())
+            rPath.emplace_back(i, OUString());
+        // a blank inner level (an item without sub items) ends the path early
+        while (rPath.size() > 1 && rPath.back().second.isEmpty())
+            rPath.pop_back();
+    }
+    return aPaths;
+}
+
+sal_Int32 TreemapChart::topKey(const std::vector<std::pair<sal_Int32, OUString>>& rPath, sal_Int32 nPoint)
+{
+    // a one level path is a leaf: every point is its own top level node
+    return rPath.size() == 1 ? -1 - nPoint : rPath[0].first;
+}
+
+std::vector<ViewLegendEntry> TreemapChart::createLegendEntriesForSeries(
+    const awt::Size& rEntryKeyAspectRatio, const VDataSeries& rSeries,
+    const uno::Reference<beans::XPropertySet>& xTextProperties,
+    const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
+    const uno::Reference<uno::XComponentContext>& /*xContext*/)
+{
+    std::vector<ViewLegendEntry> aResult;
+    if (!xTarget.is())
+        return aResult;
+    // the top level nodes in the order createShapes() makes them, which picks their colour
+    const sal_Int32 nPoints = rSeries.getTotalPointCount();
+    const std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths = categoryPaths(nPoints);
+    std::vector<sal_Int32> aSeen;
+    for (sal_Int32 i = 0; i < nPoints; ++i)
+    {
+        const double fValue = rSeries.getYValue(i);
+        if (std::isnan(fValue) || fValue <= 0.0)
+            continue;
+        const sal_Int32 nKey = topKey(aPaths[i], i);
+        if (std::find(aSeen.begin(), aSeen.end(), nKey) != aSeen.end())
+            continue;
+        const sal_Int32 nColor = aAccents[aSeen.size() % std::size(aAccents)];
+        aSeen.push_back(nKey);
+        aResult.push_back(createBoxLegendEntry(rEntryKeyAspectRatio, aPaths[i][0].second, nColor, xTextProperties, xTarget));
+    }
+    return aResult;
+}
+
 void TreemapChart::addSeries(std::unique_ptr<VDataSeries> pSeries, sal_Int32 /*zSlot*/,
                              sal_Int32 /*xSlot*/, sal_Int32 ySlot)
 {
@@ -196,34 +272,7 @@ void TreemapChart::createShapes()
 
     // the hierarchy: one path of category texts per point, outermost level first
     const sal_Int32 nPoints = pSeries->getTotalPointCount();
-    std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths(nPoints); // (group, text)
-    if (m_pExplicitCategoriesProvider)
-    {
-        // getSimpleCategories() builds the complex categories that getCategoriesByLevel() returns
-        const uno::Sequence<OUString>& rSimple = m_pExplicitCategoriesProvider->getSimpleCategories();
-        const sal_Int32 nLevels = m_pExplicitCategoriesProvider->getCategoryLevelCount();
-        for (sal_Int32 nLevel = nLevels - 1; nLevel >= 0; --nLevel)
-        {
-            const std::vector<ComplexCategory>* pCategories = m_pExplicitCategoriesProvider->getCategoriesByLevel(nLevel);
-            if (!pCategories)
-                continue;
-            sal_Int32 nPos = 0;
-            sal_Int32 nGroup = 0;
-            for (const ComplexCategory& rCategory : *pCategories)
-            {
-                // the list starts with an empty entry of count 0; it covers no point
-                for (sal_Int32 k = 0; k < rCategory.Count; ++k, ++nPos)
-                    if (nPos < nPoints)
-                        aPaths[nPos].emplace_back(nGroup, rCategory.Text);
-                ++nGroup;
-            }
-        }
-        if (std::all_of(aPaths.begin(), aPaths.end(), [](const auto& r) { return r.empty(); }))
-        {
-            for (sal_Int32 i = 0; i < nPoints && i < rSimple.getLength(); ++i)
-                aPaths[i].emplace_back(i, rSimple[i]);
-        }
-    }
+    const std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths = categoryPaths(nPoints);
 
     std::vector<Node> aNodes(1); // the root
     std::map<std::pair<size_t, sal_Int32>, size_t> aChildOf; // (parent node, group) -> node
@@ -232,17 +281,12 @@ void TreemapChart::createShapes()
         const double fValue = pSeries->getYValue(i);
         if (std::isnan(fValue) || fValue <= 0.0)
             continue;
-        std::vector<std::pair<sal_Int32, OUString>> aPath = aPaths[i];
-        if (aPath.empty())
-            aPath.emplace_back(i, OUString());
-        // a blank inner level (an item without sub items) ends the path early
-        while (aPath.size() > 1 && aPath.back().second.isEmpty())
-            aPath.pop_back();
+        const std::vector<std::pair<sal_Int32, OUString>>& aPath = aPaths[i];
         size_t nNode = 0;
         for (size_t nDepth = 0; nDepth < aPath.size(); ++nDepth)
         {
             // the leaf level is per point; groups above are shared
-            const sal_Int32 nGroup = nDepth + 1 == aPath.size() ? -1 - i : aPath[nDepth].first;
+            const sal_Int32 nGroup = nDepth == 0 ? topKey(aPath, i) : nDepth + 1 == aPath.size() ? -1 - i : aPath[nDepth].first;
             auto aFound = aChildOf.find({ nNode, nGroup });
             size_t nChild;
             if (aFound == aChildOf.end())
