@@ -48,6 +48,8 @@ protected:
 
     // ____ ChartTypeTemplate ____
     virtual sal_Int32 getDimension() const override;
+    // A sunburst fills the plot area with rings: no axes, no grid
+    virtual sal_Int32 getAxisCountByDimension(sal_Int32 nDimension) override;
 
     virtual rtl::Reference<::chart::ChartType>
     getChartTypeForIndex(sal_Int32 nChartTypeIndex) override;

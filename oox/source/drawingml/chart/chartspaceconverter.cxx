@@ -187,12 +187,14 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
     if( !mrModel.mbAutoTitleDel || mrModel.mxTitle.is() ) try
     {
         /*  If the title model is missing, but the chart shows exactly one
-            series, the series title is shown as chart title. */
-        OUString aAutoTitle = aPlotAreaConv.getAutomaticTitle();
+            series, the series title is shown as chart title. Excel shows
+            "Chart Title" for a chartex title without text instead. */
+        OUString aAutoTitle = eCT == ChartType::CX ? OUString() : aPlotAreaConv.getAutomaticTitle();
         if( mrModel.mxTitle.is() || !aAutoTitle.isEmpty() )
         {
             // tdf#146487 In some cases, we need to show the empty title
             bool bShowEmptyTitle = aAutoTitle.isEmpty() && !mrModel.mbAutoTitleDel
+                                   && eCT != ChartType::CX
                                    && aPlotAreaConv.isSingleSeriesTitle()
                                    && mrModel.mxTitle->mxShapeProp.is()
                                    && mrModel.mxTitle->mxTextProp.is()

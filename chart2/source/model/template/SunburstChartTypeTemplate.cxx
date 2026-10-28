@@ -74,6 +74,8 @@ SunburstChartTypeTemplate::~SunburstChartTypeTemplate() {}
 
 sal_Int32 SunburstChartTypeTemplate::getDimension() const { return m_nDim; }
 
+sal_Int32 SunburstChartTypeTemplate::getAxisCountByDimension(sal_Int32 /*nDimension*/) { return 0; }
+
 // ____ ChartTypeTemplate ____
 bool SunburstChartTypeTemplate::matchesTemplate2(const rtl::Reference<::chart::Diagram>& xDiagram,
                                                  bool bAdaptProperties)

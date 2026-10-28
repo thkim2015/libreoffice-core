@@ -62,6 +62,7 @@
 #include "NetChart.hxx"
 #include "FunnelChart.hxx"
 #include "TreemapChart.hxx"
+#include "SunburstChart.hxx"
 #include "UnsupportedChart.hxx"
 #include <unonames.hxx>
 #include <SpecialCharacters.hxx>
@@ -2936,6 +2937,8 @@ VSeriesPlotter* VSeriesPlotter::createSeriesPlotter(
         pRet = new FunnelChart(xChartTypeModel,nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_TREEMAP) )
         pRet = new TreemapChart(xChartTypeModel);
+    else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_SUNBURST) )
+        pRet = new SunburstChart(xChartTypeModel);
     else
         pRet = new UnsupportedChart(xChartTypeModel);
     return pRet;

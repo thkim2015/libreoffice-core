@@ -52,23 +52,6 @@ constexpr sal_Int32 nLabelPadding = 80;
 // one line of the 12pt overlapping parent label (1/100 mm)
 constexpr double fParentLabelHeight = 12.0 * 2540.0 / 72.0 * 1.25;
 
-struct Node
-{
-    OUString aLabel;
-    double fValue = 0.0;
-    sal_Int32 nPoint = -1; // data point of a leaf
-    sal_Int32 nTop = -1; // index of the outermost ancestor among the root's children
-    std::vector<size_t> aChildren;
-};
-
-bool isDarkColor(sal_Int32 nColor)
-{
-    const double r = ((nColor >> 16) & 0xff) / 255.0;
-    const double g = ((nColor >> 8) & 0xff) / 255.0;
-    const double b = (nColor & 0xff) / 255.0;
-    return 0.299 * r + 0.587 * g + 0.114 * b < 0.6;
-}
-
 // the worst aspect ratio of a row of tiles laid along a side of length fSide
 double worstRatio(double fSum, double fMin, double fMax, double fSide)
 {
@@ -88,6 +71,71 @@ TreemapChart::TreemapChart(const rtl::Reference<ChartType>& xChartTypeModel)
 }
 
 TreemapChart::~TreemapChart() {}
+
+bool TreemapChart::isDarkColor(sal_Int32 nColor)
+{
+    const double r = ((nColor >> 16) & 0xff) / 255.0;
+    const double g = ((nColor >> 8) & 0xff) / 255.0;
+    const double b = (nColor & 0xff) / 255.0;
+    // Excel writes white on the grey accent (A5A5A5)
+    return 0.299 * r + 0.587 * g + 0.114 * b < 0.7;
+}
+
+sal_Int32 TreemapChart::nodeColor(const Node& rNode)
+{
+    return aAccents[std::max<sal_Int32>(0, rNode.nTop) % std::size(aAccents)];
+}
+
+VDataSeries* TreemapChart::firstSeries() const
+{
+    if (m_aZSlots.empty())
+        return nullptr;
+    for (auto const& rXSlot : m_aZSlots.front())
+        for (auto const& p : rXSlot.m_aSeriesVector)
+            if (p)
+                return p.get();
+    return nullptr;
+}
+
+std::vector<TreemapChart::Node> TreemapChart::buildTree(const VDataSeries& rSeries)
+{
+    const sal_Int32 nPoints = rSeries.getTotalPointCount();
+    const std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths = categoryPaths(nPoints);
+
+    std::vector<Node> aNodes(1); // the root
+    std::map<std::pair<size_t, sal_Int32>, size_t> aChildOf; // (parent node, group) -> node
+    for (sal_Int32 i = 0; i < nPoints; ++i)
+    {
+        const double fValue = rSeries.getYValue(i);
+        if (std::isnan(fValue) || fValue <= 0.0)
+            continue;
+        const std::vector<std::pair<sal_Int32, OUString>>& aPath = aPaths[i];
+        size_t nNode = 0;
+        for (size_t nDepth = 0; nDepth < aPath.size(); ++nDepth)
+        {
+            // the leaf level is per point; groups above are shared
+            const sal_Int32 nGroup = nDepth == 0 ? topKey(aPath, i) : nDepth + 1 == aPath.size() ? -1 - i : aPath[nDepth].first;
+            auto aFound = aChildOf.find({ nNode, nGroup });
+            size_t nChild;
+            if (aFound == aChildOf.end())
+            {
+                nChild = aNodes.size();
+                aNodes.emplace_back();
+                aNodes[nChild].aLabel = aPath[nDepth].second;
+                aNodes[nChild].nTop = nNode == 0 ? static_cast<sal_Int32>(aNodes[0].aChildren.size()) : aNodes[nNode].nTop;
+                aNodes[nNode].aChildren.push_back(nChild);
+                aChildOf[{ nNode, nGroup }] = nChild;
+            }
+            else
+                nChild = aFound->second;
+            aNodes[nNode].fValue += fValue;
+            nNode = nChild;
+        }
+        aNodes[nNode].fValue += fValue;
+        aNodes[nNode].nPoint = i;
+    }
+    return aNodes;
+}
 
 std::vector<std::vector<std::pair<sal_Int32, OUString>>> TreemapChart::categoryPaths(sal_Int32 nPoints)
 {
@@ -127,6 +175,25 @@ std::vector<std::vector<std::pair<sal_Int32, OUString>>> TreemapChart::categoryP
         // a blank inner level (an item without sub items) ends the path early
         while (rPath.size() > 1 && rPath.back().second.isEmpty())
             rPath.pop_back();
+    }
+    // Excel also groups a repeated parent text (East, East, West...), not only
+    // a text followed by blank cells: renumber the parent levels so that
+    // neighbouring points with the same text under the same parent share a group
+    sal_Int32 nNextGroup = 0;
+    for (sal_Int32 i = 0; i < nPoints; ++i)
+    {
+        std::vector<std::pair<sal_Int32, OUString>>& rPath = aPaths[i];
+        for (size_t d = 0; d + 1 < rPath.size(); ++d)
+        {
+            bool bSame = false;
+            if (i > 0)
+            {
+                const std::vector<std::pair<sal_Int32, OUString>>& rPrev = aPaths[i - 1];
+                bSame = d + 1 < rPrev.size() && rPrev[d].second == rPath[d].second
+                        && (d == 0 || rPrev[d - 1].first == rPath[d - 1].first);
+            }
+            rPath[d].first = bSame ? aPaths[i - 1][d].first : nNextGroup++;
+        }
     }
     return aPaths;
 }
@@ -244,16 +311,9 @@ std::vector<TreemapChart::Rect> TreemapChart::squarify(const std::vector<Item>& 
 
 void TreemapChart::createShapes()
 {
-    if (m_aZSlots.empty() || m_aZSlots.front().empty())
-        return;
     if (!(m_xLogicTarget.is() && m_xFinalTarget.is()))
         return;
-
-    VDataSeries* pSeries = nullptr;
-    for (auto const& rXSlot : m_aZSlots.front())
-        for (auto const& p : rXSlot.m_aSeriesVector)
-            if (!pSeries && p)
-                pSeries = p.get();
+    VDataSeries* pSeries = firstSeries();
     if (!pSeries)
         return;
 
@@ -272,40 +332,7 @@ void TreemapChart::createShapes()
 
     // the hierarchy: one path of category texts per point, outermost level first
     const sal_Int32 nPoints = pSeries->getTotalPointCount();
-    const std::vector<std::vector<std::pair<sal_Int32, OUString>>> aPaths = categoryPaths(nPoints);
-
-    std::vector<Node> aNodes(1); // the root
-    std::map<std::pair<size_t, sal_Int32>, size_t> aChildOf; // (parent node, group) -> node
-    for (sal_Int32 i = 0; i < nPoints; ++i)
-    {
-        const double fValue = pSeries->getYValue(i);
-        if (std::isnan(fValue) || fValue <= 0.0)
-            continue;
-        const std::vector<std::pair<sal_Int32, OUString>>& aPath = aPaths[i];
-        size_t nNode = 0;
-        for (size_t nDepth = 0; nDepth < aPath.size(); ++nDepth)
-        {
-            // the leaf level is per point; groups above are shared
-            const sal_Int32 nGroup = nDepth == 0 ? topKey(aPath, i) : nDepth + 1 == aPath.size() ? -1 - i : aPath[nDepth].first;
-            auto aFound = aChildOf.find({ nNode, nGroup });
-            size_t nChild;
-            if (aFound == aChildOf.end())
-            {
-                nChild = aNodes.size();
-                aNodes.emplace_back();
-                aNodes[nChild].aLabel = aPath[nDepth].second;
-                aNodes[nChild].nTop = nNode == 0 ? static_cast<sal_Int32>(aNodes[0].aChildren.size()) : aNodes[nNode].nTop;
-                aNodes[nNode].aChildren.push_back(nChild);
-                aChildOf[{ nNode, nGroup }] = nChild;
-            }
-            else
-                nChild = aFound->second;
-            aNodes[nNode].fValue += fValue;
-            nNode = nChild;
-        }
-        aNodes[nNode].fValue += fValue;
-        aNodes[nNode].nPoint = i;
-    }
+    const std::vector<Node> aNodes = buildTree(*pSeries);
     if (aNodes[0].fValue <= 0.0)
         return;
 
@@ -325,7 +352,7 @@ void TreemapChart::createShapes()
     const bool bBanner = bHasLabels && aParentLayout == "banner";
     const bool bOverlapping = bHasLabels && aParentLayout == "overlapping";
 
-    auto aTileColor = [&](const Node& rNode) { return aAccents[std::max<sal_Int32>(0, rNode.nTop) % std::size(aAccents)]; };
+    auto aTileColor = [](const Node& rNode) { return nodeColor(rNode); };
 
     auto aCreateTile = [&](const Rect& r, sal_Int32 nColor, sal_Int32 nPoint) {
         std::vector<std::vector<drawing::Position3D>> aPoly{ {

@@ -54,7 +54,24 @@ public:
         const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
         const css::uno::Reference<css::uno::XComponentContext>& xContext) override;
 
-private:
+protected:
+    /// A node of the category hierarchy; node 0 is the root
+    struct Node
+    {
+        OUString aLabel;
+        double fValue = 0.0;
+        sal_Int32 nPoint = -1; ///< data point of a leaf
+        sal_Int32 nTop = -1; ///< index of the outermost ancestor among the root's children
+        std::vector<size_t> aChildren;
+    };
+    /// The hierarchy of the positive points of rSeries
+    std::vector<Node> buildTree(const VDataSeries& rSeries);
+    /// Office theme accent picked by the outermost ancestor
+    static sal_Int32 nodeColor(const Node& rNode);
+    static bool isDarkColor(sal_Int32 nColor);
+    /// The first series of the plotter, or nullptr
+    VDataSeries* firstSeries() const;
+
     /// Per point, the (group, text) path through the category levels, outermost first
     std::vector<std::vector<std::pair<sal_Int32, OUString>>> categoryPaths(sal_Int32 nPoints);
     /// Top level node key of point nPoint: shared by the points of one group
