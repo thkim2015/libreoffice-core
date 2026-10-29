@@ -208,6 +208,7 @@ bool ChartTypeHelper::shiftCategoryPosAtXAxisPerDefault( const rtl::Reference< C
         if( aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_COLUMN)
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_BAR)
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_HISTOGRAM)
+            || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_BOXWHISKER)
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_CANDLESTICK) )
             return true;
     }
