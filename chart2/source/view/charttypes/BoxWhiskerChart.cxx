@@ -233,7 +233,9 @@ void BoxWhiskerChart::createShapes()
     PlotterBase::m_pPosHelper = pPosHelper;
     const std::vector<VDataSeriesGroup>& rXSlots = m_aZSlots.front();
     pPosHelper->updateSeriesCount(rXSlots.size());
-    const double fHalfWidth = pPosHelper->getScaledSlotWidth() / 2.0;
+    // Excel leaves a small gap between neighbouring boxes: a box takes
+    // about 93% of its slot (measured on an Excel 365 rendering).
+    const double fHalfWidth = pPosHelper->getScaledSlotWidth() * 0.93 / 2.0;
 
     // logic (x, y) to page coordinates; false for values outside the axis range
     auto aToPage = [pPosHelper](double fX, double fY, drawing::Position3D& rOut) {
