@@ -479,6 +479,16 @@ void AxisConverter::convertFromModel(const Reference<XCoordinateSystem>& rxCoord
             if (mrModel.maNumberFormat) {
                 getFormatter().convertNumberFormat(aAxisProp, mrModel.maNumberFormat.value(), true);
             }
+            else if (eCT == ChartType::CX && mrModel.mxDispUnits.is()
+                     && mrModel.mxDispUnits->mnBuiltInUnit == "percentage")
+            {
+                // chartex <cx:units unit="percentage"/> (the Pareto line axis):
+                // Excel shows the 0..1 scale as 0% .. 100%
+                NumberFormat aPercent;
+                aPercent.maFormatCode = u"0%"_ustr;
+                aPercent.mbSourceLinked = false;
+                getFormatter().convertNumberFormat(aAxisProp, aPercent, true);
+            }
         }
 
         // position of crossing axis ------------------------------------------
@@ -491,6 +501,10 @@ void AxisConverter::convertFromModel(const Reference<XCoordinateSystem>& rxCoord
             case XML_max:       eAxisPos = cssc::ChartAxisPosition_END;     break;
             case XML_autoZero:  eAxisPos = cssc::ChartAxisPosition_ZERO;   break;
         }
+        // chartex has no crossing settings: Excel puts the secondary value axis
+        // (the Pareto percentage axis) at the right end of the category axis
+        if (!bManualCrossing && eCT == ChartType::CX && nAxesSetIdx == 1 && nAxisIdx == API_Y_AXIS)
+            eAxisPos = cssc::ChartAxisPosition_END;
 
         aAxisProp.setProperty( PROP_CrossoverPosition, eAxisPos );
 
