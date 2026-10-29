@@ -620,9 +620,13 @@ void ScPrintFunc::DrawToDev(ScDocument& rDoc, OutputDevice* pDev, double /* nPri
         if (!bMetaFile)
             pDev->SetMapMode(aMode);
 
+        // Pictures of cells (clipboard, OLE preview) show the grid as on
+        // screen, like Excel copy as picture: use the view grid colour.
+        const Color aGridColor = rDoc.GetViewOptions().GetGridColor();
+        aOutputData.SetGridColor(aGridColor);
         aOutputData.DrawGrid(*pDev, true, false);    // no page breaks
 
-        pDev->SetLineColor( COL_BLACK );
+        pDev->SetLineColor( aGridColor );
 
         Size aOne = pDev->PixelToLogic( Size(1,1) );
         if (bMetaFile)
