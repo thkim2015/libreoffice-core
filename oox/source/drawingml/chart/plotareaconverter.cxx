@@ -458,11 +458,16 @@ void PlotAreaConverter::convertFromModel( View3DModel& rView3DModel,
                         }
 
                         if (bNeedCat) {
-                            // Add the first cat axis
+                            // Add the first cat axis. It goes in front: the
+                            // first id becomes the X axis, so a series that
+                            // names only its value axis (paretoLine bars use
+                            // axis 1, the line axis 2) must not end up with
+                            // the value axis as X.
                             for (const auto& [nId, aAxisModel] : aAxisMap) {
                                 if (aAxisModel->mobCatNotVal.has_value() &&
                                         aAxisModel->mobCatNotVal.value()) {
-                                    elemSeries->maAxisIds.push_back(nId);
+                                    elemSeries->maAxisIds.insert(
+                                        elemSeries->maAxisIds.begin(), nId);
                                     break;
                                 }
                             }
