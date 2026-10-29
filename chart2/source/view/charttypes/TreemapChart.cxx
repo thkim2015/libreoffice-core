@@ -39,9 +39,13 @@ using namespace ::com::sun::star;
 
 namespace
 {
-// Office 2013-2022 theme accents 1-6: Excel colours treemap tiles by the
-// outermost category
-constexpr sal_Int32 aAccents[] = { 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5, 0x70AD47 };
+// Excel colours treemap tiles and sunburst slices by the outermost category:
+// Office theme accents 1-6, then darkened (lumMod 60 %) and lightened
+// (lumMod 80 % lumOff 20 %) past the sixth top item
+constexpr sal_Int32 aAccents[]
+    = { 0x4472C4, 0xED7D31, 0xA5A5A5, 0xFFC000, 0x5B9BD5, 0x70AD47,
+        0x264478, 0x9E480E, 0x636363, 0x997300, 0x255E91, 0x43682B,
+        0x698ED0, 0xF1975A, 0xB7B7B7, 0xFFCD33, 0x7CAFDD, 0x8CC168 };
 
 // Gap between tiles (1/100 mm), drawn as a white border
 constexpr sal_Int32 nTileBorder = 35;
