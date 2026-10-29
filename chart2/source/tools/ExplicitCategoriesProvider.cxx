@@ -239,6 +239,35 @@ bool ExplicitCategoriesProvider::isParetoOrder()
     return m_bParetoOrder;
 }
 
+sal_Int32 ExplicitCategoriesProvider::getParetoLineColor() const
+{
+    rtl::Reference< BaseCoordinateSystem > xCooSys( m_xCooSysModel.get() );
+    if( !xCooSys.is() )
+        return -1;
+    for( rtl::Reference< ChartType > const & xChartType : xCooSys->getChartTypes2() )
+    {
+        if( !xChartType.is()
+            || !xChartType->getChartType().equalsIgnoreAsciiCase( u"com.sun.star.chart2.ParetoLineChartType" ) )
+            continue;
+        for( rtl::Reference< DataSeries > const & xSeries : xChartType->getDataSeries2() )
+        {
+            if( !xSeries.is()
+                || DataSeriesHelper::getDataSequenceByRole( xSeries, u"values-y"_ustr ).is() )
+                continue;
+            sal_Int32 nColor = -1;
+            try
+            {
+                xSeries->getPropertyValue( u"Color"_ustr ) >>= nColor;
+            }
+            catch( const uno::Exception& )
+            {
+            }
+            return nColor;
+        }
+    }
+    return -1;
+}
+
 namespace
 {
 bool lcl_isBoxWhisker( const rtl::Reference< BaseCoordinateSystem >& xCooSys )

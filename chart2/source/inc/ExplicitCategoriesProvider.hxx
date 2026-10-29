@@ -85,6 +85,10 @@ public:
     /// true when the categories were merged and sorted for a Pareto chart
     bool isParetoOrder();
 
+    /** Color of the Pareto cumulative line: the color of the data-less series
+        of the ParetoLine chart type (OOXML chartex import), or -1. */
+    sal_Int32 getParetoLineColor() const;
+
     static OUString getCategoryByIndex(
           const rtl::Reference< ::chart::BaseCoordinateSystem >& xCooSysModel
         , ChartModel& rModel

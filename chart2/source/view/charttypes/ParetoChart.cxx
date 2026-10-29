@@ -254,7 +254,14 @@ void ParetoChart::createShapes()
     if (xLine.is())
     {
         xLine->SvxShape::setPropertyValue(u"LineStyle"_ustr, uno::Any(drawing::LineStyle_SOLID));
-        xLine->SvxShape::setPropertyValue(u"LineColor"_ustr, uno::Any(nLineColor));
+        // the line series of an imported chart carries its color; an inserted
+        // chart has no line series and gets Excel's default orange
+        sal_Int32 nColor = m_pExplicitCategoriesProvider
+                               ? m_pExplicitCategoriesProvider->getParetoLineColor()
+                               : -1;
+        if (nColor < 0)
+            nColor = nLineColor;
+        xLine->SvxShape::setPropertyValue(u"LineColor"_ustr, uno::Any(nColor));
         xLine->SvxShape::setPropertyValue(u"LineWidth"_ustr, uno::Any(nLineWidth));
     }
 }

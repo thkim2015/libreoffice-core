@@ -109,7 +109,7 @@ const TypeGroupInfo spTypeInfos[] =
     { TYPEID_FUNNEL,    TYPECATEGORY_FUNNEL,  SERVICE_CHART2_FUNNEL, VARPOINTMODE_SINGLE, csscd::OUTSIDE,          false, true,  false, true,  true,  false, false, true,  false},
     { TYPEID_BOXWHISKER,TYPECATEGORY_BOXWHISKER,  SERVICE_CHART2_BOXWHISKER, VARPOINTMODE_SINGLE, csscd::OUTSIDE,  false, true,  false, true,  false, false, false, false, false},
     { TYPEID_CLUSTEREDCOLUMN,TYPECATEGORY_CLUSTEREDCOLUMN, SERVICE_CHART2_CLUSTEREDCOLUMN, VARPOINTMODE_SINGLE, csscd::OUTSIDE,  false, true,  false, true,  false, false, false, false, false},
-    { TYPEID_PARETOLINE,TYPECATEGORY_PARETOLINE,  SERVICE_CHART2_PARETOLINE, VARPOINTMODE_SINGLE, csscd::OUTSIDE,  false, true,  false, true,  false, false, false, false, false},
+    { TYPEID_PARETOLINE,TYPECATEGORY_PARETOLINE,  SERVICE_CHART2_PARETOLINE, VARPOINTMODE_SINGLE, csscd::OUTSIDE,  false, false, false, true,  false, false, false, false, false},
     { TYPEID_REGIONMAP, TYPECATEGORY_REGIONMAP,   SERVICE_CHART2_REGIONMAP,  VARPOINTMODE_NONE, csscd::OUTSIDE,    false, true,  false, true,  false, false, false, false, false},
     { TYPEID_SUNBURST,  TYPECATEGORY_SUNBURST,    SERVICE_CHART2_SUNBURST,   VARPOINTMODE_MULTI, csscd::OUTSIDE,   false, true,  false, true,  false, false, false, false, false},
     { TYPEID_TREEMAP,   TYPECATEGORY_TREEMAP,     SERVICE_CHART2_TREEMAP,    VARPOINTMODE_MULTI, csscd::OUTSIDE,   false, true,  false, true,  false, false, false, false, false},
