@@ -75,6 +75,16 @@ public:
     static std::vector< sal_Int32 > groupDuplicateCategories(
         const css::uno::Sequence< OUString >& rTexts, sal_Int32& rnGroupCount );
 
+    /** Pareto charts show one bar per distinct category text with the sum of
+        its values, sorted largest first. Returns the bar index of every data
+        point; rSums gets the bar values in display order. */
+    static std::vector< sal_Int32 > paretoSlots(
+        const css::uno::Sequence< OUString >& rTexts, const std::vector< double >& rValues,
+        std::vector< double >& rSums );
+
+    /// true when the categories were merged and sorted for a Pareto chart
+    bool isParetoOrder();
+
     static OUString getCategoryByIndex(
           const rtl::Reference< ::chart::BaseCoordinateSystem >& xCooSysModel
         , ChartModel& rModel
@@ -108,6 +118,7 @@ private:
     css::uno::Reference< css::chart2::data::XLabeledDataSequence> m_xOriginalCategories;
 
     bool m_bIsExplicitCategoriesInited;
+    bool m_bParetoOrder = false;
     css::uno::Sequence< OUString >  m_aExplicitCategories;
     std::vector< std::vector< ComplexCategory > >   m_aComplexCats;
     std::vector< css::uno::Reference< css::chart2::data::XLabeledDataSequence> > m_aSplitCategoriesList;

@@ -28,6 +28,9 @@
 #include <unonames.hxx>
 #include <BaseCoordinateSystem.hxx>
 #include <DataSeries.hxx>
+#include <DataSeriesHelper.hxx>
+#include <com/sun/star/chart2/data/XLabeledDataSequence.hpp>
+#include <com/sun/star/chart2/data/XNumericalDataSequence.hpp>
 
 #include <com/sun/star/chart2/AxisType.hpp>
 #include <com/sun/star/chart/ChartDataRowSource.hpp>
@@ -37,6 +40,7 @@
 #include <comphelper/diagnose_ex.hxx>
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 
 namespace chart
@@ -192,6 +196,49 @@ std::vector< sal_Int32 > ExplicitCategoriesProvider::groupDuplicateCategories(
     return aGroups;
 }
 
+std::vector< sal_Int32 > ExplicitCategoriesProvider::paretoSlots(
+    const Sequence< OUString >& rTexts, const std::vector< double >& rValues,
+    std::vector< double >& rSums )
+{
+    const sal_Int32 nPoints = std::max< sal_Int32 >( rTexts.getLength(), rValues.size() );
+    sal_Int32 nGroups = 0;
+    std::vector< sal_Int32 > aGroups( groupDuplicateCategories( rTexts, nGroups ) );
+    // points without a category text get a bar of their own
+    while( static_cast< sal_Int32 >( aGroups.size() ) < nPoints )
+        aGroups.push_back( nGroups++ );
+
+    std::vector< double > aSums( nGroups, 0.0 );
+    for( sal_Int32 i = 0; i < nPoints; ++i )
+    {
+        const double fValue = o3tl::make_unsigned( i ) < rValues.size() ? rValues[i] : 0.0;
+        if( std::isfinite( fValue ) )
+            aSums[ aGroups[i] ] += fValue;
+    }
+
+    // largest first; equal sums keep the order of first appearance
+    std::vector< sal_Int32 > aOrder( nGroups );
+    for( sal_Int32 g = 0; g < nGroups; ++g )
+        aOrder[g] = g;
+    std::stable_sort( aOrder.begin(), aOrder.end(),
+                      [&aSums]( sal_Int32 a, sal_Int32 b ) { return aSums[a] > aSums[b]; } );
+    std::vector< sal_Int32 > aRank( nGroups );
+    rSums.assign( nGroups, 0.0 );
+    for( sal_Int32 k = 0; k < nGroups; ++k )
+    {
+        aRank[ aOrder[k] ] = k;
+        rSums[k] = aSums[ aOrder[k] ];
+    }
+    for( sal_Int32& rGroup : aGroups )
+        rGroup = aRank[ rGroup ];
+    return aGroups;
+}
+
+bool ExplicitCategoriesProvider::isParetoOrder()
+{
+    getSimpleCategories();
+    return m_bParetoOrder;
+}
+
 namespace
 {
 bool lcl_isBoxWhisker( const rtl::Reference< BaseCoordinateSystem >& xCooSys )
@@ -201,6 +248,44 @@ bool lcl_isBoxWhisker( const rtl::Reference< BaseCoordinateSystem >& xCooSys )
     rtl::Reference< ChartType > xChartType( AxisHelper::getChartTypeByIndex( xCooSys, 0 ) );
     return xChartType.is()
            && xChartType->getChartType().equalsIgnoreAsciiCase( u"com.sun.star.chart2.BoxWhiskerChartType" );
+}
+
+// Values of a Pareto chart: the first series with numbers, whether it belongs to
+// the ParetoLine chart type (inserted chart) or to its clustered column partner
+// (OOXML chartex import). False when the coordinate system has no ParetoLine.
+bool lcl_getParetoValues( const rtl::Reference< BaseCoordinateSystem >& xCooSys,
+                          std::vector< double >& rValues )
+{
+    if( !xCooSys.is() )
+        return false;
+    bool bPareto = false;
+    for( rtl::Reference< ChartType > const & xChartType : xCooSys->getChartTypes2() )
+        if( xChartType.is()
+            && xChartType->getChartType().equalsIgnoreAsciiCase( u"com.sun.star.chart2.ParetoLineChartType" ) )
+            bPareto = true;
+    if( !bPareto )
+        return false;
+    for( rtl::Reference< ChartType > const & xChartType : xCooSys->getChartTypes2() )
+    {
+        if( !xChartType.is() )
+            continue;
+        for( rtl::Reference< DataSeries > const & xSeries : xChartType->getDataSeries2() )
+        {
+            uno::Reference< data::XLabeledDataSequence > xLabeled(
+                DataSeriesHelper::getDataSequenceByRole( xSeries, u"values-y"_ustr ) );
+            if( !xLabeled.is() )
+                continue;
+            uno::Reference< data::XNumericalDataSequence > xNumbers( xLabeled->getValues(), uno::UNO_QUERY );
+            if( !xNumbers.is() )
+                continue;
+            const Sequence< double > aData( xNumbers->getNumericalData() );
+            if( !aData.hasElements() )
+                continue;
+            rValues.assign( aData.begin(), aData.end() );
+            return true;
+        }
+    }
+    return false;
 }
 }
 
@@ -566,6 +651,7 @@ Sequence< OUString > const & ExplicitCategoriesProvider::getSimpleCategories()
     {
         init();
         m_aExplicitCategories.realloc(0);
+        m_bParetoOrder = false;
         if( m_xOriginalCategories.is() )
         {
             if( !hasComplexCategories() )
@@ -583,6 +669,21 @@ Sequence< OUString > const & ExplicitCategoriesProvider::getSimpleCategories()
                     for( sal_Int32 i = 0; i < m_aExplicitCategories.getLength(); ++i )
                         pDistinct[ aGroups[i] ] = m_aExplicitCategories[i];
                     m_aExplicitCategories = std::move( aDistinct );
+                }
+                // Pareto: one category per distinct text, sorted by the sum of its values
+                std::vector< double > aParetoValues;
+                if( m_aExplicitCategories.hasElements()
+                    && lcl_getParetoValues( m_xCooSysModel.get(), aParetoValues ) )
+                {
+                    std::vector< double > aSums;
+                    const std::vector< sal_Int32 > aSlots(
+                        paretoSlots( m_aExplicitCategories, aParetoValues, aSums ) );
+                    Sequence< OUString > aSorted( aSums.size() );
+                    auto pSorted = aSorted.getArray();
+                    for( sal_Int32 i = 0; i < m_aExplicitCategories.getLength(); ++i )
+                        pSorted[ aSlots[i] ] = m_aExplicitCategories[i];
+                    m_aExplicitCategories = std::move( aSorted );
+                    m_bParetoOrder = true;
                 }
             }
             else

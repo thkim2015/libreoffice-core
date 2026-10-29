@@ -209,6 +209,8 @@ bool ChartTypeHelper::shiftCategoryPosAtXAxisPerDefault( const rtl::Reference< C
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_BAR)
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_HISTOGRAM)
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_BOXWHISKER)
+            || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_CLUSTEREDCOLUMN)
+            || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_PARETOLINE)
             || aChartTypeName.match(CHART2_SERVICE_NAME_CHARTTYPE_CANDLESTICK) )
             return true;
     }
