@@ -67,6 +67,14 @@ public:
     css::uno::Sequence< OUString > const & getSimpleCategories();
     const std::vector<ComplexCategory>* getCategoriesByLevel( sal_Int32 nLevel );
 
+    /// Category text of every data point, without the box and whisker grouping.
+    css::uno::Sequence< OUString > getOriginalCategoryTexts();
+
+    /** Box and whisker charts show each category text once: returns, for every
+        text, its index among the distinct texts in order of first appearance. */
+    static std::vector< sal_Int32 > groupDuplicateCategories(
+        const css::uno::Sequence< OUString >& rTexts, sal_Int32& rnGroupCount );
+
     static OUString getCategoryByIndex(
           const rtl::Reference< ::chart::BaseCoordinateSystem >& xCooSysModel
         , ChartModel& rModel

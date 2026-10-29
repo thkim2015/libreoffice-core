@@ -63,6 +63,7 @@
 #include "FunnelChart.hxx"
 #include "TreemapChart.hxx"
 #include "SunburstChart.hxx"
+#include "BoxWhiskerChart.hxx"
 #include "UnsupportedChart.hxx"
 #include <unonames.hxx>
 #include <SpecialCharacters.hxx>
@@ -2939,6 +2940,8 @@ VSeriesPlotter* VSeriesPlotter::createSeriesPlotter(
         pRet = new TreemapChart(xChartTypeModel);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_SUNBURST) )
         pRet = new SunburstChart(xChartTypeModel);
+    else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_BOXWHISKER) )
+        pRet = new BoxWhiskerChart(xChartTypeModel, nDimensionCount);
     else
         pRet = new UnsupportedChart(xChartTypeModel);
     return pRet;

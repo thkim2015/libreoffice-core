@@ -36,6 +36,7 @@
 #include <rtl/ustrbuf.hxx>
 #include <comphelper/diagnose_ex.hxx>
 
+#include <algorithm>
 #include <limits>
 
 namespace chart
@@ -156,6 +157,51 @@ Reference< chart2::data::XDataSequence > ExplicitCategoriesProvider::getOriginal
     if( m_xOriginalCategories.is() )
         return m_xOriginalCategories->getValues();
     return nullptr;
+}
+
+Sequence< OUString > ExplicitCategoriesProvider::getOriginalCategoryTexts()
+{
+    Sequence< OUString > aTexts;
+    if( m_xOriginalCategories.is() && !hasComplexCategories() )
+    {
+        uno::Reference< data::XDataSequence > xDataSequence( m_xOriginalCategories->getValues() );
+        if( xDataSequence.is() )
+            convertCategoryAnysToText( aTexts, xDataSequence->getData(), mrModel );
+    }
+    return aTexts;
+}
+
+std::vector< sal_Int32 > ExplicitCategoriesProvider::groupDuplicateCategories(
+    const Sequence< OUString >& rTexts, sal_Int32& rnGroupCount )
+{
+    std::vector< sal_Int32 > aGroups;
+    std::vector< OUString > aDistinct;
+    aGroups.reserve( rTexts.getLength() );
+    for( const OUString& rText : rTexts )
+    {
+        auto aFound = std::find( aDistinct.begin(), aDistinct.end(), rText );
+        if( aFound == aDistinct.end() )
+        {
+            aGroups.push_back( static_cast< sal_Int32 >( aDistinct.size() ) );
+            aDistinct.push_back( rText );
+        }
+        else
+            aGroups.push_back( static_cast< sal_Int32 >( aFound - aDistinct.begin() ) );
+    }
+    rnGroupCount = static_cast< sal_Int32 >( aDistinct.size() );
+    return aGroups;
+}
+
+namespace
+{
+bool lcl_isBoxWhisker( const rtl::Reference< BaseCoordinateSystem >& xCooSys )
+{
+    if( !xCooSys.is() )
+        return false;
+    rtl::Reference< ChartType > xChartType( AxisHelper::getChartTypeByIndex( xCooSys, 0 ) );
+    return xChartType.is()
+           && xChartType->getChartType().equalsIgnoreAsciiCase( u"com.sun.star.chart2.BoxWhiskerChartType" );
+}
 }
 
 bool ExplicitCategoriesProvider::hasComplexCategories() const
@@ -527,6 +573,17 @@ Sequence< OUString > const & ExplicitCategoriesProvider::getSimpleCategories()
                 uno::Reference< data::XDataSequence > xDataSequence( m_xOriginalCategories->getValues() );
                 if( xDataSequence.is() )
                     ExplicitCategoriesProvider::convertCategoryAnysToText( m_aExplicitCategories, xDataSequence->getData(), mrModel );
+                // box and whisker: one category per distinct text (like Excel)
+                if( m_aExplicitCategories.hasElements() && lcl_isBoxWhisker( m_xCooSysModel.get() ) )
+                {
+                    sal_Int32 nGroups = 0;
+                    std::vector< sal_Int32 > aGroups( groupDuplicateCategories( m_aExplicitCategories, nGroups ) );
+                    Sequence< OUString > aDistinct( nGroups );
+                    auto pDistinct = aDistinct.getArray();
+                    for( sal_Int32 i = 0; i < m_aExplicitCategories.getLength(); ++i )
+                        pDistinct[ aGroups[i] ] = m_aExplicitCategories[i];
+                    m_aExplicitCategories = std::move( aDistinct );
+                }
             }
             else
             {
