@@ -564,6 +564,7 @@ constexpr auto constChartTypeMap = frozen::make_unordered_map<std::u16string_vie
     { u"com.sun.star.chart2.ParetoLineChartType",  chart::TYPEID_PARETOLINE },
     { u"com.sun.star.chart2.RegionMapDiagram",  chart::TYPEID_REGIONMAP },
     { u"com.sun.star.chart2.RegionMapChartType",  chart::TYPEID_REGIONMAP },
+    { u"com.sun.star.chart2.SurfaceChartType",  chart::TYPEID_SURFACE },
     { u"com.sun.star.chart2.SunburstDiagram",  chart::TYPEID_SUNBURST },
     { u"com.sun.star.chart2.SunburstChartType",  chart::TYPEID_SUNBURST },
     { u"com.sun.star.chart2.TreemapDiagram",  chart::TYPEID_TREEMAP },
@@ -3856,11 +3857,27 @@ void ChartExport::exportUpDownBars( const Reference< chart2::XChartType >& xChar
 void ChartExport::exportSurfaceChart( const Reference< chart2::XChartType >& xChartType )
 {
     FSHelperPtr pFS = GetFS();
-    sal_Int32 nTypeId = XML_surfaceChart;
-    if( mbIs3DChart )
-        nTypeId = XML_surface3DChart;
+    // CT_SurfaceChart starts with c:wireframe and has no c:varyColors; a
+    // contour (the grid seen from above) is Excel's 2D c:surfaceChart
+    bool bWireframe = false;
+    bool bContour = !mbIs3DChart;
+    Reference<beans::XPropertySet> xTypeProps(xChartType, uno::UNO_QUERY);
+    if (xTypeProps.is())
+    {
+        try
+        {
+            xTypeProps->getPropertyValue(u"Wireframe"_ustr) >>= bWireframe;
+            bool bContourProp = false;
+            if (xTypeProps->getPropertyValue(u"Contour"_ustr) >>= bContourProp)
+                bContour = bContour || bContourProp;
+        }
+        catch (const uno::Exception&)
+        {
+        }
+    }
+    const sal_Int32 nTypeId = bContour ? XML_surfaceChart : XML_surface3DChart;
     pFS->startElement(FSNS(XML_c, nTypeId));
-    exportVaryColors(xChartType);
+    pFS->singleElement(FSNS(XML_c, XML_wireframe), XML_val, bWireframe ? "1" : "0");
     bool bPrimaryAxes = true;
     exportAllSeries(xChartType, bPrimaryAxes);
     createAxes_chart(bPrimaryAxes, true);
@@ -4920,7 +4937,8 @@ void ChartExport::exportAxis(const AxisIdPair& rAxisIdPair, bool bIsChartex)
                 nAxisType = XML_valAx;
             else if( eChartType == chart::TYPEID_STOCK )
                 nAxisType = XML_dateAx;
-            else if( eChartType == chart::TYPEID_BAR || eChartType == chart::TYPEID_AREA )
+            else if( eChartType == chart::TYPEID_BAR || eChartType == chart::TYPEID_AREA
+                     || eChartType == chart::TYPEID_SURFACE )
                 nAxisType = XML_serAx;
             // FIXME: axPos, need to check axis direction
             sAxPos = "b";

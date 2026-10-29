@@ -256,6 +256,7 @@ $(eval $(call gb_Library_add_exception_objects,chart2,\
     chart2/source/view/charttypes/CorrelationCircleChart \
     chart2/source/view/charttypes/CategoryPositionHelper \
     chart2/source/view/charttypes/FunnelChart \
+    chart2/source/view/charttypes/SurfaceChart \
     chart2/source/view/charttypes/TreemapChart \
     chart2/source/view/charttypes/SunburstChart \
     chart2/source/view/charttypes/BoxWhiskerChart \
@@ -342,6 +343,8 @@ $(eval $(call gb_Library_add_exception_objects,chart2,\
     chart2/source/model/template/FilledNetChartType \
     chart2/source/model/template/FunnelChartType \
     chart2/source/model/template/FunnelChartTypeTemplate \
+    chart2/source/model/template/SurfaceChartType \
+    chart2/source/model/template/SurfaceChartTypeTemplate \
     chart2/source/model/template/LineChartType \
     chart2/source/model/template/LineChartTypeTemplate \
     chart2/source/model/template/NetChartType \

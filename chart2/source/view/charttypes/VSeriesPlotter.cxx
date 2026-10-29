@@ -61,6 +61,7 @@
 #include "CorrelationCircleChart.hxx"
 #include "NetChart.hxx"
 #include "FunnelChart.hxx"
+#include "SurfaceChart.hxx"
 #include "TreemapChart.hxx"
 #include "SunburstChart.hxx"
 #include "BoxWhiskerChart.hxx"
@@ -2935,6 +2936,8 @@ VSeriesPlotter* VSeriesPlotter::createSeriesPlotter(
         pRet = new NetChart(xChartTypeModel,nDimensionCount,false,std::make_unique<PolarPlottingPositionHelper>());
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_CANDLESTICK) )
         pRet = new CandleStickChart(xChartTypeModel,nDimensionCount);
+    else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_SURFACE) )
+        pRet = new SurfaceChart(xChartTypeModel,nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_FUNNEL) )
         pRet = new FunnelChart(xChartTypeModel,nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_TREEMAP) )

@@ -76,7 +76,7 @@ const char SERVICE_CHART2_FILLEDNET[] = "com.sun.star.chart2.FilledNetChartType"
 const char SERVICE_CHART2_PIE[]       = "com.sun.star.chart2.PieChartType";
 const char SERVICE_CHART2_SCATTER[]   = "com.sun.star.chart2.ScatterChartType";
 const char SERVICE_CHART2_BUBBLE[]    = "com.sun.star.chart2.BubbleChartType";
-const char SERVICE_CHART2_SURFACE[]   = "com.sun.star.chart2.ColumnChartType";    // Todo
+const char SERVICE_CHART2_SURFACE[]   = "com.sun.star.chart2.SurfaceChartType";
 const char SERVICE_CHART2_FUNNEL[]    = "com.sun.star.chart2.FunnelChartType";
 const char SERVICE_CHART2_CLUSTEREDCOLUMN[]= "com.sun.star.chart2.ClusteredColumnChartType";
 const char SERVICE_CHART2_BOXWHISKER[]= "com.sun.star.chart2.BoxWhiskerChartType";
@@ -215,7 +215,8 @@ TypeGroupConverter::TypeGroupConverter( const ConverterRoot& rParent, TypeGroupM
                 eTypeId = TYPEID_RADARAREA;
         break;
         case TYPEID_SURFACE:
-            // create a deep 3D bar chart from surface charts
+            // a surface chart is a deep 3D grid; c:surfaceChart (contour) keeps
+            // its top-down view3D
             mrModel.mnGrouping = XML_standard;
         break;
         default:;
@@ -395,6 +396,17 @@ void TypeGroupConverter::convertFromModel( const Reference< XDiagram >& rxDiagra
         // additional properties
         PropertySet aDiaProp( rxDiagram );
         PropertySet aTypeProp( xChartType );
+
+        if (maTypeInfo.meTypeId == TYPEID_SURFACE)
+        {
+            Reference<css::beans::XPropertySet> xTypePropSet(xChartType, UNO_QUERY);
+            if (xTypePropSet.is())
+            {
+                xTypePropSet->setPropertyValue(u"Wireframe"_ustr, Any(mrModel.mbWireframe));
+                xTypePropSet->setPropertyValue(u"Contour"_ustr,
+                                               Any(mrModel.mnTypeId == C_TOKEN(surfaceChart)));
+            }
+        }
 
         if (maTypeInfo.meTypeId == TYPEID_HISTO)
         {

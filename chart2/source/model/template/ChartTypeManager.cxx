@@ -32,6 +32,7 @@
 #include "BubbleChartTypeTemplate.hxx"
 #include "CorrelationCircleChartTypeTemplate.hxx"
 #include "FunnelChartTypeTemplate.hxx"
+#include "SurfaceChartTypeTemplate.hxx"
 #include "BoxWhiskerChartTypeTemplate.hxx"
 #include "ClusteredColumnChartTypeTemplate.hxx"
 #include "ParetoLineChartTypeTemplate.hxx"
@@ -129,6 +130,10 @@ enum TemplateId
     TEMPLATE_BUBBLE,
     TEMPLATE_CORRELATIONCIRCLE,
     TEMPLATE_FUNNEL,
+    TEMPLATE_SURFACE,
+    TEMPLATE_SURFACEWIREFRAME,
+    TEMPLATE_CONTOUR,
+    TEMPLATE_CONTOURWIREFRAME,
     TEMPLATE_BOXWHISKER,
     TEMPLATE_CLUSTEREDCOLUMN,
     TEMPLATE_PARETOLINE,
@@ -216,6 +221,10 @@ const tTemplateMapType & lcl_DefaultChartTypeMap()
         {"com.sun.star.chart2.template.Bubble",                         TEMPLATE_BUBBLE},
         {"com.sun.star.chart2.template.CorrelationCircle",              TEMPLATE_CORRELATIONCIRCLE},
         {"com.sun.star.chart2.template.Funnel",                         TEMPLATE_FUNNEL},
+        {"com.sun.star.chart2.template.Surface",                        TEMPLATE_SURFACE},
+        {"com.sun.star.chart2.template.SurfaceWireframe",               TEMPLATE_SURFACEWIREFRAME},
+        {"com.sun.star.chart2.template.Contour",                        TEMPLATE_CONTOUR},
+        {"com.sun.star.chart2.template.ContourWireframe",               TEMPLATE_CONTOURWIREFRAME},
         {"com.sun.star.chart2.template.BoxWhisker",                     TEMPLATE_BOXWHISKER},
         {"com.sun.star.chart2.template.ClusteredColumn",                TEMPLATE_CLUSTEREDCOLUMN},
         {"com.sun.star.chart2.template.ParetoLine",                     TEMPLATE_PARETOLINE},
@@ -565,6 +574,18 @@ rtl::Reference< ::chart::ChartTypeTemplate > ChartTypeManager::createTemplate(
             break;
 
         // Funnel chart
+        case TEMPLATE_SURFACE:
+            xTemplate.set( new SurfaceChartTypeTemplate( m_xContext, aServiceSpecifier, false, false ));
+            break;
+        case TEMPLATE_SURFACEWIREFRAME:
+            xTemplate.set( new SurfaceChartTypeTemplate( m_xContext, aServiceSpecifier, false, true ));
+            break;
+        case TEMPLATE_CONTOUR:
+            xTemplate.set( new SurfaceChartTypeTemplate( m_xContext, aServiceSpecifier, true, false ));
+            break;
+        case TEMPLATE_CONTOURWIREFRAME:
+            xTemplate.set( new SurfaceChartTypeTemplate( m_xContext, aServiceSpecifier, true, true ));
+            break;
         case TEMPLATE_FUNNEL:
             xTemplate.set( new FunnelChartTypeTemplate( m_xContext,
                         aServiceSpecifier));

@@ -54,6 +54,8 @@ inline constexpr OUString CHART2_SERVICE_NAME_CHARTTYPE_PARETOLINE
     = u"com.sun.star.chart2.ParetoLineChartType"_ustr;
 inline constexpr OUString CHART2_SERVICE_NAME_CHARTTYPE_REGIONMAP
     = u"com.sun.star.chart2.RegionMapChartType"_ustr;
+inline constexpr OUString CHART2_SERVICE_NAME_CHARTTYPE_SURFACE
+    = u"com.sun.star.chart2.SurfaceChartType"_ustr;
 inline constexpr OUString CHART2_SERVICE_NAME_CHARTTYPE_SUNBURST
     = u"com.sun.star.chart2.SunburstChartType"_ustr;
 inline constexpr OUString CHART2_SERVICE_NAME_CHARTTYPE_TREEMAP
