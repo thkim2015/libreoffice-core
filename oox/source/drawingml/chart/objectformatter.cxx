@@ -649,7 +649,9 @@ public:
     explicit            TextFormatter(
                             ObjectFormatterData& rData,
                             const AutoTextEntry* pAutoTextEntry,
-                            const ModelRef< TextBody >& rxGlobalTextProp );
+                            const ModelRef< TextBody >& rxGlobalTextProp,
+                            bool bChartEx = false,
+                            bool bChartTitle = false );
 
     /** Converts text formatting to the passed property set. */
     void                convertFormatting(
@@ -903,7 +905,7 @@ const TextCharacterProperties* lclGetTextProperties( const ModelRef< TextBody >&
 
 } // namespace
 
-TextFormatter::TextFormatter( ObjectFormatterData& rData, const AutoTextEntry* pAutoTextEntry, const ModelRef< TextBody >& rxGlobalTextProp ) :
+TextFormatter::TextFormatter( ObjectFormatterData& rData, const AutoTextEntry* pAutoTextEntry, const ModelRef< TextBody >& rxGlobalTextProp, bool bChartEx, bool bChartTitle ) :
     DetailFormatterBase( rData, pAutoTextEntry )
 {
     if( !pAutoTextEntry )
@@ -920,6 +922,21 @@ TextFormatter::TextFormatter( ObjectFormatterData& rData, const AutoTextEntry* p
     }
     mxAutoText->moHeight = pAutoTextEntry->mnDefFontSize;
     mxAutoText->moBold = pAutoTextEntry->mbBold;
+
+    // Excel 2016 chartex charts take their text defaults from the chart
+    // style part (chartStyle 410): a 14pt regular title, 9pt for all other
+    // text, both in tx1 at 65% luminance. Without this a chartex title
+    // comes out as an 18pt bold black c:chart title.
+    if( bChartEx )
+    {
+        mxAutoText->moHeight = bChartTitle ? 1400 : 900;
+        mxAutoText->moBold = false;
+        Color& rColor = mxAutoText->maFillProperties.maFillColor;
+        rColor.setSchemeClr( XML_tx1 );
+        rColor.addTransformation( XML_lumMod, 65000 );
+        rColor.addTransformation( XML_lumOff, 35000 );
+        mxAutoText->maFillProperties.moFillType = XML_solidFill;
+    }
 
     if( const TextCharacterProperties* pTextProps = lclGetTextProperties( rxGlobalTextProp ) )
     {
@@ -947,7 +964,9 @@ void TextFormatter::convertFormatting( PropertySet& rPropSet, const ModelRef< Te
 ObjectTypeFormatter::ObjectTypeFormatter( ObjectFormatterData& rData, const ObjectTypeFormatEntry& rEntry, const ChartSpaceModel& rChartSpace, const ObjectType eObjType ) :
     maLineFormatter(   rData, lclGetAutoFormatEntry( rEntry.mpAutoLines,   rChartSpace.mnStyle ), eObjType ),
     maFillFormatter(   rData, lclGetAutoFormatEntry( rEntry.mpAutoFills,   rChartSpace.mnStyle ), eObjType ),
-    maTextFormatter(   rData, lclGetAutoTextEntry(   rEntry.mpAutoTexts,   rChartSpace.mnStyle ), rChartSpace.mxTextProp ),
+    maTextFormatter(   rData, lclGetAutoTextEntry(   rEntry.mpAutoTexts,   rChartSpace.mnStyle ), rChartSpace.mxTextProp,
+                       rChartSpace.mxPlotArea.is() && rChartSpace.mxPlotArea->meCT == ChartType::CX,
+                       eObjType == OBJECTTYPE_CHARTTITLE ),
     mrModelObjHelper( rData.maModelObjHelper ),
     mrEntry( rEntry )
 {
