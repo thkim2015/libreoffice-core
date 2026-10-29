@@ -197,8 +197,12 @@ void SunburstChart::createShapes()
     std::function<void(size_t, sal_Int32, double, double)> aLayout
         = [&](size_t nNode, sal_Int32 nRing, double fStart, double fWidth) {
               std::vector<size_t> aChildren = aNodes[nNode].aChildren;
-              std::stable_sort(aChildren.begin(), aChildren.end(),
-                               [&](size_t a, size_t b) { return aNodes[a].fValue > aNodes[b].fValue; });
+              // Excel: largest first; equal values keep the later data row first
+              std::sort(aChildren.begin(), aChildren.end(), [&](size_t a, size_t b) {
+                  if (aNodes[a].fValue != aNodes[b].fValue)
+                      return aNodes[a].fValue > aNodes[b].fValue;
+                  return a > b;
+              });
               double fPos = fStart;
               for (size_t nChild : aChildren)
               {

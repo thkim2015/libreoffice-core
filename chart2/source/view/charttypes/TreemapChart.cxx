@@ -49,8 +49,8 @@ constexpr sal_Int32 nTileBorder = 35;
 constexpr double fBannerHeight = 450.0;
 // Inner padding of a tile label
 constexpr sal_Int32 nLabelPadding = 80;
-// one line of the 12pt overlapping parent label (1/100 mm)
-constexpr double fParentLabelHeight = 12.0 * 2540.0 / 72.0 * 1.25;
+// one line of the 9pt overlapping parent label (1/100 mm)
+constexpr double fParentLabelHeight = 9.0 * 2540.0 / 72.0 * 1.25;
 
 // the worst aspect ratio of a row of tiles laid along a side of length fSide
 double worstRatio(double fSum, double fMin, double fMax, double fSide)
@@ -377,7 +377,9 @@ void TreemapChart::createShapes()
         xShape->SvxShape::setPropertyValue(u"LineWidth"_ustr, uno::Any(nTileBorder));
     };
 
-    auto aCreateLabel = [&](const Rect& r, const OUString& rText, sal_Int32 nBackColor, float fHeight, bool bBold) {
+    // Excel treemap style: every label is 9pt regular in lt1 (white), parents at the
+    // top left, leaves at the bottom left
+    auto aCreateLabel = [&](const Rect& r, const OUString& rText, float fHeight, bool bBold, bool bBottom) {
         if (rText.isEmpty() || r.fW < 2 * nLabelPadding + 200 || r.fH < 2 * nLabelPadding + 250)
             return;
         tPropertyNameValueMap aValues;
@@ -388,12 +390,12 @@ void TreemapChart::createShapes()
         aValues[u"CharWeight"_ustr] <<= fWeight;
         aValues[u"CharWeightAsian"_ustr] <<= fWeight;
         aValues[u"CharWeightComplex"_ustr] <<= fWeight;
-        aValues[u"CharColor"_ustr] <<= sal_Int32(isDarkColor(nBackColor) ? 0xFFFFFF : 0x000000);
+        aValues[u"CharColor"_ustr] <<= sal_Int32(0xFFFFFF);
         aValues[u"FillStyle"_ustr] <<= drawing::FillStyle_NONE;
         aValues[u"LineStyle"_ustr] <<= drawing::LineStyle_NONE;
         aValues[u"ParaAdjust"_ustr] <<= style::ParagraphAdjust_LEFT;
         aValues[u"TextHorizontalAdjust"_ustr] <<= drawing::TextHorizontalAdjust_LEFT;
-        aValues[u"TextVerticalAdjust"_ustr] <<= drawing::TextVerticalAdjust_TOP;
+        aValues[u"TextVerticalAdjust"_ustr] <<= bBottom ? drawing::TextVerticalAdjust_BOTTOM : drawing::TextVerticalAdjust_TOP;
         aValues[u"TextAutoGrowHeight"_ustr] <<= false;
         aValues[u"TextAutoGrowWidth"_ustr] <<= false;
         aValues[u"TextWordWrap"_ustr] <<= true;
@@ -446,15 +448,14 @@ void TreemapChart::createShapes()
             if (rChild.aChildren.empty())
             {
                 aCreateTile(r, aTileColor(rChild), rChild.nPoint);
-                // keep the leaf label below a parent label in the same corner
-                aCreateLabel(Rect{ r.fX, r.fY + fSkip, r.fW, r.fH - fSkip }, aLeafText(rChild), aTileColor(rChild), 9.0f, false);
+                aCreateLabel(Rect{ r.fX, r.fY + fSkip, r.fW, r.fH - fSkip }, aLeafText(rChild), 9.0f, false, true);
                 continue;
             }
             if (bBanner && r.fH > 2 * fBannerHeight)
             {
                 const Rect aBanner{ r.fX, r.fY, r.fW, fBannerHeight };
                 aCreateTile(aBanner, aTileColor(rChild), -1);
-                aCreateLabel(Rect{ aBanner.fX, aBanner.fY - nLabelPadding / 2.0, aBanner.fW, aBanner.fH + nLabelPadding }, rChild.aLabel, aTileColor(rChild), 9.0f, false);
+                aCreateLabel(Rect{ aBanner.fX, aBanner.fY - nLabelPadding / 2.0, aBanner.fW, aBanner.fH + nLabelPadding }, rChild.aLabel, 9.0f, false, false);
                 r.fY += fBannerHeight;
                 r.fH -= fBannerHeight;
             }
@@ -469,7 +470,7 @@ void TreemapChart::createShapes()
     };
     aLayout(0, aPlot, 0.0);
     for (const auto& [r, nNode] : aParentLabels)
-        aCreateLabel(r, aNodes[nNode].aLabel, aTileColor(aNodes[nNode]), 12.0f, true);
+        aCreateLabel(r, aNodes[nNode].aLabel, 9.0f, false, false);
 }
 
 } // namespace chart
