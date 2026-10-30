@@ -63,6 +63,7 @@
 #include "FunnelChart.hxx"
 #include "SurfaceChart.hxx"
 #include "TreemapChart.hxx"
+#include "RegionMapChart.hxx"
 #include "SunburstChart.hxx"
 #include "BoxWhiskerChart.hxx"
 #include "ParetoChart.hxx"
@@ -2942,6 +2943,8 @@ VSeriesPlotter* VSeriesPlotter::createSeriesPlotter(
         pRet = new FunnelChart(xChartTypeModel,nDimensionCount);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_TREEMAP) )
         pRet = new TreemapChart(xChartTypeModel);
+    else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_REGIONMAP) )
+        pRet = new RegionMapChart(xChartTypeModel);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_SUNBURST) )
         pRet = new SunburstChart(xChartTypeModel);
     else if( aChartType.equalsIgnoreAsciiCase(CHART2_SERVICE_NAME_CHARTTYPE_BOXWHISKER) )

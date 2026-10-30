@@ -24,6 +24,7 @@ $(eval $(call gb_Library_use_externals,chart2,\
 	boost_headers \
 	frozen \
 	libxml2 \
+	zlib \
 ))
 
 
@@ -258,6 +259,7 @@ $(eval $(call gb_Library_add_exception_objects,chart2,\
     chart2/source/view/charttypes/FunnelChart \
     chart2/source/view/charttypes/SurfaceChart \
     chart2/source/view/charttypes/TreemapChart \
+    chart2/source/view/charttypes/RegionMapChart \
     chart2/source/view/charttypes/SunburstChart \
     chart2/source/view/charttypes/BoxWhiskerChart \
     chart2/source/view/charttypes/ParetoChart \

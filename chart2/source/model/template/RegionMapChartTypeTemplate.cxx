@@ -74,6 +74,8 @@ RegionMapChartTypeTemplate::~RegionMapChartTypeTemplate() {}
 
 sal_Int32 RegionMapChartTypeTemplate::getDimension() const { return m_nDim; }
 
+sal_Int32 RegionMapChartTypeTemplate::getAxisCountByDimension(sal_Int32 /*nDimension*/) { return 0; }
+
 // ____ ChartTypeTemplate ____
 bool RegionMapChartTypeTemplate::matchesTemplate2(const rtl::Reference<::chart::Diagram>& xDiagram,
                                                   bool bAdaptProperties)
