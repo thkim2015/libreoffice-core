@@ -1240,7 +1240,9 @@ void Alignment::finalizeImport()
         case XML_right:             maApiData.meHorJustify = css::table::CellHoriJustify_RIGHT;     break;
     }
 
-    if (maModel.mnHorAlign == XML_distributed)
+    // 'center across selection' keeps CENTER with the DISTRIBUTE method as marker,
+    // so the cells are not merged and the alignment is written back on export
+    if (maModel.mnHorAlign == XML_distributed || maModel.mnHorAlign == XML_centerContinuous)
         maApiData.mnHorJustifyMethod = css::table::CellJustifyMethod::DISTRIBUTE;
 
     // vertical alignment

@@ -1541,6 +1541,13 @@ bool XclExpCellAlign::FillFromItemSet(const XclRoot& rRoot, const SfxItemSet& rI
             if (eHorJustMethod == SvxCellJustifyMethod::Distribute)
                 mnHorAlign = EXC_XF_HOR_DISTRIB;
         }
+        else if (eHorAlign == SvxCellHorJustify::Center)
+        {
+            // center across selection (see oox Alignment::finalizeImport)
+            if (rItemSet.GetItem<SvxJustifyMethodItem>(ATTR_HOR_JUSTIFY_METHOD)->GetValue()
+                == SvxCellJustifyMethod::Distribute)
+                mnHorAlign = EXC_XF_HOR_CENTER_AS;
+        }
 
         if (eVerAlign == SvxCellVerJustify::Block)
         {

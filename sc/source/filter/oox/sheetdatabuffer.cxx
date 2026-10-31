@@ -770,7 +770,7 @@ void SheetDataBuffer::setCellFormat( const CellModel& rModel )
         return;
 
     sal_Int32 nHorAlign = pXf->getAlignment().getModel().mnHorAlign;
-    if( (nHorAlign == XML_centerContinuous) || (nHorAlign == XML_fill) )
+    if( nHorAlign == XML_fill )
     {
         /*  start new merged range, if cell is not empty (#108781#),
             or try to expand last range with empty cell */
