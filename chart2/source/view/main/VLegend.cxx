@@ -727,6 +727,39 @@ chart2::RelativePosition lcl_getDefaultPosition( LegendPosition ePos, const awt:
     return aResult;
 }
 
+// move a default legend position from the middle of its side to the start or end
+void lcl_alignDefaultPosition( chart2::RelativePosition& rPos, LegendPosition ePos, bool bStart,
+                               const awt::Rectangle& rSpace, const awt::Size& rPageSize )
+{
+    if( rPageSize.Width <= 0 || rPageSize.Height <= 0 )
+        return;
+    const double fTop = double( rSpace.Y + lcl_getLegendTopBottomMargin() ) / rPageSize.Height;
+    const double fBottom = double( rSpace.Y + rSpace.Height - lcl_getLegendTopBottomMargin() ) / rPageSize.Height;
+    const double fLeft = double( rSpace.X + lcl_getLegendLeftRightMargin() ) / rPageSize.Width;
+    const double fRight = double( rSpace.X + rSpace.Width - lcl_getLegendLeftRightMargin() ) / rPageSize.Width;
+    switch( ePos )
+    {
+        case LegendPosition_LINE_START:
+            rPos.Secondary = bStart ? fTop : fBottom;
+            rPos.Anchor = bStart ? drawing::Alignment_TOP_LEFT : drawing::Alignment_BOTTOM_LEFT;
+            break;
+        case LegendPosition_LINE_END:
+            rPos.Secondary = bStart ? fTop : fBottom;
+            rPos.Anchor = bStart ? drawing::Alignment_TOP_RIGHT : drawing::Alignment_BOTTOM_RIGHT;
+            break;
+        case LegendPosition_PAGE_START:
+            rPos.Primary = bStart ? fLeft : fRight;
+            rPos.Anchor = bStart ? drawing::Alignment_TOP_LEFT : drawing::Alignment_TOP_RIGHT;
+            break;
+        case LegendPosition_PAGE_END:
+            rPos.Primary = bStart ? fLeft : fRight;
+            rPos.Anchor = bStart ? drawing::Alignment_BOTTOM_LEFT : drawing::Alignment_BOTTOM_RIGHT;
+            break;
+        default:
+            break;
+    }
+}
+
 /**  @return
          a point relative to the upper left corner that can be used for
          XShape::setPosition()
@@ -1079,6 +1112,11 @@ void VLegend::changePosition(
         {
             // auto position: relative to remaining space
             aRelativePosition = lcl_getDefaultPosition( ePos, rOutAvailableSpace, rPageSize );
+            // chartex legends may sit at the start or end of their side instead of the centre
+            sal_Int16 nAlign = 0;
+            m_xLegend->getPropertyValue( u"SideAlignment"_ustr ) >>= nAlign;
+            if( nAlign == 1 || nAlign == 2 )
+                lcl_alignDefaultPosition( aRelativePosition, ePos, nAlign == 1, rOutAvailableSpace, rPageSize );
             awt::Point aPos = lcl_calculatePositionAndRemainingSpace(
                 rOutAvailableSpace, rPageSize, aRelativePosition, ePos, aLegendSize, bOverlay );
             m_xShape->setPosition( aPos );

@@ -56,7 +56,8 @@ enum
     PROP_LEGEND_REF_PAGE_SIZE,
     PROP_LEGEND_REL_POS,
     PROP_LEGEND_REL_SIZE,
-    PROP_LEGEND_HAS_EXPLICIT_SPPR
+    PROP_LEGEND_HAS_EXPLICIT_SPPR,
+    PROP_LEGEND_ALIGNMENT
 };
 
 void lcl_AddPropertiesToVector(
@@ -109,6 +110,14 @@ void lcl_AddPropertiesToVector(
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEVOID );
+
+    // alignment along the side the legend sits on (chartex cx:legend/@align):
+    // 0 = centre, 1 = start (top or left), 2 = end (bottom or right)
+    rOutProperties.emplace_back( "SideAlignment",
+                  PROP_LEGEND_ALIGNMENT,
+                  cppu::UnoType<sal_Int16>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 } // namespace
@@ -128,6 +137,7 @@ const ::chart::tPropertyValueMap& StaticLegendDefaults()
             ::chart::PropertyHelper::setPropertyValueDefault( aTmp, PROP_LEGEND_EXPANSION, css::chart::ChartLegendExpansion_HIGH );
             ::chart::PropertyHelper::setPropertyValueDefault( aTmp, PROP_LEGEND_SHOW, true );
             ::chart::PropertyHelper::setPropertyValueDefault( aTmp, PROP_LEGEND_OVERLAY, false );
+            ::chart::PropertyHelper::setPropertyValueDefault< sal_Int16 >( aTmp, PROP_LEGEND_ALIGNMENT, 0 );
 
             float fDefaultCharHeight = 10.0;
             ::chart::PropertyHelper::setPropertyValue( aTmp, ::chart::CharacterProperties::PROP_CHAR_CHAR_HEIGHT, fDefaultCharHeight );

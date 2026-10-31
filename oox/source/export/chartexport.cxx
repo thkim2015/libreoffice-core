@@ -2364,7 +2364,7 @@ void ChartExport::exportLegend( const Reference< css::chart::XChartDocument >& x
         css::chart::ChartLegendPosition aLegendPos = css::chart::ChartLegendPosition_NONE;
         try
         {
-            Any aAny( xProp->getPropertyValue( u"Alignment"_ustr ));
+            Any aAny( xProp->getPropertyValue( u"SideAlignment"_ustr ));
             aAny >>= aLegendPos;
         }
         catch( beans::UnknownPropertyException & )
@@ -2528,9 +2528,22 @@ void ChartExport::exportLegend( const Reference< css::chart::XChartDocument >& x
         }
 
         if (bIsChartex) {
+            // alignment along the side: chart2 Legend "SideAlignment" (0 centre, 1 start, 2 end)
+            const char* sAlign = "ctr";
+            try
+            {
+                Reference<beans::XPropertySet> xNewLegend(
+                    mxNewDiagram.is() ? mxNewDiagram->getLegend() : nullptr, uno::UNO_QUERY);
+                sal_Int16 nAlign = 0;
+                if (xNewLegend.is() && (xNewLegend->getPropertyValue(u"SideAlignment"_ustr) >>= nAlign))
+                    sAlign = nAlign == 1 ? "min" : nAlign == 2 ? "max" : "ctr";
+            }
+            catch (const uno::Exception&)
+            {
+            }
             pFS->startElement(FSNS(XML_cx, XML_legend),
                     XML_pos, strPos ? strPos : "r",
-                    XML_align, "ctr",   // is this supported?
+                    XML_align, sAlign,
                     XML_overlay, sOverlay ? sOverlay : "0");
         } else {
             pFS->singleElement(FSNS(XML_c, XML_overlay), XML_val, sOverlay);

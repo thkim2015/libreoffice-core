@@ -48,7 +48,8 @@ LegendEntryModel::LegendEntryModel() :
 
 LegendModel::LegendModel() :
     mnPosition( XML_r ),
-    mbOverlay( false )
+    mbOverlay( false ),
+    mnAlign( XML_ctr )
 {
 }
 

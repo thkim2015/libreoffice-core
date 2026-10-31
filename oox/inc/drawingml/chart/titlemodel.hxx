@@ -76,6 +76,7 @@ struct LegendModel
     LayoutRef           mxLayout;           /// Layout/position of the legend.
     sal_Int32           mnPosition;         /// Legend position.
     bool                mbOverlay;          /// True = legend may overlay other objects.
+    sal_Int32           mnAlign;            /// chartex: alignment along its side (min, ctr, max).
 
     explicit            LegendModel();
                         ~LegendModel();

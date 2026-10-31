@@ -182,8 +182,9 @@ ContextHandlerRef ChartSpaceFragment::onCreateContext( sal_Int32 nElement, const
                     const bool bOverlay = rAttribs.getBool(XML_overlay, false);
                     const sal_Int32 nPos = rAttribs.getToken(XML_pos, XML_t);
 
-                    return new LegendContext( *this, mrModel.mxLegend.create(),
-                            bOverlay, nPos);
+                    LegendModel& rLegend = mrModel.mxLegend.create();
+                    rLegend.mnAlign = rAttribs.getToken(XML_align, XML_ctr);
+                    return new LegendContext( *this, rLegend, bOverlay, nPos);
                 }
                 case CX_TOKEN(extLst):
                     // TODO

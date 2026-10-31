@@ -19,6 +19,7 @@
 
 #include <drawingml/chart/titleconverter.hxx>
 
+#include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/chart/ChartLegendExpansion.hpp>
 #include <com/sun/star/chart2/FormattedString.hpp>
 #include <com/sun/star/chart2/LegendPosition.hpp>
@@ -306,6 +307,15 @@ void LegendConverter::convertFromModel( const Reference< XDiagram >& rxDiagram, 
             aPropSet.setProperty( PROP_RelativePosition, Any(eRelPos));
 
         aPropSet.setProperty(PROP_Overlay, mrModel.mbOverlay);
+
+        if (eCT == ChartType::CX && !bManualLayout && !bTopRight
+            && (mrModel.mnAlign == XML_min || mrModel.mnAlign == XML_max))
+        {
+            Reference<css::beans::XPropertySet> xLegendProps(xLegend, UNO_QUERY);
+            if (xLegendProps.is())
+                xLegendProps->setPropertyValue(u"SideAlignment"_ustr,
+                                               Any(sal_Int16(mrModel.mnAlign == XML_min ? 1 : 2)));
+        }
 
         if (mrModel.maLegendEntries.size() > 0)
             legendEntriesFormatting(rxDiagram);
