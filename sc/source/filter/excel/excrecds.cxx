@@ -934,6 +934,9 @@ ExcAutoFilterRecs::ExcAutoFilterRecs( const XclExpRoot& rRoot, SCTAB nTab, const
     ScRange aRange( aParam.nCol1, aParam.nRow1, aParam.nTab,
                     aParam.nCol2, aParam.nRow2, aParam.nTab );
     aRange.PutInOrder();
+    // the autoFilter of a table does not cover its totals row (as Excel writes it)
+    if (pDefinedData && pDefinedData->HasTotals() && aRange.aEnd.Row() > aRange.aStart.Row())
+        aRange.aEnd.IncRow(-1);
     SCCOL nColCnt = aRange.aEnd.Col() - aRange.aStart.Col() + 1;
 
     maRef = aRange;
