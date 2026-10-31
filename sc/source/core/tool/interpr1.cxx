@@ -3925,8 +3925,47 @@ void ScInterpreter::ScJis()
  */
 void ScInterpreter::ScAsc()
 {
-    if (MustHaveParamCount( GetByte(), 1))
-        PushString( lcl_convertIntoHalfWidth( GetString().getString()));
+    if (!MustHaveParamCount( GetByte(), 1))
+        return;
+    OUString aStr;
+    if (GetRawStackType() == svDouble)
+    {
+        // Excel converts a boolean as its name, =ASC(TRUE) gives TRUE.
+        double fVal = PopDouble();
+        if (nCurFmtType == SvNumFormatType::LOGICAL)
+            aStr = (fVal != 0.0) ? u"TRUE"_ustr : u"FALSE"_ustr;
+        else
+            aStr = GetStringFromDouble( fVal).getString();
+    }
+    else
+        aStr = GetString().getString();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;
+    }
+    const OUString aLang = ScGlobal::getLocaleData().getLanguageTag().getLanguage();
+    if (aLang == "ja")
+    {
+        PushString( lcl_convertIntoHalfWidth( aStr));
+        return;
+    }
+    // Measured in Korean Excel, the inverse of DBCS: U+FF01..U+FF5E become
+    // ASCII, U+3000 becomes a space and the full-width won sign a backslash;
+    // katakana and all other characters are left unchanged.
+    OUStringBuffer aBuf( aStr.getLength());
+    for (sal_Int32 i = 0; i < aStr.getLength(); ++i)
+    {
+        sal_Unicode c = aStr[i];
+        if (c == 0x3000)
+            c = ' ';
+        else if (c == 0xFFE6 && aLang == "ko")
+            c = '\\';
+        else if (c >= 0xFF01 && c <= 0xFF5E)
+            c = c - 0xFEE0;
+        aBuf.append( c);
+    }
+    PushString( aBuf.makeStringAndClear());
 }
 
 /* Excel DBCS: converts half-width ASCII to full-width. Measured in Korean
