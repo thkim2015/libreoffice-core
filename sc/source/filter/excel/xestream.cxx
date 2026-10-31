@@ -1139,7 +1139,18 @@ bool XclExpXmlStream::exportDocument()
     if (mbExportVBA)
     {
         VbaExport aExport(getModel());
-        if (aExport.containsVBAProject())
+        const ScDocument& rVbaDoc = mpRoot->GetDoc();
+        if (aExport.containsVBAProject() && !rVbaDoc.GetOriginalVbaProject().empty()
+            && rVbaDoc.GetOriginalVbaFingerprint() == aExport.getModulesFingerprint())
+        {
+            // macros unchanged: write the loaded project back as it was
+            const std::vector<sal_Int8>& rBytes = rVbaDoc.GetOriginalVbaProject();
+            css::uno::Reference<css::io::XOutputStream> xVBAOutput =
+                openFragmentStream(u"xl/vbaProject.bin"_ustr, u"application/vnd.ms-office.vbaProject"_ustr);
+            xVBAOutput->writeBytes(css::uno::Sequence<sal_Int8>(rBytes.data(), rBytes.size()));
+            addRelation(GetCurrentStream()->getOutputStream(), oox::getRelationship(Relationship::VBAPROJECT), u"vbaProject.bin");
+        }
+        else if (aExport.containsVBAProject())
         {
             SvMemoryStream aVbaStream(4096, 4096);
             rtl::Reference<SotStorage> pVBAStorage(new SotStorage(aVbaStream));

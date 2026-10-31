@@ -435,6 +435,8 @@ private:
     std::vector<OUString> maTabNames;               // for undo document, we need the information tab name <-> index
     mutable std::unique_ptr<ScRangeName>    pRangeName;
     std::unique_ptr<ScDBCollection>         pDBCollection;
+    std::vector<sal_Int8> maOrigVbaProject;
+    OUString maOrigVbaFingerprint;
     std::unique_ptr<ScDPCollection>         pDPCollection;
     std::unique_ptr< ScTemporaryChartLock > apTemporaryChartLock;
     std::unique_ptr<ScPatternAttr>          pSelectionAttr;                 // Attributes of a block
@@ -1182,6 +1184,11 @@ public:
     SC_DLLPUBLIC void           SetTabBgColor( SCTAB nTab, const Color& rColor );
     /// OOXML <ignoredErrors> of the sheet (error checking exceptions)
     SC_DLLPUBLIC const std::vector<ScIgnoredErrors>* GetIgnoredErrors( SCTAB nTab ) const;
+    /// vbaProject.bin as loaded, written back unchanged while the macros are unchanged
+    SC_DLLPUBLIC void           SetOriginalVbaProject( std::vector<sal_Int8> aBytes ) { maOrigVbaProject = std::move(aBytes); }
+    SC_DLLPUBLIC void           SetOriginalVbaFingerprint( const OUString& rFingerprint ) { maOrigVbaFingerprint = rFingerprint; }
+    const std::vector<sal_Int8>& GetOriginalVbaProject() const { return maOrigVbaProject; }
+    const OUString&             GetOriginalVbaFingerprint() const { return maOrigVbaFingerprint; }
     SC_DLLPUBLIC void           SetIgnoredErrors( SCTAB nTab, std::vector<ScIgnoredErrors> aList );
     SC_DLLPUBLIC bool           IsDefaultTabBgColor( SCTAB nTab ) const;
     void                        GetScenarioFlags(SCTAB nTab, ScScenarioFlags &rFlags) const;

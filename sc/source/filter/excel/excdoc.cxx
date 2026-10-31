@@ -104,6 +104,26 @@ private:
 
 }
 
+namespace {
+
+/** Writes the codeName attribute of <workbookPr> (VBA ThisWorkbook module). */
+class XclExpXmlCodeName : public XclExpRecordBase
+{
+public:
+    explicit XclExpXmlCodeName( OUString aName ) : maName( std::move(aName) ) {}
+
+    virtual void SaveXml( XclExpXmlStream& rStrm ) override
+    {
+        if (!maName.isEmpty())
+            rStrm.WriteAttributes(XML_codeName, maName);
+    }
+
+private:
+    OUString maName;
+};
+
+}
+
 static OUString lcl_GetVbaTabName( SCTAB n )
 {
     OUString aRet = "__VBA__"  + OUString::number( static_cast<sal_uInt16>(n) );
@@ -385,6 +405,7 @@ void ExcTable::FillAsHeaderXml( ExcBoundsheetList& rBoundsheetList )
     Add( new XclExpBoolRecord(0x008D, false, XML_showObjects ) );   // HIDEOBJ
 
     Add( new Exc1904( rDoc ) );
+    Add( new XclExpXmlCodeName( rDoc.GetCodeName() ) );
     // OOXTODO: The following /workbook/workbookPr attributes are mapped
     //          to various BIFF records that are not currently supported:
     //

@@ -36,6 +36,10 @@ public:
 
     bool containsVBAProject();
 
+    /** Names, types and source code of all modules; equal before and after
+        a round trip unless the macros were changed. */
+    OUString getModulesFingerprint() const;
+
 private:
 
     css::uno::Reference<css::container::XNameContainer>

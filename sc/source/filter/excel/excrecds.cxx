@@ -366,15 +366,18 @@ XclExpXmlSheetPr::XclExpXmlSheetPr( bool bFitToPages, SCTAB nScTab, const Color&
 
 void XclExpXmlSheetPr::SaveXml( XclExpXmlStream& rStrm )
 {
+    // the VBA document module of the sheet: without it Excel drops the VBA project of an .xlsm
+    OUString aCodeName;
+    rStrm.GetRoot().GetDoc().GetCodeName(mnScTab, aCodeName);
     sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
     rWorksheet->startElement( XML_sheetPr,
+            XML_codeName, sax_fastparser::UseIf(aCodeName, !aCodeName.isEmpty()),
             // OOXTODO: XML_syncHorizontal,
             // OOXTODO: XML_syncVertical,
             // OOXTODO: XML_syncRef,
             // OOXTODO: XML_transitionEvaluation,
             // OOXTODO: XML_transitionEntry,
             // OOXTODO: XML_published,
-            // OOXTODO: XML_codeName,
             XML_filterMode, mpManager ? ToPsz(mpManager->HasFilterMode(mnScTab)) : nullptr
             // OOXTODO: XML_enableFormatConditionsCalculation
     );

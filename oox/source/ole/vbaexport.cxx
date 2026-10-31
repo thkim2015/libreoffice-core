@@ -9,6 +9,7 @@
 
 #include <sal/config.h>
 
+#include <algorithm>
 #include <cassert>
 #include <string_view>
 
@@ -34,6 +35,7 @@
 #include <utility>
 #include <rtl/ref.hxx>
 #include <rtl/tencinfo.h>
+#include <rtl/ustrbuf.hxx>
 #include <osl/thread.h>
 
 #define VBA_EXPORT_DEBUG 0
@@ -1145,6 +1147,27 @@ css::uno::Reference<css::container::XNameContainer> VbaExport::getBasicLibrary()
     }
 
     return xLibrary;
+}
+
+OUString VbaExport::getModulesFingerprint() const
+{
+    css::uno::Reference<css::container::XNameContainer> xNameContainer = getBasicLibrary();
+    if (!xNameContainer.is())
+        return OUString();
+    css::uno::Sequence<OUString> aNames = xNameContainer->getElementNames();
+    std::sort(aNames.getArray(), aNames.getArray() + aNames.getLength());
+    css::uno::Reference<css::script::vba::XVBAModuleInfo> xModuleInfo(xNameContainer, css::uno::UNO_QUERY);
+    OUStringBuffer aBuf;
+    for (const OUString& rName : aNames)
+    {
+        OUString aCode;
+        xNameContainer->getByName(rName) >>= aCode;
+        sal_Int32 nType = -1;
+        if (xModuleInfo.is() && xModuleInfo->hasModuleInfo(rName))
+            nType = xModuleInfo->getModuleInfo(rName).ModuleType;
+        aBuf.append(rName + "\n" + OUString::number(nType) + "\n" + aCode + "\n\x01\n");
+    }
+    return aBuf.makeStringAndClear();
 }
 
 bool VbaExport::containsVBAProject()

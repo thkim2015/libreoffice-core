@@ -98,6 +98,10 @@ public:
     /** Returns true, if this defined name describes a macro call.
         @param bFunc  true = Macro function; false = Macro procedure. */
     bool                IsMacroCall( bool bVBasic, bool bFunc ) const;
+    /** Returns true, if this is a NAME record created for a macro call or an
+        undefined name in a formula (not a defined name of the document). */
+    bool                IsMacroCallName() const { return mbFormulaName || ::get_flag( mnFlags, EXC_NAME_PROC ); }
+    void                SetFormulaName() { mbFormulaName = true; }
 
     /** Writes the entire NAME record to the passed stream. */
     virtual void        Save( XclExpStream& rStrm ) override;
@@ -118,6 +122,7 @@ private:
     std::unique_ptr<ScTokenArray> mpScTokenArray;
     ScAddress           maPos;
     sal_Unicode         mcBuiltIn;      /// The built-in index for built-in names.
+    bool                mbFormulaName = false; /// Created for a macro call or undefined name in a formula.
     SCTAB               mnScTab;        /// The Calc sheet index for local names.
     sal_uInt16          mnFlags;        /// Additional flags for this defined name.
     sal_uInt16          mnExtSheet;     /// The 1-based index to a global EXTERNSHEET record.
@@ -592,6 +597,7 @@ sal_uInt16 XclExpNameManagerImpl::InsertRawName( const OUString& rName )
 
     // create a new NAME record
     XclExpNameRef xName = new XclExpName( GetRoot(), rName );
+    xName->SetFormulaName();
     return Append( xName );
 }
 
@@ -634,11 +640,22 @@ void XclExpNameManagerImpl::Save( XclExpStream& rStrm )
 
 void XclExpNameManagerImpl::SaveXml( XclExpXmlStream& rStrm )
 {
-    if( maNameList.IsEmpty() )
+    // NAME records of macro calls are BIFF only: OOXML formulas call a macro by its
+    // function name, and a defined name with that name would hide the VBA function
+    // in Excel (#NAME?, the macro cannot be run).
+    std::vector<XclExpNameRef> aNames;
+    for( size_t nIdx = 0, nSize = maNameList.GetSize(); nIdx < nSize; ++nIdx )
+    {
+        XclExpNameRef xName = maNameList.GetRecord( nIdx );
+        if( !xName->IsMacroCallName() )
+            aNames.push_back( xName );
+    }
+    if( aNames.empty() )
         return;
     sax_fastparser::FSHelperPtr& rWorkbook = rStrm.GetCurrentStream();
     rWorkbook->startElement(XML_definedNames);
-    maNameList.SaveXml( rStrm );
+    for( const XclExpNameRef& xName : aNames )
+        xName->SaveXml( rStrm );
     rWorkbook->endElement( XML_definedNames );
 }
 

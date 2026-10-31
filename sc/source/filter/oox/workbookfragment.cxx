@@ -544,6 +544,22 @@ void WorkbookFragment::finalizeImport()
             setVbaProjectStorage( xPrjStrg );
             getBaseFilter().getVbaProject().readVbaModules( *xPrjStrg );
         }
+        // keep the original bytes: Excel cannot always load the project LibreOffice rebuilds
+        try
+        {
+            Reference< XInputStream > xRaw = getBaseFilter().openInputStream( aVbaFragmentPath );
+            if( xRaw.is() )
+            {
+                std::vector<sal_Int8> aBytes;
+                css::uno::Sequence<sal_Int8> aBuf;
+                while (sal_Int32 nRead = xRaw->readBytes(aBuf, 65536))
+                    aBytes.insert(aBytes.end(), aBuf.begin(), aBuf.begin() + nRead);
+                getScDocument().SetOriginalVbaProject(std::move(aBytes));
+            }
+        }
+        catch( const css::uno::Exception& )
+        {
+        }
     }
 
     // lock the model to prevent broadcasting, speeds up load a lot

@@ -38,6 +38,7 @@
 #include <oox/helper/progressbar.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/ole/vbaproject.hxx>
+#include <oox/ole/vbaexport.hxx>
 #include <oox/token/properties.hxx>
 #include <tools/mapunit.hxx>
 #include <addressconverter.hxx>
@@ -730,7 +731,14 @@ void WorkbookHelper::finalizeWorkbookImport()
     // order to correctly resolve VBA custom function names.
     StorageRef xVbaPrjStrg = mrBookGlob.getVbaProjectStorage();
     if( xVbaPrjStrg && xVbaPrjStrg->isStorage() )
+    {
         getBaseFilter().getVbaProject().importModulesAndForms( *xVbaPrjStrg, getBaseFilter().getGraphicHelper() );
+        if( !getScDocument().GetOriginalVbaProject().empty() )
+        {
+            VbaExport aExport( getBaseFilter().getModel() );
+            getScDocument().SetOriginalVbaFingerprint( aExport.getModulesFingerprint() );
+        }
+    }
 
     // need to import formulas before scenarios
     mrBookGlob.getFormulaBuffer().finalizeImport();
