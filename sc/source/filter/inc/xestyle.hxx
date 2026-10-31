@@ -799,6 +799,7 @@ private:
 class XclExpXmlTableStyle : public XclExpRecordBase, protected XclExpRoot
 {
     std::map<ScTableStyleElement, sal_Int32> maTableElements;
+    std::map<ScTableStyleElement, sal_Int32> maStripeSizes;
     OUString maStyleName;
 
 public:

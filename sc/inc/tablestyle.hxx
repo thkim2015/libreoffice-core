@@ -91,6 +91,8 @@ public:
 
     void SetRowStripeSize(sal_Int32 nFirstRowStripeSize, sal_Int32 nSecondRowStripeSize);
     void SetColStripeSize(sal_Int32 nFirstColStripeSize, sal_Int32 nSecondColStripeSize);
+    /// stripe size of a stripe element (1 for the other elements)
+    sal_Int32 GetStripeSize(ScTableStyleElement eElement) const;
 
     void SetPattern(ScTableStyleElement eTableStyleElement,
                     std::unique_ptr<ScPatternAttr> pPattern);
@@ -124,6 +126,10 @@ public:
 
     void AddTableStyle(std::unique_ptr<ScTableStyle> pTableStyle);
     const ScTableStyle* GetTableStyle(const OUString& rName) const;
+    /// add or replace a style with the same name
+    void SetTableStyle(std::unique_ptr<ScTableStyle> pTableStyle);
+    /// styles that are not OOXML built-in ones (custom styles of the document)
+    std::vector<const ScTableStyle*> GetCustomTableStyles() const;
     bool HasTableStyle() const { return !maTableStyles.empty(); }
 
     /// Remove all styles marked as OOXML defaults (for regeneration after theme change)

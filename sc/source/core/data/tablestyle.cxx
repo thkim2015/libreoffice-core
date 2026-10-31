@@ -700,6 +700,23 @@ void ScTableStyle::SetColStripeSize(sal_Int32 nFirstColStripeSize, sal_Int32 nSe
         mnSecondColStripeSize = nSecondColStripeSize;
 }
 
+sal_Int32 ScTableStyle::GetStripeSize(ScTableStyleElement eElement) const
+{
+    switch (eElement)
+    {
+        case ScTableStyleElement::FirstRowStripe:
+            return mnFirstRowStripeSize;
+        case ScTableStyleElement::SecondRowStripe:
+            return mnSecondRowStripeSize;
+        case ScTableStyleElement::FirstColumnStripe:
+            return mnFirstColStripeSize;
+        case ScTableStyleElement::SecondColumnStripe:
+            return mnSecondColStripeSize;
+        default:
+            return 1;
+    }
+}
+
 void ScTableStyle::SetOOXMLDefault(bool bDefault) { mbIsOOXMLDefault = bDefault; }
 
 bool ScTableStyle::IsOOXMLDefault() const { return mbIsOOXMLDefault; }
@@ -831,6 +848,25 @@ void ScTableStyles::AddTableStyle(std::unique_ptr<ScTableStyle> pTableStyle)
     maTableStyles.insert({ pTableStyle->GetName(), std::move(pTableStyle) });
     if (mpBindings)
         mpBindings->Invalidate(SID_TABLE_STYLES);
+}
+
+void ScTableStyles::SetTableStyle(std::unique_ptr<ScTableStyle> pTableStyle)
+{
+    OUString aName = pTableStyle->GetName();
+    maTableStyles.insert_or_assign(aName, std::move(pTableStyle));
+    if (mpBindings)
+        mpBindings->Invalidate(SID_TABLE_STYLES);
+}
+
+std::vector<const ScTableStyle*> ScTableStyles::GetCustomTableStyles() const
+{
+    std::vector<const ScTableStyle*> aStyles;
+    for (const auto& rEntry : maTableStyles)
+        if (!rEntry.second->IsOOXMLDefault())
+            aStyles.push_back(rEntry.second.get());
+    std::sort(aStyles.begin(), aStyles.end(),
+              [](const ScTableStyle* a, const ScTableStyle* b) { return a->GetName() < b->GetName(); });
+    return aStyles;
 }
 
 void ScTableStyles::ClearOOXMLDefaultStyles()

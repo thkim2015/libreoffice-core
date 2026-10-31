@@ -98,6 +98,18 @@
 
 #include <cellsuno.hxx>
 #include <columnspanset.hxx>
+#include <tablestyle.hxx>
+#include <patattr.hxx>
+#include <scitems.hxx>
+#include <editeng/boxitem.hxx>
+#include <editeng/borderline.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
+#include <editeng/wghtitem.hxx>
+#include <editeng/postitem.hxx>
+#include <editeng/udlnitem.hxx>
+#include <editeng/crossedoutitem.hxx>
+#include <com/sun/star/table/BorderLine2.hpp>
 #include <convuno.hxx>
 #include <datauno.hxx>
 #include <docfunc.hxx>
@@ -206,6 +218,7 @@ static std::span<const SfxItemPropertyMapEntry> lcl_GetDocOptPropertyMap()
         {u"BuildId"_ustr,                      0, ::cppu::UnoType<OUString>::get(),                0, 0},
         { SC_UNO_CODENAME,                0, cppu::UnoType<OUString>::get(),                  0, 0},
         { SC_UNO_INTEROPGRABBAG,          0, cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(), 0, 0},
+        { SC_UNO_ZETATABLESTYLES,         0, cppu::UnoType<uno::Sequence< uno::Sequence< beans::PropertyValue >>>::get(), 0, 0},
     };
     return aDocOptPropertyMap_Impl;
 }
@@ -3252,6 +3265,187 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScModelObj::getPropertySetInfo(
     return aRef;
 }
 
+namespace {
+
+// Custom table styles as UNO data (property ZetaTableStyles): each style is
+// { Name, Elements = [ { Name = OOXML element type, Value = format } ], <element>Size }
+// and a format is { Fill, Color (RGB), Bold, Italic, Underline (1 single, 2 double),
+// Strike, Top/Bottom/Left/Right/InsideH/InsideV (BorderLine2) }.
+const std::pair<ScTableStyleElement, OUString> aZetaTableElements[] = {
+    { ScTableStyleElement::WholeTable, u"wholeTable"_ustr },
+    { ScTableStyleElement::FirstColumnStripe, u"firstColumnStripe"_ustr },
+    { ScTableStyleElement::SecondColumnStripe, u"secondColumnStripe"_ustr },
+    { ScTableStyleElement::FirstRowStripe, u"firstRowStripe"_ustr },
+    { ScTableStyleElement::SecondRowStripe, u"secondRowStripe"_ustr },
+    { ScTableStyleElement::LastColumn, u"lastColumn"_ustr },
+    { ScTableStyleElement::FirstColumn, u"firstColumn"_ustr },
+    { ScTableStyleElement::HeaderRow, u"headerRow"_ustr },
+    { ScTableStyleElement::TotalRow, u"totalRow"_ustr },
+    { ScTableStyleElement::FirstHeaderCell, u"firstHeaderCell"_ustr },
+    { ScTableStyleElement::LastHeaderCell, u"lastHeaderCell"_ustr },
+};
+
+std::unique_ptr<ScPatternAttr> lcl_ZetaPatternFromProps(ScDocument& rDoc, const uno::Sequence<beans::PropertyValue>& rProps)
+{
+    auto pPattern = std::make_unique<ScPatternAttr>(rDoc.getCellAttributeHelper());
+    SfxItemSet& rSet = pPattern->GetItemSetWritable();
+    SvxBoxItem aBox(ATTR_BORDER);
+    SvxBoxInfoItem aBoxInfo(ATTR_BORDER_INNER);
+    bool bBox = false, bInner = false;
+    for (const beans::PropertyValue& rProp : rProps)
+    {
+        sal_Int32 nVal = 0;
+        bool bVal = false;
+        table::BorderLine2 aLine;
+        if (rProp.Name == "Fill" && (rProp.Value >>= nVal))
+            rSet.Put(SvxBrushItem(Color(ColorTransparency, nVal), ATTR_BACKGROUND));
+        else if (rProp.Name == "Color" && (rProp.Value >>= nVal))
+            rSet.Put(SvxColorItem(Color(ColorTransparency, nVal), ATTR_FONT_COLOR));
+        else if (rProp.Name == "Bold" && (rProp.Value >>= bVal) && bVal)
+        {
+            rSet.Put(SvxWeightItem(WEIGHT_BOLD, ATTR_FONT_WEIGHT));
+            rSet.Put(SvxWeightItem(WEIGHT_BOLD, ATTR_CJK_FONT_WEIGHT));
+            rSet.Put(SvxWeightItem(WEIGHT_BOLD, ATTR_CTL_FONT_WEIGHT));
+        }
+        else if (rProp.Name == "Italic" && (rProp.Value >>= bVal) && bVal)
+        {
+            rSet.Put(SvxPostureItem(ITALIC_NORMAL, ATTR_FONT_POSTURE));
+            rSet.Put(SvxPostureItem(ITALIC_NORMAL, ATTR_CJK_FONT_POSTURE));
+            rSet.Put(SvxPostureItem(ITALIC_NORMAL, ATTR_CTL_FONT_POSTURE));
+        }
+        else if (rProp.Name == "Underline" && (rProp.Value >>= nVal) && nVal > 0)
+            rSet.Put(SvxUnderlineItem(nVal == 2 ? LINESTYLE_DOUBLE : LINESTYLE_SINGLE, ATTR_FONT_UNDERLINE));
+        else if (rProp.Name == "Strike" && (rProp.Value >>= bVal) && bVal)
+            rSet.Put(SvxCrossedOutItem(STRIKEOUT_SINGLE, ATTR_FONT_CROSSEDOUT));
+        else if (rProp.Value >>= aLine)
+        {
+            editeng::SvxBorderLine aSvxLine;
+            if (!SvxBoxItem::LineToSvxLine(aLine, aSvxLine, true))
+                continue;
+            if (rProp.Name == "Top") { aBox.SetLine(&aSvxLine, SvxBoxItemLine::TOP); bBox = true; }
+            else if (rProp.Name == "Bottom") { aBox.SetLine(&aSvxLine, SvxBoxItemLine::BOTTOM); bBox = true; }
+            else if (rProp.Name == "Left") { aBox.SetLine(&aSvxLine, SvxBoxItemLine::LEFT); bBox = true; }
+            else if (rProp.Name == "Right") { aBox.SetLine(&aSvxLine, SvxBoxItemLine::RIGHT); bBox = true; }
+            else if (rProp.Name == "InsideH") { aBoxInfo.SetLine(&aSvxLine, SvxBoxInfoItemLine::HORI); bInner = true; }
+            else if (rProp.Name == "InsideV") { aBoxInfo.SetLine(&aSvxLine, SvxBoxInfoItemLine::VERT); bInner = true; }
+        }
+    }
+    if (bBox)
+        rSet.Put(aBox);
+    if (bInner)
+        rSet.Put(aBoxInfo);
+    return pPattern;
+}
+
+uno::Sequence<beans::PropertyValue> lcl_ZetaPropsFromPattern(const ScPatternAttr& rPattern)
+{
+    std::vector<beans::PropertyValue> aProps;
+    const SfxItemSet& rSet = rPattern.GetItemSet();
+    if (const SvxBrushItem* pBrush = rSet.GetItemIfSet(ATTR_BACKGROUND))
+        if (!pBrush->GetColor().IsTransparent())
+            aProps.push_back(comphelper::makePropertyValue(u"Fill"_ustr, sal_Int32(pBrush->GetColor().GetRGBColor())));
+    if (const SvxColorItem* pColor = rSet.GetItemIfSet(ATTR_FONT_COLOR))
+        aProps.push_back(comphelper::makePropertyValue(u"Color"_ustr, sal_Int32(pColor->GetValue().GetRGBColor())));
+    if (const SvxWeightItem* pWeight = rSet.GetItemIfSet(ATTR_FONT_WEIGHT))
+        if (pWeight->GetWeight() >= WEIGHT_SEMIBOLD)
+            aProps.push_back(comphelper::makePropertyValue(u"Bold"_ustr, true));
+    if (const SvxPostureItem* pPosture = rSet.GetItemIfSet(ATTR_FONT_POSTURE))
+        if (pPosture->GetPosture() != ITALIC_NONE)
+            aProps.push_back(comphelper::makePropertyValue(u"Italic"_ustr, true));
+    if (const SvxUnderlineItem* pUnder = rSet.GetItemIfSet(ATTR_FONT_UNDERLINE))
+        if (pUnder->GetLineStyle() != LINESTYLE_NONE)
+            aProps.push_back(comphelper::makePropertyValue(u"Underline"_ustr, sal_Int32(pUnder->GetLineStyle() == LINESTYLE_DOUBLE ? 2 : 1)));
+    if (const SvxCrossedOutItem* pCross = rSet.GetItemIfSet(ATTR_FONT_CROSSEDOUT))
+        if (pCross->GetStrikeout() != STRIKEOUT_NONE)
+            aProps.push_back(comphelper::makePropertyValue(u"Strike"_ustr, true));
+    if (const SvxBoxItem* pBox = rSet.GetItemIfSet(ATTR_BORDER))
+    {
+        const std::pair<SvxBoxItemLine, OUString> aSides[] = { { SvxBoxItemLine::TOP, u"Top"_ustr }, { SvxBoxItemLine::BOTTOM, u"Bottom"_ustr },
+                                                               { SvxBoxItemLine::LEFT, u"Left"_ustr }, { SvxBoxItemLine::RIGHT, u"Right"_ustr } };
+        for (const auto& [eLine, aName] : aSides)
+            if (const editeng::SvxBorderLine* pLine = pBox->GetLine(eLine))
+                aProps.push_back(comphelper::makePropertyValue(aName, SvxBoxItem::SvxLineToLine(pLine, true)));
+    }
+    if (const SvxBoxInfoItem* pInfo = rSet.GetItemIfSet(ATTR_BORDER_INNER))
+    {
+        if (const editeng::SvxBorderLine* pLine = pInfo->GetHori())
+            aProps.push_back(comphelper::makePropertyValue(u"InsideH"_ustr, SvxBoxItem::SvxLineToLine(pLine, true)));
+        if (const editeng::SvxBorderLine* pLine = pInfo->GetVert())
+            aProps.push_back(comphelper::makePropertyValue(u"InsideV"_ustr, SvxBoxItem::SvxLineToLine(pLine, true)));
+    }
+    return comphelper::containerToSequence(aProps);
+}
+
+void lcl_ZetaSetTableStyles(ScDocument& rDoc, const uno::Sequence<uno::Sequence<beans::PropertyValue>>& rStyles)
+{
+    ScTableStyles* pStyles = rDoc.GetTableStyles();
+    if (!pStyles)
+        return;
+    for (const uno::Sequence<beans::PropertyValue>& rStyle : rStyles)
+    {
+        OUString aName;
+        uno::Sequence<beans::PropertyValue> aElements;
+        std::map<OUString, sal_Int32> aSizes;
+        for (const beans::PropertyValue& rProp : rStyle)
+        {
+            sal_Int32 nSize = 0;
+            if (rProp.Name == "Name")
+                rProp.Value >>= aName;
+            else if (rProp.Name == "Elements")
+                rProp.Value >>= aElements;
+            else if (rProp.Name.endsWith("Size") && (rProp.Value >>= nSize))
+                aSizes[rProp.Name.copy(0, rProp.Name.getLength() - 4)] = nSize;
+        }
+        if (aName.isEmpty())
+            continue;
+        auto pStyle = std::make_unique<ScTableStyle>(aName, std::optional<OUString>());
+        pStyle->SetOOXMLDefault(false);
+        for (const beans::PropertyValue& rElement : aElements)
+        {
+            uno::Sequence<beans::PropertyValue> aFormat;
+            if (!(rElement.Value >>= aFormat))
+                continue;
+            for (const auto& [eElement, aType] : aZetaTableElements)
+                if (aType == rElement.Name)
+                    pStyle->SetPattern(eElement, lcl_ZetaPatternFromProps(rDoc, aFormat));
+        }
+        auto size = [&aSizes](const OUString& rKey) { auto it = aSizes.find(rKey); return it == aSizes.end() ? -1 : it->second; };
+        pStyle->SetRowStripeSize(size(u"firstRowStripe"_ustr), size(u"secondRowStripe"_ustr));
+        pStyle->SetColStripeSize(size(u"firstColumnStripe"_ustr), size(u"secondColumnStripe"_ustr));
+        pStyles->SetTableStyle(std::move(pStyle));
+    }
+}
+
+uno::Sequence<uno::Sequence<beans::PropertyValue>> lcl_ZetaGetTableStyles(const ScDocument& rDoc)
+{
+    std::vector<uno::Sequence<beans::PropertyValue>> aOut;
+    const ScTableStyles* pStyles = rDoc.GetTableStyles();
+    if (!pStyles)
+        return {};
+    for (const ScTableStyle* pStyle : pStyles->GetCustomTableStyles())
+    {
+        std::vector<beans::PropertyValue> aStyle { comphelper::makePropertyValue(u"Name"_ustr, pStyle->GetName()) };
+        std::vector<beans::PropertyValue> aElements;
+        for (const auto& [eElement, pPattern] : pStyle->GetSetPatterns())
+        {
+            for (const auto& [eKnown, aType] : aZetaTableElements)
+            {
+                if (eKnown != eElement)
+                    continue;
+                aElements.push_back(comphelper::makePropertyValue(aType, lcl_ZetaPropsFromPattern(*pPattern)));
+                sal_Int32 nSize = pStyle->GetStripeSize(eElement);
+                if (nSize > 1)
+                    aStyle.push_back(comphelper::makePropertyValue(aType + "Size", nSize));
+            }
+        }
+        aStyle.push_back(comphelper::makePropertyValue(u"Elements"_ustr, comphelper::containerToSequence(aElements)));
+        aOut.push_back(comphelper::containerToSequence(aStyle));
+    }
+    return comphelper::containerToSequence(aOut);
+}
+
+}
+
 void SAL_CALL ScModelObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
 {
@@ -3291,6 +3485,15 @@ void SAL_CALL ScModelObj::setPropertyValue(
             rDoc.GetLanguage( eLatin, eCjk, eCtl );
             eLatin = ScUnoConversion::GetLanguage(aLocale);
             rDoc.SetLanguage( eLatin, eCjk, eCtl );
+        }
+    }
+    else if ( aPropertyName == SC_UNO_ZETATABLESTYLES )
+    {
+        uno::Sequence<uno::Sequence<beans::PropertyValue>> aStyles;
+        if ( aValue >>= aStyles )
+        {
+            lcl_ZetaSetTableStyles( rDoc, aStyles );
+            pDocShell->SetDocumentModified();
         }
     }
     else if ( aPropertyName == SC_UNO_CODENAME )
@@ -3519,6 +3722,10 @@ uno::Any SAL_CALL ScModelObj::getPropertyValue( const OUString& aPropertyName )
         else if ( aPropertyName == SC_UNO_FORBIDDEN )
         {
             aRet <<= uno::Reference<i18n::XForbiddenCharacters>(new ScForbiddenCharsObj( pDocShell ));
+        }
+        else if ( aPropertyName == SC_UNO_ZETATABLESTYLES )
+        {
+            aRet <<= lcl_ZetaGetTableStyles( rDoc );
         }
         else if ( aPropertyName == SC_UNO_HASDRAWPAGES )
         {

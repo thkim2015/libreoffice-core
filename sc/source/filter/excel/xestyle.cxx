@@ -3398,6 +3398,9 @@ XclExpXmlTableStyle::XclExpXmlTableStyle(const XclExpRoot& rRoot, const ScTableS
     for (auto& rElement : aTableElements)
     {
         maTableElements.emplace(rElement.first, rDxfs.fillFromPattern(rElement.second));
+        sal_Int32 nSize = pTableStyle->GetStripeSize(rElement.first);
+        if (nSize > 1)
+            maStripeSizes.emplace(rElement.first, nSize);
     }
 }
 
@@ -3411,7 +3414,11 @@ void XclExpXmlTableStyle::SaveXml( XclExpXmlStream& rStrm )
     {
         const auto aFind = aTableStyleElementToOOXML.find(rTableStyleElement.first);
         assert(aFind != aTableStyleElementToOOXML.end() && "will be found, see aTableStyleElementToOOXML above");
-        rStyleSheet->singleElement( XML_tableStyleElement, XML_dxfId, OString::number(rTableStyleElement.second), XML_type, aFind->second);
+        const auto aSize = maStripeSizes.find(rTableStyleElement.first);
+        if (aSize != maStripeSizes.end())
+            rStyleSheet->singleElement( XML_tableStyleElement, XML_dxfId, OString::number(rTableStyleElement.second), XML_type, aFind->second, XML_size, OString::number(aSize->second));
+        else
+            rStyleSheet->singleElement( XML_tableStyleElement, XML_dxfId, OString::number(rTableStyleElement.second), XML_type, aFind->second);
     }
     rStyleSheet->endElement(XML_tableStyle);
 }

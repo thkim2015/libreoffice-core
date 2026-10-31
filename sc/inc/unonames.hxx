@@ -334,6 +334,7 @@ inline constexpr OUString SC_UNONAME_TOKENINDEX       = u"TokenIndex"_ustr;
 inline constexpr OUString SC_UNONAME_ISSHAREDFMLA     = u"IsSharedFormula"_ustr;
 inline constexpr OUString SC_UNONAME_TOTALSROW        = u"TotalsRow"_ustr;
 inline constexpr OUString SC_UNONAME_ZETACALCCOLUMNS  = u"ZetaCalculatedColumnFormulas"_ustr;
+inline constexpr OUString SC_UNO_ZETATABLESTYLES      = u"ZetaTableStyles"_ustr;
 inline constexpr OUString SC_UNONAME_NUMBERBEHAVIOR   = u"NumberBehavior"_ustr;
 inline constexpr OUString SC_UNONAME_TABLETYPE        = u"TableType"_ustr;
 inline constexpr OUString SC_UNONAME_TABLE_STYLENAME  = u"TableStyleName"_ustr;
