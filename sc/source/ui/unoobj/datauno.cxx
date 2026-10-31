@@ -59,6 +59,8 @@
 #include <sortparam.hxx>
 #include <dpobject.hxx>
 #include <filterentries.hxx>
+#include <compiler.hxx>
+#include <tokenarray.hxx>
 
 #include <comphelper/extract.hxx>
 #include <cppuhelper/supportsservice.hxx>
@@ -1911,6 +1913,38 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDatabaseRangeObj::getProperty
     return aRef;
 }
 
+namespace {
+
+// Formula text of a table calculated column, converted between grammars at the
+// first data cell of the column. Returns an empty string when it does not compile.
+OUString lcl_ConvertCalculatedFormula( ScDocument& rDoc, const ScAddress& rPos, const OUString& rText,
+        formula::FormulaGrammar::Grammar eFrom, formula::FormulaGrammar::Grammar eTo )
+{
+    OUString aText = rText.trim();
+    if (aText.startsWith("="))
+        aText = aText.copy(1);
+    if (aText.isEmpty())
+        return OUString();
+    ScCompiler aComp(rDoc, rPos, eFrom);
+    std::unique_ptr<ScTokenArray> pArr(aComp.CompileString(aText));
+    if (!pArr || pArr->GetCodeError() != FormulaError::NONE)
+        return OUString();
+    ScCompiler aOut(rDoc, rPos, *pArr, eTo);
+    OUStringBuffer aBuf;
+    aOut.CreateStringFromTokenArray(aBuf);
+    return aBuf.makeStringAndClear();
+}
+
+ScAddress lcl_CalculatedColumnPos( const ScDBData& rData, size_t nColumn )
+{
+    ScRange aRange;
+    rData.GetArea(aRange);
+    return ScAddress(aRange.aStart.Col() + static_cast<SCCOL>(nColumn),
+                     aRange.aStart.Row() + (rData.HasHeader() ? 1 : 0), aRange.aStart.Tab());
+}
+
+}
+
 void SAL_CALL ScDatabaseRangeObj::setPropertyValue(
                         const OUString& aPropertyName, const uno::Any& aValue )
 {
@@ -2000,6 +2034,24 @@ void SAL_CALL ScDatabaseRangeObj::setPropertyValue(
         OUString aStrVal;
         aValue >>= aStrVal;
         aNewData.SetTableType(aStrVal);
+    }
+    else if ( aPropertyName == SC_UNONAME_ZETACALCCOLUMNS )
+    {
+        // one API formula per table column (first data row), empty = not a calculated column
+        uno::Sequence<OUString> aSeq;
+        if (!(aValue >>= aSeq))
+            throw lang::IllegalArgumentException();
+        ScDocument& rDoc = pDocShell->GetDocument();
+        aNewData.RefreshTableColumnNames(&rDoc);
+        const std::vector<OUString>& rNames = aNewData.GetTableColumnNames();
+        for (size_t i = 0; i < rNames.size(); ++i)
+        {
+            OUString aOoxml;
+            if (i < o3tl::make_unsigned(aSeq.getLength()))
+                aOoxml = lcl_ConvertCalculatedFormula(rDoc, lcl_CalculatedColumnPos(aNewData, i), aSeq[i],
+                        formula::FormulaGrammar::GRAM_API, formula::FormulaGrammar::GRAM_OOXML);
+            aNewData.SetCalculatedColumnFormula(rNames[i], aOoxml);
+        }
     }
     else if (aPropertyName == SC_UNONAME_TABLE_STYLENAME)
     {
@@ -2120,6 +2172,25 @@ uno::Any SAL_CALL ScDatabaseRangeObj::getPropertyValue( const OUString& aPropert
             bool bHeader(GetDBData_Impl()->HasHeader());
 
             aRet <<= bHeader;
+        }
+        else if (aPropertyName == SC_UNONAME_ZETACALCCOLUMNS )
+        {
+            ScDocument& rDoc = pDocShell->GetDocument();
+            pData->RefreshTableColumnNames(&rDoc);
+            const std::vector<OUString>& rNames = pData->GetTableColumnNames();
+            uno::Sequence<OUString> aSeq(rNames.size());
+            auto pSeq = aSeq.getArray();
+            for (size_t i = 0; i < rNames.size(); ++i)
+            {
+                const OUString aOoxml = pData->GetCalculatedColumnFormula(rNames[i]);
+                if (aOoxml.isEmpty())
+                    continue;
+                const OUString aApi = lcl_ConvertCalculatedFormula(rDoc, lcl_CalculatedColumnPos(*pData, i), aOoxml,
+                        formula::FormulaGrammar::GRAM_OOXML, formula::FormulaGrammar::GRAM_API);
+                if (!aApi.isEmpty())
+                    pSeq[i] = "=" + aApi;
+            }
+            aRet <<= aSeq;
         }
         else if (aPropertyName == SC_UNONAME_TABLETYPE )
         {

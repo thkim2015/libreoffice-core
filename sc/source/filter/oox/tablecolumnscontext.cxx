@@ -40,6 +40,9 @@ void TableColumnContext::onCharacters( const rtl::OUString& rChars )
         case XLS_TOKEN( totalsRowFormula ):
             mrTableColumn.setFunc(rChars);
         break;
+        case XLS_TOKEN( calculatedColumnFormula ):
+            mrTableColumn.setCalculatedFormula(rChars);
+        break;
     }
 }
 
@@ -49,6 +52,11 @@ ContextHandlerRef TableColumnContext::onCreateContext( sal_Int32 nElement, const
     {
         case XLS_TOKEN(xmlColumnPr):
             mrTableColumn.importXmlColumnPr( rAttribs );
+        break;
+        case XLS_TOKEN(calculatedColumnFormula):
+            // array calculated column formulas are not supported
+            if (getCurrentElement() == XLS_TOKEN(tableColumn) && !rAttribs.getBool(XML_array, false))
+                return this;
         break;
         case XLS_TOKEN(totalsRowFormula):
         {

@@ -152,6 +152,8 @@ bool TableColumns::finalizeImport( ScDBData* pDBData, bool bQueryTable )
         {
             aNames[i] = rxTableColumn->getName();
             pDBData->SetTableColumnModel( rxTableColumn->getModel() );
+            if (!rxTableColumn->getCalculatedFormula().isEmpty())
+                pDBData->SetCalculatedColumnFormula( aNames[i], rxTableColumn->getCalculatedFormula() );
             aAttributes[i].maTotalsRowLabel = rxTableColumn->getColumnRowLabel();
             aAttributes[i].maTotalsFunction = rxTableColumn->getColumnSubTotal();
             aAttributes[i].maCustomFunction = rxTableColumn->getColumnFunction();

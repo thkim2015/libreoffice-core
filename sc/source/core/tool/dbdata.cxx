@@ -445,6 +445,7 @@ ScDBData::ScDBData( const ScDBData& rData ) :
     bAutoFilter         (rData.bAutoFilter),
     bModified           (rData.bModified),
     maTableColumnNames  (rData.maTableColumnNames),
+    maCalculatedColumnFormulas(rData.maCalculatedColumnFormulas),
     mbTableColumnNamesDirty(rData.mbTableColumnNamesDirty),
     nFilteredRowCount   (rData.nFilteredRowCount)
 {
@@ -482,6 +483,7 @@ ScDBData::ScDBData( const OUString& rName, const ScDBData& rData ) :
     bAutoFilter         (rData.bAutoFilter),
     bModified           (rData.bModified),
     maTableColumnNames  (rData.maTableColumnNames),
+    maCalculatedColumnFormulas(rData.maCalculatedColumnFormulas),
     mbTableColumnNamesDirty (rData.mbTableColumnNamesDirty),
     nFilteredRowCount   (rData.nFilteredRowCount)
 {
@@ -528,6 +530,7 @@ ScDBData& ScDBData::operator= (const ScDBData& rData)
         nIndex              = rData.nIndex;
         bAutoFilter         = rData.bAutoFilter;
         nFilteredRowCount   = rData.nFilteredRowCount;
+        maCalculatedColumnFormulas = rData.maCalculatedColumnFormulas;
         if (rData.mpTableStyles)
             mpTableStyles.reset(new ScTableStyleParam(*rData.mpTableStyles));
         else
@@ -1361,6 +1364,20 @@ void ScDBData::SetTableColumnNames( ::std::vector< OUString >&& rNames )
 {
     maTableColumnNames = std::move(rNames);
     mbTableColumnNamesDirty = false;
+}
+
+void ScDBData::SetCalculatedColumnFormula( const OUString& rColumn, const OUString& rFormula )
+{
+    if (rFormula.isEmpty())
+        maCalculatedColumnFormulas.erase(rColumn);
+    else
+        maCalculatedColumnFormulas[rColumn] = rFormula;
+}
+
+OUString ScDBData::GetCalculatedColumnFormula( const OUString& rColumn ) const
+{
+    auto it = maCalculatedColumnFormulas.find(rColumn);
+    return it == maCalculatedColumnFormulas.end() ? OUString() : it->second;
 }
 
 void ScDBData::AdjustTableColumnNames( UpdateRefMode eUpdateRefMode, SCCOL nDx, SCCOL nCol1,

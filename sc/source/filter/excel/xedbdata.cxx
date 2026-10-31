@@ -11,6 +11,8 @@
 #include <excrecds.hxx>
 #include <dbdata.hxx>
 #include <document.hxx>
+#include <formulacell.hxx>
+#include <xestream.hxx>
 #include <querytablebuffer.hxx>
 #include <tablestyle.hxx>
 #include <xelink.hxx>
@@ -187,6 +189,51 @@ void XclExpTables::AppendTable( const ScDBData* pData, sal_Int32 nTableId )
     maTables.emplace_back( pData, nTableId);
 }
 
+namespace {
+
+/** The calculated column formula to write for a table column: the one read from the
+    file while a data cell still has exactly that formula, else the formula all data
+    cells share (same OOXML text, e.g. a structured [#This Row] reference). */
+OUString lcl_CalculatedColumnFormula( XclExpXmlStream& rStrm, const ScDBData& rData,
+        const ScRange& rRange, size_t nColumn, const OUString& rName )
+{
+    ScDocument& rDoc = rStrm.GetRoot().GetDoc();
+    const SCCOL nCol = rRange.aStart.Col() + static_cast<SCCOL>(nColumn);
+    const SCROW nRow1 = rRange.aStart.Row() + (rData.HasHeader() ? 1 : 0);
+    const SCROW nRow2 = rRange.aEnd.Row() - (rData.HasTotals() ? 1 : 0);
+    if (nRow1 > nRow2)
+        return OUString();
+    const OUString aStored = rData.GetCalculatedColumnFormula(rName);
+    OUString aShared;
+    bool bAll = true;
+    bool bStoredUsed = false;
+    for (SCROW nRow = nRow1; nRow <= nRow2; ++nRow)
+    {
+        ScAddress aPos(nCol, nRow, rRange.aStart.Tab());
+        ScFormulaCell* pCell = rDoc.GetFormulaCell(aPos);
+        if (!pCell || pCell->GetMatrixFlag() != ScMatrixMode::NONE)
+        {
+            bAll = false;
+            continue;
+        }
+        OUString aText = XclXmlUtils::ToOUString(rStrm.GetRoot().GetCompileFormulaContext(), aPos, pCell->GetCode());
+        if (aText == aStored)
+            bStoredUsed = true;
+        if (nRow == nRow1)
+            aShared = aText;
+        else if (aText != aShared)
+            bAll = false;
+    }
+    // A stored formula that no cell uses any more (renamed table or column) would make
+    // the file invalid for Excel.
+    if (!aStored.isEmpty() && bStoredUsed)
+        return aStored;
+    // a single data row does not make a calculated column of its own
+    return (bAll && nRow2 > nRow1) ? aShared : OUString();
+}
+
+}
+
 void XclExpTables::SaveTableXml( XclExpXmlStream& rStrm, const Entry& rEntry )
 {
     const ScDBData& rData = *rEntry.mpData;
@@ -273,9 +320,7 @@ void XclExpTables::SaveTableXml( XclExpXmlStream& rStrm, const Entry& rEntry )
 
         for (size_t i=0, n=rColNames.size(); i < n; ++i)
         {
-            // OOXTODO: write <calculatedColumnFormula> once we support it, in
-            // which case we'd need start/endElement XML_tableColumn for such
-            // column.
+            const OUString aCalculated = lcl_CalculatedColumnFormula(rStrm, rData, aRange, i, rColNames[i]);
 
             std::optional<OUString> uniqueName = std::nullopt;
 
@@ -304,6 +349,14 @@ void XclExpTables::SaveTableXml( XclExpXmlStream& rStrm, const Entry& rEntry )
                     // OOXTODO: XML_totalsRowDxfId, ...,
                     // OOXTODO: XML_uniqueName, ...
             );
+
+            // calculatedColumnFormula comes first in CT_TableColumn
+            if (!aCalculated.isEmpty())
+            {
+                pTableStrm->startElement(XML_calculatedColumnFormula);
+                pTableStrm->writeEscaped(aCalculated);
+                pTableStrm->endElement(XML_calculatedColumnFormula);
+            }
 
             if (i < rTableColumnModel.size() && rTableColumnModel[i].mxXmlColumnPr)
             {

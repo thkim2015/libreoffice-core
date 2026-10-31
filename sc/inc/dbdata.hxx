@@ -28,6 +28,7 @@
 #include <svl/listener.hxx>
 #include <svl/poolitem.hxx>
 
+#include <map>
 #include <memory>
 #include <set>
 #include <vector>
@@ -185,6 +186,9 @@ private:
 
     ::std::vector< OUString > maTableColumnNames;   ///< names of table columns
     ::std::vector< TableColumnModel > maTableColumnModel;
+    /// Calculated column formulas (OOXML calculatedColumnFormula) keyed by column name,
+    /// in OOXML formula syntax.
+    ::std::map< OUString, OUString > maCalculatedColumnFormulas;
     bool            mbTableColumnNamesDirty;
     SCSIZE          nFilteredRowCount;
 
@@ -247,6 +251,11 @@ public:
     void        StartTableColumnNamesListener();
     void        EndTableColumnNamesListener();
     SC_DLLPUBLIC void SetTableColumnNames( ::std::vector< OUString >&& rNames );
+    /** Set the calculated column formula (OOXML syntax) of the named column;
+        an empty formula removes it. */
+    SC_DLLPUBLIC void SetCalculatedColumnFormula( const OUString& rColumn, const OUString& rFormula );
+    SC_DLLPUBLIC OUString GetCalculatedColumnFormula( const OUString& rColumn ) const;
+    bool HasCalculatedColumnFormulas() const { return !maCalculatedColumnFormulas.empty(); }
     SC_DLLPUBLIC const ::std::vector< OUString >& GetTableColumnNames() const { return maTableColumnNames; }
     SC_DLLPUBLIC void SetTableColumnModel( TableColumnModel& rModel )
     {

@@ -54,6 +54,9 @@ public:
     const std::optional<OUString>& getColumnFunction() const;
     /** Sets the function of this column. */
     void                setFunc( const OUString& rChars );
+    /** Sets the calculated column formula of this column. */
+    void                setCalculatedFormula( const OUString& rChars ) { maCalculatedFormula += rChars; }
+    const OUString&     getCalculatedFormula() const { return maCalculatedFormula; }
 
 private:
     OUString            maName;
@@ -65,6 +68,7 @@ private:
     std::optional<OUString> maRowLabel = std::nullopt;
     std::optional<OUString> maSubTotal = std::nullopt;
     std::optional<OUString> maFunction = std::nullopt;
+    OUString            maCalculatedFormula;
 };
 
 class TableColumns : public WorkbookHelper
