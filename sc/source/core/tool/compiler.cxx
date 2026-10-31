@@ -5186,6 +5186,61 @@ public:
 
 }
 
+namespace {
+
+// Excel's this-row shorthand in structured references: [@Col], [@[Col]], [@[A]:[B]], [@]
+// becomes [[#This Row],[Col]] etc. (the item and separator symbols of the current grammar),
+// which the table reference parser already understands. String literals are left alone.
+OUString lcl_ZetaExpandThisRow( const OUString& rFormula, const OUString& rThisRow, const OUString& rSep )
+{
+    if (rFormula.indexOf("[@") < 0 || rThisRow.isEmpty() || rSep.isEmpty())
+        return rFormula;
+    OUStringBuffer aBuf( rFormula.getLength() + 32);
+    const sal_Int32 nLen = rFormula.getLength();
+    bool bInString = false;
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rFormula[i];
+        if (c == '"')
+            bInString = !bInString;
+        if (bInString || c != '[' || i + 1 >= nLen || rFormula[i + 1] != '@')
+        {
+            aBuf.append(c);
+            continue;
+        }
+        const sal_Int32 nNext = i + 2;
+        if (nNext < nLen && rFormula[nNext] == ']')
+        {
+            // [@] : the whole row of the table
+            aBuf.append("[" + rThisRow + "]");
+            i = nNext;
+        }
+        else if (nNext < nLen && rFormula[nNext] == '[')
+        {
+            // [@[Col]] / [@[A]:[B]] : keep the column part as is
+            aBuf.append("[[" + rThisRow + "]" + rSep);
+            i = nNext - 1;
+        }
+        else
+        {
+            // [@Col] : column name up to the next unescaped ']'
+            sal_Int32 j = nNext;
+            while (j < nLen && (rFormula[j] != ']' || rFormula[j - 1] == '\''))
+                ++j;
+            if (j >= nLen)
+            {
+                aBuf.append(c);
+                continue;
+            }
+            aBuf.append("[[" + rThisRow + "]" + rSep + "[" + rFormula.copy(nNext, j - nNext) + "]]");
+            i = j;
+        }
+    }
+    return aBuf.makeStringAndClear();
+}
+
+}
+
 std::unique_ptr<ScTokenArray> ScCompiler::CompileString( const OUString& rFormula )
 {
     OSL_ENSURE( meGrammar != FormulaGrammar::GRAM_EXTERNAL, "ScCompiler::CompileString - unexpected grammar GRAM_EXTERNAL" );
@@ -5196,6 +5251,9 @@ std::unique_ptr<ScTokenArray> ScCompiler::CompileString( const OUString& rFormul
     mpArr = &aArr;
     maArrIterator = FormulaTokenArrayPlainIterator(*mpArr);
     aFormula = comphelper::string::strip(rFormula, ' ');
+    if (mxSymbols)
+        aFormula = lcl_ZetaExpandThisRow( aFormula, mxSymbols->getSymbol( ocTableRefItemThisRow),
+                mxSymbols->getSymbol( ocSep));
 
     nSrcPos = 0;
     mbCorrected = false;
