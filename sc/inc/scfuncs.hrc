@@ -4595,6 +4595,22 @@ const TranslateId ocPERCENTOF_ARY[] =
     NC_("ocPERCENTOF", "All the values.")
 };
 
+// -=*# Resource for function DBCS #*=-
+const TranslateId ocDBCS_ARY[] =
+{
+    NC_("ocDBCS", "Converts half-width (single-byte) letters, digits and symbols to full-width (double-byte) characters."),
+    NC_("ocDBCS", "Text"),
+    NC_("ocDBCS", "The text to convert.")
+};
+
+// -=*# Resource for function PHONETIC #*=-
+const TranslateId ocPHONETIC_ARY[] =
+{
+    NC_("ocPHONETIC", "Extracts the phonetic (furigana) characters from a text string. Without phonetic data the text of the referenced cells is returned."),
+    NC_("ocPHONETIC", "Reference"),
+    NC_("ocPHONETIC", "The cell or range containing the text.")
+};
+
 // -=*# Resource for function TRIMRANGE #*=-
 const TranslateId ocTRIMRANGE_ARY[] =
 {

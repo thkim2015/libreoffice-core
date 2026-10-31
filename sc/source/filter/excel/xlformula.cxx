@@ -258,7 +258,8 @@ const XclFunctionInfo saFuncTable_4[] =
 {
     { ocFixed,              14,     1,  3,  V, { VR }, 0, nullptr },                  // BIFF2-3: 1-2, BIFF4: 1-3
     { ocAsc,                214,    1,  1,  V, { VR }, 0, nullptr },
-    { ocJis,                215,    1,  1,  V, { VR }, 0, nullptr },
+    { ocDbcs,               215,    1,  1,  V, { VR }, 0, nullptr },
+    { ocJis,                215,    1,  1,  V, { VR }, EXC_FUNCFLAG_EXPORTONLY, nullptr },
     { ocRank,               216,    2,  3,  V, { VR, RO, VR }, 0, nullptr },
     { ocDB,                 247,    4,  5,  V, { VR }, 0, nullptr },
     { ocFrequency,          252,    2,  2,  A, { RA }, 0, nullptr },
@@ -367,12 +368,12 @@ const XclFunctionInfo saFuncTable_5[] =
     { ocRoman,              354,    1,  2,  V, { VR }, 0, nullptr }
 };
 
-/** Functions new in BIFF8. Unsupported functions: PHONETIC. */
+/** Functions new in BIFF8. */
 const XclFunctionInfo saFuncTable_8[] =
 {
     { ocGetPivotData,       358,    2,  MX, V, { RR, RR, VR }, 0, nullptr },
     { ocHyperLink,          359,    1,  2,  V, { VV, VO }, 0, nullptr },
-    { ocNoName,             360,    1,  1,  V, { RO }, EXC_FUNCFLAG_IMPORTONLY, nullptr },    // PHONETIC
+    { ocPhonetic,           360,    1,  1,  V, { RO }, 0, nullptr },
     { ocAverageA,           361,    1,  MX, V, { RX }, 0, nullptr },
     { ocMaxA,               362,    1,  MX, V, { RX }, 0, nullptr },
     { ocMinA,               363,    1,  MX, V, { RX }, 0, nullptr },

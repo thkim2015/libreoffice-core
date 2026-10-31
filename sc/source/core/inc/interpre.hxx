@@ -791,6 +791,8 @@ private:
     void ScTextSplit();
     void ScArrayToText();
     void ScValueToText();
+    void ScDbcs();
+    void ScPhonetic();
     void ScPercentOf();
     void ScTrimRange();
     void ScToCol();

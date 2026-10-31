@@ -3929,6 +3929,109 @@ void ScInterpreter::ScAsc()
         PushString( lcl_convertIntoHalfWidth( GetString().getString()));
 }
 
+/* Excel DBCS: converts half-width ASCII to full-width. Measured in Korean
+ * Excel: 0x21..0x7E map to U+FF01..U+FF5E except the backslash, which maps
+ * to the full-width won sign U+FFE6; the space maps to U+3000; half-width
+ * katakana and hangul and all other characters are left unchanged. With a
+ * Japanese locale it behaves like JIS.
+ */
+void ScInterpreter::ScDbcs()
+{
+    if (!MustHaveParamCount( GetByte(), 1))
+        return;
+    OUString aStr;
+    if (GetRawStackType() == svDouble)
+    {
+        // Excel converts a boolean as its name, =DBCS(TRUE) gives TRUE in full-width.
+        double fVal = PopDouble();
+        if (nCurFmtType == SvNumFormatType::LOGICAL)
+            aStr = (fVal != 0.0) ? u"TRUE"_ustr : u"FALSE"_ustr;
+        else
+            aStr = GetStringFromDouble( fVal).getString();
+    }
+    else
+        aStr = GetString().getString();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError);
+        return;
+    }
+    const OUString aLang = ScGlobal::getLocaleData().getLanguageTag().getLanguage();
+    if (aLang == "ja")
+    {
+        PushString( lcl_convertIntoFullWidth( aStr));
+        return;
+    }
+    const sal_Unicode cBackslash = (aLang == "ko") ? 0xFFE6 : 0xFF3C;
+    OUStringBuffer aBuf( aStr.getLength());
+    for (sal_Int32 i = 0; i < aStr.getLength(); ++i)
+    {
+        sal_Unicode c = aStr[i];
+        if (c == ' ')
+            c = 0x3000;
+        else if (c == '\\')
+            c = cBackslash;
+        else if (c >= 0x21 && c <= 0x7E)
+            c = c + 0xFEE0;
+        aBuf.append( c);
+    }
+    PushString( aBuf.makeStringAndClear());
+}
+
+/* Excel PHONETIC: returns the phonetic (furigana) text of the referenced
+ * cells. Phonetic data is not kept, so as Excel does for cells without it the
+ * text of the constant text cells is concatenated in row-major order; formula
+ * results, numbers and empty cells are skipped. A union is accepted.
+ */
+void ScInterpreter::ScPhonetic()
+{
+    short nParamCount = GetByte();
+    if (!MustHaveParamCount( nParamCount, 1))
+        return;
+    OUStringBuffer aBuf;
+    size_t nRefInList = 0;
+    while (nParamCount-- > 0)
+    {
+        ScRange aRange;
+        switch (GetStackType())
+        {
+            case svSingleRef:
+            {
+                ScAddress aAdr;
+                PopSingleRef( aAdr);
+                aRange = ScRange( aAdr);
+            }
+            break;
+            case svDoubleRef:
+            case svRefList:
+                PopDoubleRef( aRange, nParamCount, nRefInList);
+            break;
+            default:
+                PopError();
+                PushIllegalArgument();
+                return;
+        }
+        if (nGlobalError != FormulaError::NONE)
+        {
+            PushError( nGlobalError);
+            return;
+        }
+        for (SCTAB nTab = aRange.aStart.Tab(); nTab <= aRange.aEnd.Tab(); ++nTab)
+        {
+            for (SCROW nRow = aRange.aStart.Row(); nRow <= aRange.aEnd.Row(); ++nRow)
+            {
+                for (SCCOL nCol = aRange.aStart.Col(); nCol <= aRange.aEnd.Col(); ++nCol)
+                {
+                    ScRefCellValue aCell( mrDoc, ScAddress( nCol, nRow, nTab));
+                    if (aCell.getType() == CELLTYPE_STRING || aCell.getType() == CELLTYPE_EDIT)
+                        aBuf.append( aCell.getString( mrDoc));
+                }
+            }
+        }
+    }
+    PushString( aBuf.makeStringAndClear());
+}
+
 void ScInterpreter::ScUnicode()
 {
     if ( MustHaveParamCount( GetByte(), 1 ) )

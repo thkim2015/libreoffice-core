@@ -4498,6 +4498,8 @@ void ScInterpreter::DispatchOpCode( OpCode eOp )
         case ocBahtText         : ScBahtText();                 break;
         case ocGetPivotData     : ScGetPivotData();             break;
         case ocJis              : ScJis();                      break;
+        case ocDbcs             : ScDbcs();                     break;
+        case ocPhonetic         : ScPhonetic();                 break;
         case ocAsc              : ScAsc();                      break;
         case ocLenB             : ScLenB();                     break;
         case ocRightB           : ScRightB();                   break;

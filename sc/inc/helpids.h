@@ -630,6 +630,8 @@ inline constexpr OUString HID_FUNC_REGEXREPLACE_MS = u"SC_HID_FUNC_REGEXREPLACE_
 inline constexpr OUString HID_FUNC_VALUETOTEXT_MS = u"SC_HID_FUNC_VALUETOTEXT_MS"_ustr;
 inline constexpr OUString HID_FUNC_PERCENTOF_MS = u"SC_HID_FUNC_PERCENTOF_MS"_ustr;
 inline constexpr OUString HID_FUNC_TRIMRANGE_MS = u"SC_HID_FUNC_TRIMRANGE_MS"_ustr;
+inline constexpr OUString HID_FUNC_DBCS_MS = u"SC_HID_FUNC_DBCS_MS"_ustr;
+inline constexpr OUString HID_FUNC_PHONETIC_MS = u"SC_HID_FUNC_PHONETIC_MS"_ustr;
 inline constexpr OUString HID_FUNC_LAMBDA_MS = u"SC_HID_FUNC_LAMBDA_MS"_ustr;
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

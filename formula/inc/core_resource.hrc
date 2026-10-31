@@ -314,6 +314,8 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH_ODFF[] =
     { "COM.MICROSOFT.VALUETOTEXT" , ocValueToText },
     { "COM.MICROSOFT.PERCENTOF" , ocPercentOf },
     { "COM.MICROSOFT.TRIMRANGE" , ocTrimRange },
+    { "COM.MICROSOFT.DBCS" , ocDbcs },
+    { "COM.MICROSOFT.PHONETIC" , ocPhonetic },
     { "_xlpm." , ocStringName },
     { "_xlop." , ocStringName },
     { "ORG.OPENOFFICE.MULTIRANGE" , ocMultiArea }, // legacy for range list (union)
@@ -805,6 +807,8 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH_OOXML[] =
     { "_xlfn.VALUETOTEXT" , ocValueToText },
     { "_xlfn.PERCENTOF" , ocPercentOf },
     { "_xlfn.TRIMRANGE" , ocTrimRange },
+    { "DBCS" , ocDbcs },
+    { "PHONETIC" , ocPhonetic },
     { "_xlpm." , ocStringName },
     { "_xlop." , ocStringName },
     { "_xlfn.ORG.OPENOFFICE.MULTIRANGE" , ocMultiArea }, // legacy for range list (union)
@@ -1299,6 +1303,8 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH_PODF[] =
     { "VALUETOTEXT" , ocValueToText },
     { "PERCENTOF" , ocPercentOf },
     { "TRIMRANGE" , ocTrimRange },
+    { "DBCS" , ocDbcs },
+    { "PHONETIC" , ocPhonetic },
     { "MULTIRANGE" , ocMultiArea },    // legacy for range list (union)
     { "OFFSET" , ocOffset },
     { "INDEX" , ocIndex },
@@ -1793,6 +1799,8 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH_API[] =
     { "VALUETOTEXT" , ocValueToText },
     { "PERCENTOF" , ocPercentOf },
     { "TRIMRANGE" , ocTrimRange },
+    { "DBCS" , ocDbcs },
+    { "PHONETIC" , ocPhonetic },
     { "MULTIRANGE" , ocMultiArea },    // legacy for range list (union)
     { "OFFSET" , ocOffset },
     { "INDEX" , ocIndex },  // ?? first character = I ??
@@ -2289,6 +2297,8 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH[] =
     { "VALUETOTEXT" , ocValueToText },
     { "PERCENTOF" , ocPercentOf },
     { "TRIMRANGE" , ocTrimRange },
+    { "DBCS" , ocDbcs },
+    { "PHONETIC" , ocPhonetic },
     { "MULTIRANGE" , ocMultiArea },
     { "OFFSET" , ocOffset },
     { "INDEX" , ocIndex },
@@ -2764,6 +2774,8 @@ const std::pair<TranslateId, int> RID_STRLIST_FUNCTION_NAMES[] =
     { NC_("RID_STRLIST_FUNCTION_NAMES", "VALUETOTEXT") , ocValueToText },
     { NC_("RID_STRLIST_FUNCTION_NAMES", "PERCENTOF") , ocPercentOf },
     { NC_("RID_STRLIST_FUNCTION_NAMES", "TRIMRANGE") , ocTrimRange },
+    { NC_("RID_STRLIST_FUNCTION_NAMES", "DBCS") , ocDbcs },
+    { NC_("RID_STRLIST_FUNCTION_NAMES", "PHONETIC") , ocPhonetic },
     { NC_("RID_STRLIST_FUNCTION_NAMES", "MULTIRANGE") , ocMultiArea }, // legacy for range list (union)
     { NC_("RID_STRLIST_FUNCTION_NAMES", "OFFSET") , ocOffset },
     { NC_("RID_STRLIST_FUNCTION_NAMES", "INDEX") , ocIndex }, // ?? first character = I ??

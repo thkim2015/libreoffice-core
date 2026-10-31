@@ -403,7 +403,8 @@ const FunctionData saFuncTableBiff3[] =
     { "ROUNDUP",                "ROUNDUP",              212,    212,    2,  2,  V, { VR }, FuncFlags::NONE },
     { "ROUNDDOWN",              "ROUNDDOWN",            213,    213,    2,  2,  V, { VR }, FuncFlags::NONE },
     { "ASC",                    "ASC",                  214,    214,    1,  1,  V, { VR }, FuncFlags::NONE },
-    { "JIS",                    "DBCS",                 215,    215,    1,  1,  V, { VR }, FuncFlags::NONE },
+    { "COM.MICROSOFT.DBCS",     "DBCS",                 215,    215,    1,  1,  V, { VR }, FuncFlags::NONE },
+    { "JIS",                    "DBCS",                 215,    215,    1,  1,  V, { VR }, FuncFlags::EXPORTONLY },
     { "ADDRESS",                "ADDRESS",              219,    219,    2,  5,  V, { VR }, FuncFlags::NONE },
     { "DAYS360",                "DAYS360",              220,    220,    2,  2,  V, { VR, VR, C }, FuncFlags::NONE },
     { "TODAY",                  "TODAY",                221,    221,    0,  0,  V, {}, FuncFlags::VOLATILE },
@@ -644,7 +645,7 @@ const FunctionData saFuncTableBiff8[] =
 {
     { "GETPIVOTDATA",           "GETPIVOTDATA",         358,    358,    2,  MX, V, { RR, RR, VR, VR }, FuncFlags::IMPORTONLY | FuncFlags::PARAMPAIRS },
     { "HYPERLINK",              "HYPERLINK",            359,    359,    1,  2,  V, { VV, VO }, FuncFlags::NONE },
-    { nullptr,                        "PHONETIC",             360,    360,    1,  1,  V, { RO }, FuncFlags::IMPORTONLY },
+    { "COM.MICROSOFT.PHONETIC",       "PHONETIC",             360,    360,    1,  1,  V, { RO }, FuncFlags::NONE },
     { "AVERAGEA",               "AVERAGEA",             361,    361,    1,  MX, V, { RX }, FuncFlags::NONE },
     { "MAXA",                   "MAXA",                 362,    362,    1,  MX, V, { RX }, FuncFlags::NONE },
     { "MINA",                   "MINA",                 363,    363,    1,  MX, V, { RX }, FuncFlags::NONE },
