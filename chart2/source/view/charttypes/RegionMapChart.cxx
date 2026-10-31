@@ -10,6 +10,7 @@
 #include "RegionMapChart.hxx"
 
 #include <ChartType.hxx>
+#include <DataSeries.hxx>
 #include <ExplicitCategoriesProvider.hxx>
 #include <ObjectIdentifier.hxx>
 #include <PropertyMapper.hxx>
@@ -21,7 +22,11 @@
 #include <com/sun/star/drawing/TextHorizontalAdjust.hpp>
 #include <com/sun/star/drawing/TextVerticalAdjust.hpp>
 #include <com/sun/star/style/ParagraphAdjust.hpp>
+#include <FormattedStringHelper.hxx>
 #include <comphelper/base64.hxx>
+#include <basegfx/utils/bgradient.hxx>
+#include <docmodel/uno/UnoGradientTools.hxx>
+#include <com/sun/star/awt/GradientStyle.hpp>
 #include <comphelper/diagnose_ex.hxx>
 #include <rtl/character.hxx>
 #include <svx/unoshape.hxx>
@@ -30,6 +35,7 @@
 #include <zlib.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <mutex>
@@ -45,6 +51,7 @@ constexpr sal_Int32 nLowColor = 0xDAE3F3; // accent 1, lighter 80 %
 constexpr sal_Int32 nHighColor = 0x2F5597; // accent 1, darker 25 %
 constexpr sal_Int32 nNoDataColor = 0xE0E0E0;
 constexpr sal_Int32 nAttributionColor = 0x595959;
+constexpr sal_Int32 nLabelColor = 0x404040;
 // drawing tolerances in 1/100 mm: closer points are merged, smaller rings dropped
 constexpr double fPointTolerance = 8.0;
 constexpr double fRingMinSize = 6.0;
@@ -549,11 +556,69 @@ std::vector<ViewLegendEntry> RegionMapChart::createLegendEntriesForSeries(
     }
     if (nMax < 0)
         return aResult;
-    aResult.push_back(createBoxLegendEntry(rEntryKeyAspectRatio, getLabelTextForValue(rSeries, nMax, rSeries.getYValue(nMax), false),
-                                           scaleColor(1.0), xTextProperties, xTarget));
-    if (nMin != nMax && rSeries.getYValue(nMin) < rSeries.getYValue(nMax))
-        aResult.push_back(createBoxLegendEntry(rEntryKeyAspectRatio, getLabelTextForValue(rSeries, nMin, rSeries.getYValue(nMin), false),
-                                               scaleColor(0.0), xTextProperties, xTarget));
+
+    // Excel: the series name, then a vertical colour bar from the highest value
+    // (top) to the lowest (bottom) with the two values beside its ends. The
+    // legend lays out rows of text; the bar is one tall symbol hanging from the
+    // highest value's row down to the lowest value's row, over blank rows.
+    const bool bRange = nMin != nMax && rSeries.getYValue(nMin) < rSeries.getYValue(nMax);
+    const sal_Int32 nKeyW = std::max<sal_Int32>(1, rEntryKeyAspectRatio.Width);
+    const sal_Int32 nKeyH = std::max<sal_Int32>(1, rEntryKeyAspectRatio.Height);
+    // VLegend: key height = 0.6 font height; row pitch = text line + max(1 mm, 0.2 font height)
+    const double fFont = nKeyH / 0.6;
+    const double fPitch = fFont * 1.17 + std::max(100.0, fFont * 0.2);
+    const sal_Int32 nBlankRows = bRange ? 3 : 0;
+
+    auto aEmptySymbol = [&]() {
+        rtl::Reference<SvxShapeGroup> xSymbolGroup(ShapeFactory::createGroup2D(xTarget));
+        ShapeFactory::createInvisibleRectangle(xSymbolGroup, awt::Size(nKeyW, nKeyH));
+        return xSymbolGroup;
+    };
+    auto aTextEntry = [&](const OUString& rText, rtl::Reference<SvxShapeGroup> xSymbol) {
+        ViewLegendEntry aEntry;
+        aEntry.xSymbol = std::move(xSymbol);
+        aEntry.xLabel = FormattedStringHelper::createFormattedString(rText, xTextProperties);
+        aResult.push_back(aEntry);
+    };
+
+    OUString aName;
+    if (rSeries.getModel().is())
+        aName = rSeries.getModel()->getLabelForRole(
+            m_xChartTypeModel.is() ? m_xChartTypeModel->getRoleOfSequenceForSeriesLabel() : u"values-y"_ustr);
+    if (!aName.isEmpty())
+        aTextEntry(aName, aEmptySymbol());
+
+    // the bar: VLegend puts a symbol at the top of its row, so the bar hangs from
+    // the highest value's key down to the bottom of the lowest value's key
+    const sal_Int32 nBar = bRange ? static_cast<sal_Int32>((nBlankRows + 1) * fPitch) : nKeyH;
+    rtl::Reference<SvxShapeGroup> xBarGroup(ShapeFactory::createGroup2D(xTarget));
+    if (xBarGroup.is())
+    {
+        const sal_Int32 nGroupH = bRange ? nBar + nKeyH : nKeyH;
+        ShapeFactory::createInvisibleRectangle(xBarGroup, awt::Size(nKeyW, nGroupH));
+        basegfx::BColorStops aStops;
+        for (int i = 0; i <= 8; ++i)
+        {
+            const sal_Int32 nColor = scaleColor(1.0 - i / 8.0);
+            aStops.addStop(i / 8.0, basegfx::BColor(((nColor >> 16) & 0xff) / 255.0, ((nColor >> 8) & 0xff) / 255.0,
+                                                    (nColor & 0xff) / 255.0));
+        }
+        const basegfx::BGradient aGradient(aStops, awt::GradientStyle_LINEAR, 0_deg10, 50, 50, 0, 100, 100, 0);
+        tNameSequence aNames{ u"FillStyle"_ustr, u"FillGradient"_ustr, u"LineStyle"_ustr };
+        tAnySequence aValues{ uno::Any(bRange ? drawing::FillStyle_GRADIENT : drawing::FillStyle_SOLID),
+                              uno::Any(model::gradient::createUnoGradient2(aGradient)), uno::Any(drawing::LineStyle_NONE) };
+        rtl::Reference<SvxShapeRect> xBar = ShapeFactory::createRectangle(
+            xBarGroup, awt::Size(nKeyW, nGroupH), awt::Point(0, 0), aNames, aValues);
+        if (xBar.is() && !bRange)
+            xBar->SvxShape::setPropertyValue(u"FillColor"_ustr, uno::Any(scaleColor(1.0)));
+    }
+    aTextEntry(getLabelTextForValue(rSeries, nMax, rSeries.getYValue(nMax), false), xBarGroup);
+    if (bRange)
+    {
+        for (sal_Int32 i = 0; i < nBlankRows; ++i)
+            aTextEntry(u" "_ustr, aEmptySymbol());
+        aTextEntry(getLabelTextForValue(rSeries, nMin, rSeries.getYValue(nMin), false), aEmptySymbol());
+    }
     return aResult;
 }
 
@@ -652,6 +717,14 @@ void RegionMapChart::createShapes()
 
     rtl::Reference<SvxShapeGroupAnyD> xSeriesTarget = createGroupShape(m_xLogicTarget);
     rtl::Reference<SvxShapeGroupAnyD> xSeriesGroupShape = getSeriesGroupShape(pSeries, xSeriesTarget);
+    // data labels: the box of each labelled region's largest ring
+    struct LabelSpot
+    {
+        sal_Int32 nPoint;
+        double fX0, fY0, fX1, fY1;
+        double fCX, fCY; // area centroid of the ring
+    };
+    std::vector<LabelSpot> aLabelSpots;
     for (size_t r = 0; r < rRegions.size(); ++r)
     {
         if (!aShown[r])
@@ -659,6 +732,7 @@ void RegionMapChart::createShapes()
         std::vector<std::vector<drawing::Position3D>> aPoly;
         size_t nLargest = 0;
         double fLargest = -1.0;
+        std::array<double, 4> aLargestBox{};
         std::vector<std::vector<drawing::Position3D>> aAll; // every ring, to keep tiny regions
         for (const auto& rRing : aProjected[r])
         {
@@ -682,6 +756,7 @@ void RegionMapChart::createShapes()
             {
                 fLargest = fSize;
                 nLargest = aAll.size();
+                aLargestBox = { fX0, fY0, fX1, fY1 };
             }
             aAll.push_back(aOut);
             if (fSize >= fRingMinSize && aOut.size() >= 3)
@@ -713,6 +788,93 @@ void RegionMapChart::createShapes()
         xShape->SvxShape::setPropertyValue(u"LineStyle"_ustr, uno::Any(drawing::LineStyle_SOLID));
         xShape->SvxShape::setPropertyValue(u"LineColor"_ustr, uno::Any(sal_Int32(0xFFFFFF)));
         xShape->SvxShape::setPropertyValue(u"LineWidth"_ustr, uno::Any(sal_Int32(0)));
+        if (nPoint >= 0 && pSeries->getDataPointLabelIfLabel(nPoint) && !aAll.empty())
+        {
+            // shoelace centroid of the largest ring; the box centre for degenerate rings
+            const std::vector<drawing::Position3D>& rRing = aAll[nLargest];
+            double fArea = 0.0, fCX = 0.0, fCY = 0.0;
+            for (size_t i = 0, n = rRing.size(); i < n; ++i)
+            {
+                const drawing::Position3D& a = rRing[i];
+                const drawing::Position3D& b = rRing[(i + 1) % n];
+                const double fCross = a.PositionX * b.PositionY - b.PositionX * a.PositionY;
+                fArea += fCross;
+                fCX += (a.PositionX + b.PositionX) * fCross;
+                fCY += (a.PositionY + b.PositionY) * fCross;
+            }
+            if (std::fabs(fArea) > 1.0)
+            {
+                fCX /= 3.0 * fArea;
+                fCY /= 3.0 * fArea;
+            }
+            else
+            {
+                fCX = (aLargestBox[0] + aLargestBox[2]) / 2.0;
+                fCY = (aLargestBox[1] + aLargestBox[3]) / 2.0;
+            }
+            aLabelSpots.push_back({ nPoint, aLargestBox[0], aLargestBox[1], aLargestBox[2], aLargestBox[3], fCX, fCY });
+        }
+    }
+
+    // Excel map labels ("best fit only"): 9pt #404040 centred on the region; a label
+    // wider or taller than its region is left out
+    if (!aLabelSpots.empty())
+    {
+        rtl::Reference<SvxShapeGroupAnyD> xLabelTarget = ShapeFactory::createGroup2D(m_xFinalTarget);
+        const uno::Sequence<OUString> aCategories
+            = m_pExplicitCategoriesProvider ? m_pExplicitCategoriesProvider->getSimpleCategories() : uno::Sequence<OUString>();
+        for (const LabelSpot& rSpot : aLabelSpots)
+        {
+            const chart2::DataPointLabel* pLabel = pSeries->getDataPointLabelIfLabel(rSpot.nPoint);
+            OUString aText;
+            if (pLabel->ShowCategoryName && rSpot.nPoint < aCategories.getLength())
+                aText = aCategories[rSpot.nPoint];
+            if (pLabel->ShowNumber)
+            {
+                const OUString aNumber
+                    = getLabelTextForValue(*pSeries, rSpot.nPoint, pSeries->getYValue(rSpot.nPoint), false);
+                aText = aText.isEmpty() ? aNumber : aText + ", " + aNumber;
+            }
+            if (aText.isEmpty())
+                continue;
+            tPropertyNameValueMap aValues;
+            const float fHeight = 9.0f;
+            aValues[u"CharHeight"_ustr] <<= fHeight;
+            aValues[u"CharHeightAsian"_ustr] <<= fHeight;
+            aValues[u"CharHeightComplex"_ustr] <<= fHeight;
+            aValues[u"CharColor"_ustr] <<= nLabelColor;
+            aValues[u"FillStyle"_ustr] <<= drawing::FillStyle_NONE;
+            aValues[u"LineStyle"_ustr] <<= drawing::LineStyle_NONE;
+            aValues[u"ParaAdjust"_ustr] <<= style::ParagraphAdjust_CENTER;
+            aValues[u"TextHorizontalAdjust"_ustr] <<= drawing::TextHorizontalAdjust_CENTER;
+            aValues[u"TextVerticalAdjust"_ustr] <<= drawing::TextVerticalAdjust_CENTER;
+            aValues[u"TextAutoGrowHeight"_ustr] <<= true;
+            aValues[u"TextAutoGrowWidth"_ustr] <<= true;
+            aValues[u"TextWordWrap"_ustr] <<= false;
+            aValues[u"TextLeftDistance"_ustr] <<= sal_Int32(0);
+            aValues[u"TextRightDistance"_ustr] <<= sal_Int32(0);
+            aValues[u"TextUpperDistance"_ustr] <<= sal_Int32(0);
+            aValues[u"TextLowerDistance"_ustr] <<= sal_Int32(0);
+            tNameSequence aNames;
+            tAnySequence aAnys;
+            PropertyMapper::getMultiPropertyListsFromValueMap(aNames, aAnys, aValues);
+            rtl::Reference<SvxShapeText> xText = ShapeFactory::createText(xLabelTarget, aText, aNames, aAnys, uno::Any());
+            if (!xText.is())
+                continue;
+            const awt::Size aSize = xText->getSize();
+            const double fW = rSpot.fX1 - rSpot.fX0;
+            const double fH = rSpot.fY1 - rSpot.fY0;
+            if (aSize.Width > fW || aSize.Height > fH)
+            {
+                xLabelTarget->remove(uno::Reference<drawing::XShape>(xText));
+                continue;
+            }
+            // centred on the centroid, kept inside the region's box
+            const double fLeft = std::clamp(rSpot.fCX - aSize.Width / 2.0, rSpot.fX0, rSpot.fX1 - aSize.Width);
+            const double fTop = std::clamp(rSpot.fCY - aSize.Height / 2.0, rSpot.fY0, rSpot.fY1 - aSize.Height);
+            xText->setPosition(awt::Point(static_cast<sal_Int32>(fLeft), static_cast<sal_Int32>(fTop)));
+            ShapeFactory::setShapeName(xText, ObjectIdentifier::createPointCID(pSeries->getLabelCID_Stub(), rSpot.nPoint));
+        }
     }
 
     // map data attribution ("Powered by Bing") at the bottom right, 7pt grey
