@@ -1999,6 +1999,13 @@ void ScTable::UpdateReference(
     if(mpCondFormatList)
         mpCondFormatList->UpdateReference(rCxt);
 
+    if (!maIgnoredErrors.empty())
+    {
+        for (ScIgnoredErrors& rItem : maIgnoredErrors)
+            rItem.maRanges.UpdateReference(eUpdateRefMode, rDocument, rCxt.maRange, nDx, nDy, nDz);
+        std::erase_if(maIgnoredErrors, [](const ScIgnoredErrors& rItem) { return rItem.maRanges.empty(); });
+    }
+
     if (pTabProtection)
         pTabProtection->updateReference( eUpdateRefMode, rDocument, rCxt.maRange, nDx, nDy, nDz);
 }

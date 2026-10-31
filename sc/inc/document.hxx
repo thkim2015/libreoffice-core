@@ -1180,6 +1180,9 @@ public:
                                                 const Color& rColor, ScScenarioFlags nFlags);
     SC_DLLPUBLIC Color          GetTabBgColor( SCTAB nTab ) const;
     SC_DLLPUBLIC void           SetTabBgColor( SCTAB nTab, const Color& rColor );
+    /// OOXML <ignoredErrors> of the sheet (error checking exceptions)
+    SC_DLLPUBLIC const std::vector<ScIgnoredErrors>* GetIgnoredErrors( SCTAB nTab ) const;
+    SC_DLLPUBLIC void           SetIgnoredErrors( SCTAB nTab, std::vector<ScIgnoredErrors> aList );
     SC_DLLPUBLIC bool           IsDefaultTabBgColor( SCTAB nTab ) const;
     void                        GetScenarioFlags(SCTAB nTab, ScScenarioFlags &rFlags) const;
     SC_DLLPUBLIC bool           IsActiveScenario( SCTAB nTab ) const;

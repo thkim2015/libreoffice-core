@@ -228,6 +228,7 @@ private:
     std::unique_ptr<ScRangeList> pScenarioRanges;
     Color           aScenarioColor;
     Color           aTabBgColor;
+    std::vector<ScIgnoredErrors> maIgnoredErrors;
     ScScenarioFlags nScenarioFlags;
     std::unique_ptr<ScDBData> pDBDataNoName;
     mutable std::unique_ptr<ScRangeName> mpRangeName;
@@ -375,6 +376,8 @@ public:
     void         SetScenarioColor(const Color& rNew)         { aScenarioColor = rNew; }
     const Color& GetTabBgColor() const                       { return aTabBgColor; }
     void         SetTabBgColor(const Color& rColor);
+    const std::vector<ScIgnoredErrors>& GetIgnoredErrors() const { return maIgnoredErrors; }
+    void         SetIgnoredErrors(std::vector<ScIgnoredErrors> aList) { maIgnoredErrors = std::move(aList); }
     ScScenarioFlags GetScenarioFlags() const                 { return nScenarioFlags; }
     void        SetScenarioFlags(ScScenarioFlags nNew)       { nScenarioFlags = nNew; }
     void        SetActiveScenario(bool bSet)                 { bActiveScenario = bSet; }

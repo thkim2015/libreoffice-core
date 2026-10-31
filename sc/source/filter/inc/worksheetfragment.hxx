@@ -139,6 +139,8 @@ private:
     void                importCol( const AttributeList& rAttribs );
     /** Imports a merged cell range from a mergeCell element. */
     void                importMergeCell( const AttributeList& rAttribs );
+    /** Imports an ignoredError element (error checking exceptions). */
+    void                importIgnoredError( const AttributeList& rAttribs );
     /** Imports the hyperlink element containing a hyperlink for a cell range. */
     void                importHyperlink( const AttributeList& rAttribs );
     /** Imports individual break that is either within row or column break context. */

@@ -481,6 +481,19 @@ Color ScDocument::GetTabBgColor( SCTAB nTab ) const
     return COL_AUTO;
 }
 
+const std::vector<ScIgnoredErrors>* ScDocument::GetIgnoredErrors( SCTAB nTab ) const
+{
+    if (const ScTable* pTable = FetchTable(nTab))
+        return &pTable->GetIgnoredErrors();
+    return nullptr;
+}
+
+void ScDocument::SetIgnoredErrors( SCTAB nTab, std::vector<ScIgnoredErrors> aList )
+{
+    if (ScTable* pTable = FetchTable(nTab))
+        pTable->SetIgnoredErrors(std::move(aList));
+}
+
 void ScDocument::SetTabBgColor( SCTAB nTab, const Color& rColor )
 {
     if (ScTable* pTable = FetchTable(nTab))

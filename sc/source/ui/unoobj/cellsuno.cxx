@@ -21,6 +21,7 @@
 #include <scitems.hxx>
 #include <editeng/eeitem.hxx>
 #include <o3tl/safeint.hxx>
+#include <o3tl/string_view.hxx>
 #include <svx/svdpool.hxx>
 
 #include <utility>
@@ -801,6 +802,8 @@ static const SfxItemPropertySet* lcl_GetSheetPropertySet()
         // zeta: read-only JSON for the embedding app (outline groups, sparklines) - not exposed by UNO otherwise
         { u"ZetaOutline"_ustr, SC_WID_UNO_ZETAOUTLINE, cppu::UnoType<OUString>::get(), beans::PropertyAttribute::READONLY, 0 },
         { u"ZetaSparklines"_ustr, SC_WID_UNO_ZETASPARKLINES, cppu::UnoType<OUString>::get(), beans::PropertyAttribute::READONLY, 0 },
+        // zeta: OOXML <ignoredErrors> as "flags<TAB>sqref" items (flags: bit mask, see ScIgnoredErrors)
+        { u"ZetaIgnoredErrors"_ustr, SC_WID_UNO_ZETAIGNOREDERRORS, cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
     };
     static SfxItemPropertySet aSheetPropertySet( aSheetPropertyMap_Impl );
     return &aSheetPropertySet;
@@ -7951,6 +7954,27 @@ void ScTableSheetObj::SetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
                 rDoc.ClearPrintRanges( nTab ); // if this flag is true, there are no PrintRanges, so Clear clears only the flag.
         }
     }
+    else if ( pEntry->nWID == SC_WID_UNO_ZETAIGNOREDERRORS )
+    {
+        uno::Sequence<OUString> aItems;
+        if ( aValue >>= aItems )
+        {
+            std::vector<ScIgnoredErrors> aList;
+            for (const OUString& rItem : aItems)
+            {
+                sal_Int32 nIdx = 0;
+                ScIgnoredErrors aEntry;
+                aEntry.mnFlags = o3tl::toUInt32(o3tl::getToken(rItem, 0, '\t', nIdx));
+                if (nIdx < 0)
+                    continue;
+                aEntry.maRanges.Parse(rItem.subView(nIdx), rDoc, formula::FormulaGrammar::CONV_XL_OOX, nTab, ' ');
+                if (aEntry.mnFlags && !aEntry.maRanges.empty())
+                    aList.push_back(std::move(aEntry));
+            }
+            rDoc.SetIgnoredErrors(nTab, std::move(aList));
+            pDocSh->SetDocumentModified();
+        }
+    }
     else if ( pEntry->nWID == SC_WID_UNO_ZETAEDITRANGES )
     {
         // Excel 'Allow Edit Ranges' (enhanced protection) for the embedding app
@@ -8280,6 +8304,20 @@ void ScTableSheetObj::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
         }
         aBuf.appendAscii("]}");
         rAny <<= aBuf.makeStringAndClear();
+    }
+    else if ( pEntry->nWID == SC_WID_UNO_ZETAIGNOREDERRORS )
+    {
+        std::vector<OUString> aItems;
+        if (const std::vector<ScIgnoredErrors>* pList = rDoc.GetIgnoredErrors(nTab))
+        {
+            for (const ScIgnoredErrors& rItem : *pList)
+            {
+                OUString aRanges;
+                rItem.maRanges.Format(aRanges, ScRefFlags::VALID, rDoc, formula::FormulaGrammar::CONV_XL_OOX, ' ');
+                aItems.push_back(OUString::number(rItem.mnFlags) + "\t" + aRanges);
+            }
+        }
+        rAny <<= comphelper::containerToSequence(aItems);
     }
     else if ( pEntry->nWID == SC_WID_UNO_ZETAEDITRANGES )
     {

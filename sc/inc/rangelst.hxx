@@ -162,4 +162,15 @@ typedef tools::SvRef<ScRangePairList> ScRangePairListRef;
 extern "C"
 int ScRangePairList_QsortNameCompare( const void*, const void* );
 
+/** One OOXML <ignoredError> entry: cells whose error checking warnings are
+    suppressed. Bit i of mnFlags is the i-th attribute of CT_IgnoredError
+    (evalError, twoDigitTextYear, numberStoredAsText, formula, formulaRange,
+    unlockedFormula, emptyCellReference, listDataValidation,
+    calculatedColumn). */
+struct ScIgnoredErrors
+{
+    ScRangeList maRanges;
+    sal_uInt32 mnFlags = 0;
+};
+
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

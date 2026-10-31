@@ -44,6 +44,7 @@
 #include <viewsettings.hxx>
 #include <worksheetsettings.hxx>
 #include <NamedSheetViewFragment.hxx>
+#include <document.hxx>
 
 namespace oox::xls {
 
@@ -392,6 +393,7 @@ ContextHandlerRef WorksheetFragment::onCreateContext( sal_Int32 nElement, const 
                 case XLS_TOKEN( hyperlinks ):
                 case XLS_TOKEN( rowBreaks ):
                 case XLS_TOKEN( colBreaks ):
+                case XLS_TOKEN( ignoredErrors ):
                 case XLS_TOKEN( oleObjects ):
                 case XLS_TOKEN( controls ):         return this;
 
@@ -450,6 +452,9 @@ ContextHandlerRef WorksheetFragment::onCreateContext( sal_Int32 nElement, const 
         break;
         case XLS_TOKEN( colBreaks ):
             if( nElement == XLS_TOKEN( brk ) ) importBrk( rAttribs, false );
+        break;
+        case XLS_TOKEN( ignoredErrors ):
+            if( nElement == XLS_TOKEN( ignoredError ) ) importIgnoredError( rAttribs );
         break;
 
         case XLS_TOKEN( protectedRanges ):
@@ -710,6 +715,24 @@ void WorksheetFragment::importMergeCell( const AttributeList& rAttribs )
     ScRange aRange;
     if( getAddressConverter().convertToCellRange( aRange, rAttribs.getString( XML_ref, OUString() ), getSheetIndex(), true, true ) )
         getSheetData().setMergedRange( aRange );
+}
+
+void WorksheetFragment::importIgnoredError( const AttributeList& rAttribs )
+{
+    static const sal_Int32 aTokens[] = { XML_evalError, XML_twoDigitTextYear, XML_numberStoredAsText, XML_formula, XML_formulaRange, XML_unlockedFormula, XML_emptyCellReference, XML_listDataValidation, XML_calculatedColumn };
+    ScIgnoredErrors aItem;
+    for (size_t i = 0; i < std::size(aTokens); ++i)
+        if (rAttribs.getBool(aTokens[i], false))
+            aItem.mnFlags |= sal_uInt32(1) << i;
+    getAddressConverter().convertToCellRangeList(aItem.maRanges, rAttribs.getString(XML_sqref, OUString()), getSheetIndex(), true);
+    if (!aItem.mnFlags || aItem.maRanges.empty())
+        return;
+    ScDocument& rDoc = getScDocument();
+    std::vector<ScIgnoredErrors> aList;
+    if (const std::vector<ScIgnoredErrors>* pList = rDoc.GetIgnoredErrors(getSheetIndex()))
+        aList = *pList;
+    aList.push_back(std::move(aItem));
+    rDoc.SetIgnoredErrors(getSheetIndex(), std::move(aList));
 }
 
 void WorksheetFragment::importHyperlink( const AttributeList& rAttribs )

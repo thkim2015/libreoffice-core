@@ -66,6 +66,44 @@
 
 using namespace oox;
 
+namespace {
+
+/** Writes <ignoredErrors> (error checking exceptions) of a sheet. */
+class XclExpIgnoredErrors : public XclExpRecordBase
+{
+public:
+    explicit XclExpIgnoredErrors( SCTAB nTab ) : mnTab( nTab ) {}
+
+    virtual void SaveXml( XclExpXmlStream& rStrm ) override
+    {
+        const ScDocument& rDoc = rStrm.GetRoot().GetDoc();
+        const std::vector<ScIgnoredErrors>* pList = rDoc.GetIgnoredErrors(mnTab);
+        if (!pList || pList->empty())
+            return;
+        static const sal_Int32 aTokens[] = { XML_evalError, XML_twoDigitTextYear, XML_numberStoredAsText, XML_formula, XML_formulaRange, XML_unlockedFormula, XML_emptyCellReference, XML_listDataValidation, XML_calculatedColumn };
+        sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
+        rWorksheet->startElement(XML_ignoredErrors);
+        for (const ScIgnoredErrors& rItem : *pList)
+        {
+            if (rItem.maRanges.empty() || !rItem.mnFlags)
+                continue;
+            rtl::Reference<sax_fastparser::FastAttributeList> pAttrList
+                = sax_fastparser::FastSerializerHelper::createAttrList();
+            pAttrList->add(XML_sqref, XclXmlUtils::ToOString(rDoc, rItem.maRanges));
+            for (size_t i = 0; i < std::size(aTokens); ++i)
+                if (rItem.mnFlags & (sal_uInt32(1) << i))
+                    pAttrList->add(aTokens[i], "1");
+            rWorksheet->singleElement(XML_ignoredError, pAttrList);
+        }
+        rWorksheet->endElement(XML_ignoredErrors);
+    }
+
+private:
+    SCTAB mnTab;
+};
+
+}
+
 static OUString lcl_GetVbaTabName( SCTAB n )
 {
     OUString aRet = "__VBA__"  + OUString::number( static_cast<sal_uInt16>(n) );
@@ -638,6 +676,9 @@ void ExcTable::FillAsTableXml()
     }
 
     aRecList.AppendRecord( xPageSett );
+
+    // <ignoredErrors> after <colBreaks> (CT_Worksheet order) and before <drawing>
+    aRecList.AppendNewRecord( new XclExpIgnoredErrors( mnScTab ) );
 
     std::unique_ptr<XclExpImgData> pImgData(xPageSett->getGraphicExport());
     // all MSODRAWING and OBJ stuff of this sheet goes here
