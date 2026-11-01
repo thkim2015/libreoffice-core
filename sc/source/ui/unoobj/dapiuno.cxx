@@ -3463,6 +3463,11 @@ void SAL_CALL ScDataPilotItemObj::setPropertyValue( const OUString& aPropertyNam
 
     if ( bGetNewIndex )     // after SetDPObject, get the new index
     {
+        // ZetaOffice: SetDPObject made the source again, so the old members
+        // object points to freed data - ask for the members anew
+        xMembers = GetMembers();
+        if ( !xMembers.is() )
+            return;
         Sequence< OUString > aItemNames = xMembers->getElementNames();
         sal_Int32 nItemCount = aItemNames.getLength();
         for (sal_Int32 nItem=0; nItem<nItemCount; ++nItem)
