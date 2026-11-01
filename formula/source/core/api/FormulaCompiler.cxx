@@ -3168,6 +3168,21 @@ const FormulaToken* FormulaCompiler::CreateStringFromToken( OUStringBuffer& rBuf
         else
             rBuffer.append(mxSymbols->getSymbol(ocStringName));
     }
+    else if (FormulaGrammar::isOOXML(meGrammar) && eOp != ocTrue && eOp != ocFalse
+             && ((ocStartNoParameters <= eOp && eOp < ocStopNoParameters)
+                 || (ocStartOneParameter <= eOp && eOp < ocStopOneParameter)
+                 || (ocStartTwoParameters <= eOp && eOp < ocStopTwoParameters))
+             && (!maArrIterator.PeekNextNoSpaces()
+                 || maArrIterator.PeekNextNoSpaces()->GetOpCode() != ocOpen))
+    {
+        // A built-in function passed as a value (eta-reduced lambda), such as
+        // the SUM of GROUPBY(A1:A9,B1:B9,SUM), takes the _xleta. prefix.
+        // Excel writes the plain name there, without the _xlfn. prefix.
+        OUString aName = mxSymbols->getSymbol(eOp);
+        if (aName.startsWithIgnoreAsciiCase(u"_xlfn."))
+            aName = aName.copy(6);
+        rBuffer.append(u"_xleta." + aName);
+    }
     else if( static_cast<sal_uInt16>(eOp) < mxSymbols->getSymbolCount())        // Keyword:
         rBuffer.append(mxSymbols->getSymbol(eOp));
     else

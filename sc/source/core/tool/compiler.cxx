@@ -3089,6 +3089,9 @@ bool ScCompiler::ParseOpCode( const OUString& rName, bool bInArray )
     if (mxSymbols->isOOXML() && rName.startsWithIgnoreAsciiCase(u"_xleta."))
         aName = rName.copy(7);
     OpCodeHashMap::const_iterator iLook( mxSymbols->getHashMap().find( aName));
+    // Functions new in Excel 2010 and later are named _xlfn.NAME in OOXML.
+    if (iLook == mxSymbols->getHashMap().end() && aName != rName)
+        iLook = mxSymbols->getHashMap().find( u"_xlfn." + aName);
     bool bFound = (iLook != mxSymbols->getHashMap().end());
     if (bFound)
     {
