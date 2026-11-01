@@ -117,6 +117,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         { SC_UNO_DP_SOURCESERVICE,   0,  cppu::UnoType<OUString>::get(), 0, 0 },
         // ZetaOffice: Excel pivot table style info "name|rowHeaders|colHeaders|rowStripes|colStripes|lastColumn" (flags 0/1)
         { u"ZetaStyleInfo"_ustr,     0,  cppu::UnoType<OUString>::get(), 0, 0 },
+        // ZetaOffice: top-left cell of the output; setting it on a table moves the table there
+        { u"ZetaOutputPosition"_ustr, 0,  cppu::UnoType<table::CellAddress>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -708,6 +710,37 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
     if (!pDPObject)
         return;
 
+    if ( aPropertyName == u"ZetaOutputPosition"_ustr )
+    {
+        // ZetaOffice: move the table (Excel "Move PivotTable"). Like the pivot layout
+        // dialog, the table is made again at the new place and the old one removed;
+        // the old one goes first so that a move onto overlapping cells works.
+        table::CellAddress aAddr;
+        if ( !(aValue >>= aAddr) )
+            throw lang::IllegalArgumentException();
+        const ScRange aDest( static_cast<SCCOL>(aAddr.Column), static_cast<SCROW>(aAddr.Row), static_cast<SCTAB>(aAddr.Sheet) );
+        ScDocShell* pDocSh = GetDocShell();
+        if ( !pDocSh || !dynamic_cast<ScDataPilotTableObj*>(this) )
+        {
+            pDPObject->SetOutRange( aDest );
+            return;
+        }
+        if ( pDPObject->GetOutRange().aStart == aDest.aStart )
+            return;
+        ScDPObject aOld( *pDPObject );
+        ScDPObject aNew( *pDPObject );
+        aNew.SetOutRange( aDest );
+        ScDBDocFunc aFunc( *pDocSh );
+        if ( !aFunc.RemovePivotTable( *pDPObject, true, true ) )
+            throw uno::RuntimeException(u"Failed to remove the pivot table"_ustr);
+        if ( !aFunc.CreatePivotTable( aNew, true, true ) )
+        {
+            aFunc.CreatePivotTable( aOld, true, true );
+            throw uno::RuntimeException(u"Failed to move the pivot table"_ustr);
+        }
+        return;
+    }
+
     ScDPSaveData* pOldData = pDPObject->GetSaveData();
     OSL_ENSURE(pOldData, "Here should be a SaveData");
     if ( pOldData )
@@ -902,6 +935,11 @@ Any SAL_CALL ScDataPilotDescriptorBase::getPropertyValue( const OUString& aPrope
                 const std::optional<OUString> & pGrandTotalName = aNewData.GetGrandTotalName();
                 if (pGrandTotalName)
                     aRet <<= *pGrandTotalName;      // same behavior as in ScDPSource
+            }
+            else if ( aPropertyName == u"ZetaOutputPosition"_ustr )
+            {
+                const ScAddress& rPos = pDPObject->GetOutRange().aStart;
+                aRet <<= table::CellAddress( rPos.Tab(), rPos.Col(), rPos.Row() );
             }
             else if ( aPropertyName == u"ZetaStyleInfo"_ustr )
             {
