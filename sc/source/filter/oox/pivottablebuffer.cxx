@@ -1366,6 +1366,9 @@ void PivotTable::finalizeImport()
         {
             pSaveData->SetColumnGrand(maDefModel.mbColGrandTotals);
             pSaveData->SetRowGrand(maDefModel.mbRowGrandTotals);
+            // ZetaOffice: grand total caption
+            if (!maDefModel.maGrandTotalCaption.isEmpty())
+                pSaveData->SetGrandTotalName(maDefModel.maGrandTotalCaption);
             pSaveData->SetDrillDown(maDefModel.mbEnableDrill);
             pSaveData->SetFilterButton(false);
             pSaveData->SetExpandCollapse(maDefModel.mbShowDrill);

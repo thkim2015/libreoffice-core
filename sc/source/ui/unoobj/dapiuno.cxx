@@ -38,6 +38,7 @@
 #include <dpsdbtab.hxx>
 #include <dpsave.hxx>
 #include <dbdocfun.hxx>
+#include <dbfunc.hxx>
 #include <unonames.hxx>
 #include <dpdimsave.hxx>
 #include <hints.hxx>
@@ -119,6 +120,7 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         { u"ZetaStyleInfo"_ustr,     0,  cppu::UnoType<OUString>::get(), 0, 0 },
         // ZetaOffice: top-left cell of the output; setting it on a table moves the table there
         { u"ZetaOutputPosition"_ustr, 0,  cppu::UnoType<table::CellAddress>::get(), 0, 0 },
+        { u"ZetaCellInput"_ustr, 0,  cppu::UnoType<uno::Sequence<uno::Any>>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -163,6 +165,7 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotItemMap()
         { SC_UNONAME_ISHIDDEN,     0,  cppu::UnoType<bool>::get(),          0, 0 },
         { SC_UNONAME_POS,          0,  cppu::UnoType<sal_Int32>::get(),    0, 0 },
         { SC_UNONAME_SHOWDETAIL,   0,  cppu::UnoType<bool>::get(),          0, 0 },
+        { SC_UNO_DP_LAYOUTNAME,    0,  cppu::UnoType<OUString>::get(),      0, 0 },
     };
     return aDataPilotItemMap_Impl;
 }
@@ -709,6 +712,28 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
     ScDPObject* pDPObject = GetDPObject();
     if (!pDPObject)
         return;
+
+    if ( aPropertyName == u"ZetaCellInput"_ustr )
+    {
+        // ZetaOffice: typing into a cell of the table, as the input line does
+        // (rename an item, group, field or grand total; anything else is refused).
+        // Value: { CellAddress, String }. Refusal throws IllegalArgumentException
+        // with "invalidname" or "input".
+        uno::Sequence<uno::Any> aArgs;
+        table::CellAddress aAddr;
+        OUString aText;
+        if ( !(aValue >>= aArgs) || aArgs.getLength() != 2 || !(aArgs[0] >>= aAddr) || !(aArgs[1] >>= aText) )
+            throw lang::IllegalArgumentException();
+        ScDocShell* pDocSh = GetDocShell();
+        if ( !pDocSh )
+            throw uno::RuntimeException();
+        const ScAddress aPos( static_cast<SCCOL>(aAddr.Column), static_cast<SCROW>(aAddr.Row), static_cast<SCTAB>(aAddr.Sheet) );
+        TranslateId pErrorId;
+        if ( !ScDBFunc::DataPilotCellInput( *pDocSh, aPos, aText, pErrorId ) )
+            throw lang::IllegalArgumentException(
+                pErrorId == STR_INVALIDNAME ? u"invalidname"_ustr : u"input"_ustr, getXWeak(), 1 );
+        return;
+    }
 
     if ( aPropertyName == u"ZetaOutputPosition"_ustr )
     {
@@ -3412,6 +3437,17 @@ void SAL_CALL ScDataPilotItemObj::setPropertyValue( const OUString& aPropertyNam
         pMember->SetShowDetails(cppu::any2bool(aValue));
     else if ( aPropertyName == SC_UNONAME_ISHIDDEN )
         pMember->SetIsVisible(!cppu::any2bool(aValue));
+    else if ( aPropertyName == SC_UNO_DP_LAYOUTNAME )
+    {
+        // ZetaOffice: item LayoutName (Excel item caption); empty removes it
+        OUString aLayout;
+        if ( !(aValue >>= aLayout) )
+            throw IllegalArgumentException();
+        if ( aLayout.isEmpty() )
+            pMember->RemoveLayoutName();
+        else
+            pMember->SetLayoutName( aLayout );
+    }
     else if ( aPropertyName == SC_UNONAME_POS )
     {
         sal_Int32 nNewPos = 0;
@@ -3480,6 +3516,12 @@ Any SAL_CALL ScDataPilotItemObj::getPropertyValue( const OUString& aPropertyName
                         else
                             aRet <<= false;
                     }
+                }
+                else if ( aPropertyName == SC_UNO_DP_LAYOUTNAME )
+                {
+                    // ZetaOffice: item LayoutName, empty when the item has none
+                    const std::optional<OUString>* pLayout = pMember ? &pMember->GetLayoutName() : nullptr;
+                    aRet <<= ( pLayout && *pLayout ) ? **pLayout : OUString();
                 }
                 else if ( aPropertyName == SC_UNONAME_POS )
                 {

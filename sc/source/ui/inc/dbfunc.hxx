@@ -21,6 +21,7 @@
 
 #include "viewfunc.hxx"
 #include <dptypes.hxx>
+#include <unotools/resmgr.hxx>
 
 namespace com::sun::star::sheet { struct DataPilotFieldFilter; }
 struct ScSortParam;
@@ -90,6 +91,9 @@ public:
     void            NumGroupDataPilot( const ScDPNumGroupInfo& rInfo );
     void            UngroupDataPilot();
     void DataPilotInput( const ScAddress& rPos, const OUString& rString );
+    // ZetaOffice: the same input without a view (UNO); false + rErrorId when refused
+    static bool DataPilotCellInput( ScDocShell& rDocSh, const ScAddress& rPos,
+                                    const OUString& rString, TranslateId& rErrorId );
 
     void            DataPilotSort(ScDPObject* pDPObject, tools::Long nDimIndex, bool bAscending, const sal_uInt16* pUserListId = nullptr);
     bool            DataPilotMove( const ScRange& rSource, const ScAddress& rDest );

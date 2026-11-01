@@ -1252,7 +1252,10 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         XML_compact, ToPsz10(bCompactMode),
         XML_compactData, ToPsz10(bCompactMode),
         XML_rowGrandTotals, sax_fastparser::UseIf(ToPsz10(false), !rSaveData.GetRowGrand()),
-        XML_colGrandTotals, sax_fastparser::UseIf(ToPsz10(false), !rSaveData.GetColumnGrand()));
+        XML_colGrandTotals, sax_fastparser::UseIf(ToPsz10(false), !rSaveData.GetColumnGrand()),
+        // ZetaOffice: grand total caption typed into the table
+        XML_grandTotalCaption, sax_fastparser::UseIf(rSaveData.GetGrandTotalName().value_or(OUString()).toUtf8(),
+                                                     rSaveData.GetGrandTotalName().has_value() && !rSaveData.GetGrandTotalName()->isEmpty()));
 
     // NB: Excel's range does not include page field area (if any).
     ScRange aOutRange = rDPObj.GetOutputRangeByType(sheet::DataPilotOutputRangeType::TABLE);
@@ -1448,6 +1451,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         // The pair contains the member index in cache and if it is hidden
         std::vector< std::pair<size_t, bool> > aMemberSequence;
         std::set<size_t> aUsedCachePositions;
+        // ZetaOffice: item caption (Excel item n="..."), by cache position
+        std::map<size_t, OUString> aItemCaptions;
         sal_Int32 nIndex = 0;
         for (const auto & rMember : aMembers)
         {
@@ -1459,6 +1464,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                 if (aInserted.second)
                 {
                     aMemberSequence.emplace_back(std::make_pair(nCachePos, !rMember.mbVisible));
+                    if (!rMember.maLayoutName.isEmpty() && rMember.maLayoutName != rMember.maName)
+                        aItemCaptions[nCachePos] = rMember.maLayoutName;
                     if (eOrient == sheet::DataPilotFieldOrientation_ROW)
                         aRowMemberResultData.addLookupEntryFor(pDim->GetName(), rMember.maName, nIndex);
                     else if (eOrient == sheet::DataPilotFieldOrientation_COLUMN)
@@ -1534,6 +1541,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             for (const auto & nMember : aMemberSequence)
             {
                 auto pItemAttList = sax_fastparser::FastSerializerHelper::createAttrList();
+                if (auto itCaption = aItemCaptions.find(nMember.first); itCaption != aItemCaptions.end())
+                    pItemAttList->add(XML_n, itCaption->second.toUtf8());
                 if (nMember.second)
                     pItemAttList->add(XML_h, ToPsz10(true));
                 pItemAttList->add(XML_x, OString::number(static_cast<tools::Long>(nMember.first)));

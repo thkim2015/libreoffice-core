@@ -1504,19 +1504,35 @@ static OUString lcl_replaceMemberNameInSubtotal(const OUString& rSubtotal, std::
 
 void ScDBFunc::DataPilotInput( const ScAddress& rPos, const OUString& rString )
 {
+    TranslateId pErrorId;
+    if ( !DataPilotCellInput( *GetViewData().GetDocShell(), rPos, rString, pErrorId ) && pErrorId )
+        ErrorMessage(pErrorId);
+}
+
+// ZetaOffice: the named group dimension of a field, or null for a plain field
+static ScDPSaveGroupDimension* lcl_zetaNamedGroupDim( ScDPSaveData& rData, const OUString& rDimName )
+{
+    if ( !rData.GetExistingDimensionData() )
+        return nullptr;
+    return rData.GetDimensionData()->GetNamedGroupDimAcc( rDimName );
+}
+
+bool ScDBFunc::DataPilotCellInput( ScDocShell& rDocSh, const ScAddress& rPos,
+                                   const OUString& rString, TranslateId& rErrorId )
+{
     using namespace ::com::sun::star::sheet;
 
-    ScDocument& rDoc = GetViewData().GetDocument();
+    ScDocument& rDoc = rDocSh.GetDocument();
     ScDPObject* pDPObj = rDoc.GetDPAtCursor( rPos.Col(), rPos.Row(), rPos.Tab() );
     if (!pDPObj)
-        return;
+        return true;
 
     OUString aOldText = rDoc.GetString(rPos.Col(), rPos.Row(), rPos.Tab());
 
     if ( aOldText == rString )
     {
         // nothing to do: silently exit
-        return;
+        return true;
     }
 
     TranslateId pErrorId;
@@ -1531,7 +1547,7 @@ void ScDBFunc::DataPilotInput( const ScAddress& rPos, const OUString& rString )
     if ( nField >= 0 )
     {
         // changing a field title
-        if ( aData.GetExistingDimensionData() )
+        if ( lcl_zetaNamedGroupDim( aData, aOldText ) )
         {
             // only group dimensions can be renamed
 
@@ -1614,7 +1630,9 @@ void ScDBFunc::DataPilotInput( const ScAddress& rPos, const OUString& rString )
 
         if ((aPosData.Flags & MemberResultFlags::HASMEMBER) && !aOldText.isEmpty())
         {
-            if ( aData.GetExistingDimensionData() && !(aPosData.Flags & MemberResultFlags::SUBTOTAL))
+            bool bZetaDataLayout = false;
+            if ( !(aPosData.Flags & MemberResultFlags::SUBTOTAL)
+                 && lcl_zetaNamedGroupDim( aData, pDPObj->GetDimName( aPosData.Dimension, bZetaDataLayout ) ) )
             {
                 bool bIsDataLayout;
                 OUString aDimName = pDPObj->GetDimName( aPosData.Dimension, bIsDataLayout );
@@ -1762,7 +1780,7 @@ void ScDBFunc::DataPilotInput( const ScAddress& rPos, const OUString& rString )
     if ( bChange )
     {
         // apply changes
-        ScDBDocFunc aFunc( *GetViewData().GetDocShell() );
+        ScDBDocFunc aFunc( rDocSh );
         pDPObj->SetSaveData( aData );
         if (bNeedReloadGroups)
         {
@@ -1775,13 +1793,12 @@ void ScDBFunc::DataPilotInput( const ScAddress& rPos, const OUString& rString )
             } // pDPs
         } // bNeedReloadGroups
         aFunc.UpdatePivotTable(*pDPObj, true, false);
+        return true;
     }
-    else
-    {
-        if (!pErrorId)
-            pErrorId = STR_ERR_DATAPILOT_INPUT;
-        ErrorMessage(pErrorId);
-    }
+    if (!pErrorId)
+        pErrorId = STR_ERR_DATAPILOT_INPUT;
+    rErrorId = pErrorId;
+    return false;
 }
 
 static void lcl_MoveToEnd( ScDPSaveDimension& rDim, const OUString& rItemName )
