@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <dpsave.hxx>
+#include <o3tl/safeint.hxx>
 #include <dpdimsave.hxx>
 #include <miscuno.hxx>
 #include <unonames.hxx>
@@ -490,6 +491,11 @@ void ScDPSaveDimension::SetMemberPosition( const OUString& rName, sal_Int32 nNew
 
     std::erase(maMemberList, pMember);
 
+    // ZetaOffice: the list holds only members with settings - never insert past its end
+    if ( nNewPos < 0 )
+        nNewPos = 0;
+    if ( o3tl::make_unsigned(nNewPos) > maMemberList.size() )
+        nNewPos = maMemberList.size();
     maMemberList.insert( maMemberList.begin() + nNewPos, pMember );
 }
 

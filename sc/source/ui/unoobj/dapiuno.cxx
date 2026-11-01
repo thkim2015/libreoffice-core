@@ -3454,6 +3454,14 @@ void SAL_CALL ScDataPilotItemObj::setPropertyValue( const OUString& aPropertyNam
         if ( !( aValue >>= nNewPos ) || nNewPos < 0 || nNewPos >= nCount )
             throw IllegalArgumentException();
 
+        // ZetaOffice: put every member into the save data in the shown order first,
+        // so that the position counts all items like the index does
+        for ( sal_Int32 nItem = 0; nItem < nCount; ++nItem )
+        {
+            Reference<XNamed> xItem( xMembersIndex->getByIndex( nItem ), UNO_QUERY );
+            if ( xItem.is() )
+                pDim->GetMemberByName( xItem->getName() );
+        }
         pDim->SetMemberPosition( sName, nNewPos );
         // get new effective index (depends on sorting mode, which isn't modified)
         bGetNewIndex = true;
