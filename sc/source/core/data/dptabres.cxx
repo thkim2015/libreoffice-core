@@ -33,6 +33,8 @@
 #include <document.hxx>
 #include <dpresfilter.hxx>
 #include <dputil.hxx>
+#include <unotools/syslocale.hxx>
+#include <i18nlangtag/languagetag.hxx>
 
 #include <o3tl/safeint.hxx>
 #include <osl/diagnose.h>
@@ -1431,6 +1433,34 @@ void ScDPResultMemberFull::ProcessData(const std::vector<SCROW>& aChildMembers,
  * Parse subtotal string and replace all occurrences of '?' with the caption
  * string.  Do ensure that escaped characters are not translated.
  */
+// Excel's default captions for automatic subtotals and the grand total, in the
+// language of its user interface. Used when the pivot table names none (most
+// xlsx files), instead of the "<item> Result" / "Total Result" defaults.
+static OUString lcl_excelTotalCaption(bool bGrand, std::u16string_view rCaption)
+{
+    const OUString aLang = SvtSysLocale().GetUILanguageTag().getLanguage();
+    OUString aSuffix;
+    if (aLang == "ko")
+    {
+        if (bGrand)
+            return u"\ucd1d\ud569\uacc4"_ustr;
+        aSuffix = u"\uc694\uc57d"_ustr;
+    }
+    else if (aLang == "ja")
+    {
+        if (bGrand)
+            return u"\u7dcf\u8a08"_ustr;
+        aSuffix = u"\u96c6\u8a08"_ustr;
+    }
+    else
+    {
+        if (bGrand)
+            return u"Grand Total"_ustr;
+        aSuffix = u"Total"_ustr;
+    }
+    return OUString::Concat(rCaption) + " " + aSuffix;
+}
+
 static OUString lcl_parseSubtotalName(std::u16string_view rSubStr, std::u16string_view rCaption)
 {
     OUStringBuffer aNewStr;
@@ -1632,6 +1662,8 @@ void ScDPResultMember::FillMemberResults(uno::Sequence<sheet::MemberResult>* pSe
                     // coverity[var_deref_model : FALSE] - null_ref will not be derefed in this case
                     if (pSubtotalName)
                         aSubStr = lcl_parseSubtotalName(*pSubtotalName, aCaption);
+                    else
+                        aSubStr = lcl_excelTotalCaption(false, aCaption);
                     pArray[rPos].Flags &= ~sheet::MemberResultFlags::GRANDTOTAL;
                 }
                 else
@@ -1640,6 +1672,8 @@ void ScDPResultMember::FillMemberResults(uno::Sequence<sheet::MemberResult>* pSe
                     const std::optional<OUString> & pGrandTotalName = GetResultData()->GetSource().GetGrandTotalName();
                     if (pGrandTotalName)
                         aSubStr = *pGrandTotalName;
+                    else
+                        aSubStr = lcl_excelTotalCaption(true, aCaption);
                     pArray[rPos].Flags |= sheet::MemberResultFlags::GRANDTOTAL;
                 }
             }
