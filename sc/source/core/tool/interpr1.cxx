@@ -29,6 +29,8 @@
 #include <o3tl/temporary.hxx>
 #include <osl/thread.h>
 #include <unotools/textsearch.hxx>
+#include <unotools/syslocale.hxx>
+#include <functional>
 #include <svl/numformat.hxx>
 #include <svl/zforlist.hxx>
 #include <svl/zformat.hxx>
@@ -16259,6 +16261,771 @@ bool ScInterpreter::LookupQueryWithCache( ScAddress & o_rResultPos,
         }
     }
     return bFound;
+}
+
+namespace {
+
+// One key cell of a grouping field.
+struct GbKey
+{
+    enum class Kind { Number, String, Empty };
+    Kind meKind = Kind::Empty;
+    double mfVal = 0.0;
+    svl::SharedString maStr;
+};
+
+GbKey lcl_gbKey(const ScMatrix& rMat, SCSIZE nCol, SCSIZE nRow)
+{
+    GbKey aKey;
+    if (rMat.IsEmpty(nCol, nRow))
+        return aKey;
+    if (rMat.IsValue(nCol, nRow))
+    {
+        aKey.meKind = GbKey::Kind::Number;
+        aKey.mfVal = rMat.GetDouble(nCol, nRow);
+        return aKey;
+    }
+    aKey.maStr = rMat.GetString(nCol, nRow);
+    aKey.meKind = aKey.maStr.isEmpty() ? GbKey::Kind::Empty : GbKey::Kind::String;
+    return aKey;
+}
+
+// Numbers sort before text, text compares case-insensitively and blanks go last,
+// like the sort order of Excel.
+int lcl_gbCompare(const GbKey& a, const GbKey& b)
+{
+    if (a.meKind != b.meKind)
+        return static_cast<int>(a.meKind) < static_cast<int>(b.meKind) ? -1 : 1;
+    switch (a.meKind)
+    {
+        case GbKey::Kind::Number:
+            return a.mfVal < b.mfVal ? -1 : (a.mfVal > b.mfVal ? 1 : 0);
+        case GbKey::Kind::String:
+            return ScGlobal::GetCollator().compareString(a.maStr.getString(), b.maStr.getString());
+        default:
+            return 0;
+    }
+}
+
+// A row or column header of the result: a group, a subtotal or the grand total.
+struct GbEntry
+{
+    enum class Kind { Item, Subtotal, Grand };
+    Kind meKind = Kind::Item;
+    std::vector<GbKey> maLabels; // one per field level, empty past the group level
+    std::vector<SCSIZE> maRows;  // source rows that belong to the entry
+    std::vector<SCSIZE> maParentRows; // rows of the parent group (PERCENTOF relative to parent)
+};
+
+struct GbNode
+{
+    std::vector<GbKey> maKeys; // keys of all levels up to this node
+    std::vector<SCSIZE> maRows;
+    std::vector<GbNode> maChildren;
+    std::vector<double> maSortVals; // aggregate of each value column, for sorting by values
+};
+
+}
+
+/** Shared grouping engine of GROUPBY and PIVOTBY: splits rows into groups level by
+    level (hierarchy) or by whole key tuples (table), sorts them and lists the item,
+    subtotal and grand total entries of the result. */
+class ScGroupByBuilder
+{
+public:
+    ScMatrixRef mxFields;
+    SCSIZE mnFieldCols = 0;
+    std::vector<sal_Int32> maSort;   // 1-based; fields then value columns, negative = descending
+    bool mbTable = false;            // field_relationship 1
+    sal_Int32 mnDepth = 1;           // number of total levels; 0 none
+    bool mbTop = false;              // totals before the items
+    std::function<double(const std::vector<SCSIZE>&, SCSIZE)> maValueOf; // aggregate for sorting
+
+    std::vector<GbEntry> Build(const std::vector<SCSIZE>& rRows)
+    {
+        GbNode aRoot;
+        aRoot.maRows = rRows;
+        if (mbTable)
+            SplitTable(aRoot);
+        else
+            Split(aRoot, 0);
+
+        std::vector<GbEntry> aOut;
+        if (mnDepth != 0 && mbTop)
+            aOut.push_back(MakeTotal(aRoot, GbEntry::Kind::Grand, rRows));
+        Emit(aRoot, 0, rRows, aOut);
+        if (mnDepth != 0 && !mbTop)
+            aOut.push_back(MakeTotal(aRoot, GbEntry::Kind::Grand, rRows));
+        return aOut;
+    }
+
+private:
+    bool SameKeys(const std::vector<GbKey>& a, const std::vector<GbKey>& b) const
+    {
+        for (size_t i = 0; i < a.size(); ++i)
+            if (lcl_gbCompare(a[i], b[i]) != 0)
+                return false;
+        return true;
+    }
+
+    void Group(GbNode& rNode, const std::function<std::vector<GbKey>(SCSIZE)>& rKeyOf)
+    {
+        for (SCSIZE nRow : rNode.maRows)
+        {
+            std::vector<GbKey> aKeys = rKeyOf(nRow);
+            auto it = std::find_if(rNode.maChildren.begin(), rNode.maChildren.end(),
+                [&](const GbNode& r) { return SameKeys(r.maKeys, aKeys); });
+            if (it == rNode.maChildren.end())
+            {
+                GbNode aChild;
+                aChild.maKeys = std::move(aKeys);
+                aChild.maRows.push_back(nRow);
+                rNode.maChildren.push_back(std::move(aChild));
+            }
+            else
+                it->maRows.push_back(nRow);
+        }
+    }
+
+    void Split(GbNode& rNode, SCSIZE nLevel)
+    {
+        if (nLevel >= mnFieldCols)
+            return;
+        Group(rNode, [&](SCSIZE nRow)
+            {
+                std::vector<GbKey> aKeys(rNode.maKeys);
+                aKeys.push_back(lcl_gbKey(*mxFields, nLevel, nRow));
+                return aKeys;
+            });
+        Sort(rNode.maChildren, nLevel);
+        for (GbNode& rChild : rNode.maChildren)
+            Split(rChild, nLevel + 1);
+    }
+
+    void SplitTable(GbNode& rNode)
+    {
+        Group(rNode, [&](SCSIZE nRow)
+            {
+                std::vector<GbKey> aKeys;
+                for (SCSIZE c = 0; c < mnFieldCols; ++c)
+                    aKeys.push_back(lcl_gbKey(*mxFields, c, nRow));
+                return aKeys;
+            });
+        Sort(rNode.maChildren, SCSIZE(-1));
+    }
+
+    // nLevel -1 sorts whole key tuples (table relationship).
+    void Sort(std::vector<GbNode>& rNodes, SCSIZE nLevel)
+    {
+        bool bByValue = std::any_of(maSort.begin(), maSort.end(),
+            [&](sal_Int32 n) { return o3tl::make_unsigned(std::abs(n)) > mnFieldCols; });
+        if (bByValue && maValueOf)
+            for (GbNode& r : rNodes)
+            {
+                r.maSortVals.clear();
+                for (sal_Int32 n : maSort)
+                    if (o3tl::make_unsigned(std::abs(n)) > mnFieldCols)
+                        r.maSortVals.push_back(maValueOf(r.maRows, std::abs(n) - mnFieldCols - 1));
+            }
+        std::stable_sort(rNodes.begin(), rNodes.end(), [&](const GbNode& a, const GbNode& b)
+            {
+                size_t nVal = 0;
+                bool bOwnLevel = false;
+                for (sal_Int32 n : maSort)
+                {
+                    SCSIZE nCol = std::abs(n);
+                    int nCmp = 0;
+                    if (nCol > mnFieldCols)
+                    {
+                        double fa = a.maSortVals[nVal], fb = b.maSortVals[nVal];
+                        ++nVal;
+                        nCmp = fa < fb ? -1 : (fa > fb ? 1 : 0);
+                    }
+                    else if (nLevel == SCSIZE(-1) || nCol - 1 == nLevel)
+                    {
+                        if (nLevel != SCSIZE(-1))
+                            bOwnLevel = true;
+                        nCmp = lcl_gbCompare(a.maKeys[nCol - 1], b.maKeys[nCol - 1]);
+                    }
+                    if (nCmp != 0)
+                        return n < 0 ? nCmp > 0 : nCmp < 0;
+                }
+                if (nLevel == SCSIZE(-1))
+                {
+                    for (SCSIZE c = 0; c < mnFieldCols; ++c)
+                        if (int nCmp = lcl_gbCompare(a.maKeys[c], b.maKeys[c]))
+                            return nCmp < 0;
+                    return false;
+                }
+                // Levels without a sort key of their own stay in ascending order.
+                if (!bOwnLevel)
+                    return lcl_gbCompare(a.maKeys[nLevel], b.maKeys[nLevel]) < 0;
+                return false;
+            });
+    }
+
+    GbEntry MakeTotal(const GbNode& rNode, GbEntry::Kind eKind, const std::vector<SCSIZE>& rParentRows) const
+    {
+        GbEntry aEntry;
+        aEntry.meKind = eKind;
+        aEntry.maLabels = rNode.maKeys;
+        aEntry.maRows = rNode.maRows;
+        aEntry.maParentRows = rParentRows;
+        return aEntry;
+    }
+
+    void Emit(const GbNode& rNode, SCSIZE nLevel, const std::vector<SCSIZE>& rParentRows,
+              std::vector<GbEntry>& rOut) const
+    {
+        if (rNode.maChildren.empty())
+        {
+            GbEntry aEntry;
+            aEntry.maLabels = rNode.maKeys;
+            aEntry.maRows = rNode.maRows;
+            aEntry.maParentRows = rParentRows;
+            rOut.push_back(std::move(aEntry));
+            return;
+        }
+        for (const GbNode& rChild : rNode.maChildren)
+        {
+            // A subtotal for this child's group when the depth reaches its level.
+            bool bSub = !mbTable && !rChild.maChildren.empty()
+                        && static_cast<sal_Int32>(nLevel) + 1 < mnDepth;
+            if (bSub && mbTop)
+                rOut.push_back(MakeTotal(rChild, GbEntry::Kind::Subtotal, rNode.maRows));
+            Emit(rChild, nLevel + 1, rNode.maRows, rOut);
+            if (bSub && !mbTop)
+                rOut.push_back(MakeTotal(rChild, GbEntry::Kind::Subtotal, rNode.maRows));
+        }
+    }
+};
+
+namespace {
+
+OUString lcl_gbTotalLabel(bool bGrand)
+{
+    // Excel writes the total labels in the language of its user interface.
+    const OUString aLang = SvtSysLocale().GetUILanguageTag().getLanguage();
+    if (aLang == "ko")
+        return bGrand ? u"총합계"_ustr : u"합계"_ustr;
+    if (aLang == "ja")
+        return bGrand ? u"総計"_ustr : u"合計"_ustr;
+    return bGrand ? u"Grand Total"_ustr : u"Total"_ustr;
+}
+
+void lcl_gbPutKey(ScMatrix& rMat, const GbKey& rKey, SCSIZE nCol, SCSIZE nRow)
+{
+    switch (rKey.meKind)
+    {
+        case GbKey::Kind::Number: rMat.PutDouble(rKey.mfVal, nCol, nRow); break;
+        case GbKey::Kind::String: rMat.PutString(rKey.maStr, nCol, nRow); break;
+        default: rMat.PutString(svl::SharedString::getEmptyString(), nCol, nRow); break;
+    }
+}
+
+}
+
+ScMatrixRef ScInterpreter::GroupByOptionalMatrix()
+{
+    if (GetStackType() == svMissing || GetStackType() == svEmptyCell)
+    {
+        Pop();
+        return nullptr;
+    }
+    ScMatrixRef xMat = GetMatrix();
+    // An omitted argument may arrive as a single empty element.
+    if (xMat)
+    {
+        SCSIZE nC, nR;
+        xMat->GetDimensions(nC, nR);
+        if (nC == 1 && nR == 1 && xMat->IsEmpty(0, 0))
+            return nullptr;
+    }
+    return xMat;
+}
+
+bool ScInterpreter::GroupBySortSpec(const ScMatrixRef& xSort, SCSIZE nMaxCol, std::vector<sal_Int32>& rSpec)
+{
+    rSpec.clear();
+    if (!xSort)
+        return true;
+    SCSIZE nC, nR;
+    xSort->GetDimensions(nC, nR);
+    for (SCSIZE r = 0; r < nR; ++r)
+        for (SCSIZE c = 0; c < nC; ++c)
+        {
+            if (!xSort->IsValue(c, r))
+                return false;
+            double f = xSort->GetDouble(c, r);
+            sal_Int32 n = static_cast<sal_Int32>(f);
+            if (n == 0 || o3tl::make_unsigned(std::abs(n)) > nMaxCol)
+                return false;
+            rSpec.push_back(n);
+        }
+    return true;
+}
+
+// Call the aggregation for some rows of a value column. PERCENTOF gets the rows of
+// the reference set (rAllRows) as its second argument.
+formula::FormulaConstTokenRef ScInterpreter::GroupByAggregate(
+    const formula::FormulaCallableRef& pCallable, const ScMatrixRef& xValues, SCSIZE nCol,
+    const std::vector<SCSIZE>& rRows, const std::vector<SCSIZE>& rAllRows)
+{
+    auto makeArg = [&](const std::vector<SCSIZE>& rList) -> formula::FormulaConstTokenRef
+    {
+        ScMatrixRef xArg = GetNewMat(1, std::max<SCSIZE>(rList.size(), 1), /*bEmpty*/true);
+        if (!xArg)
+            return new FormulaErrorToken(FormulaError::MatrixSize);
+        for (SCSIZE i = 0; i < rList.size(); ++i)
+        {
+            SCSIZE nRow = rList[i];
+            if (xValues->IsEmpty(nCol, nRow))
+                continue;
+            if (xValues->IsValue(nCol, nRow))
+            {
+                FormulaError nErr = xValues->GetError(nCol, nRow);
+                if (nErr != FormulaError::NONE)
+                    xArg->PutError(nErr, 0, i);
+                else
+                    xArg->PutDouble(xValues->GetDouble(nCol, nRow), 0, i);
+            }
+            else
+                xArg->PutString(xValues->GetString(nCol, nRow), 0, i);
+        }
+        return new ScMatrixToken(xArg);
+    };
+
+    std::vector<formula::FormulaConstTokenRef> aArgs;
+    aArgs.push_back(makeArg(rRows));
+    if (pCallable->GetOpCode() == ocPercentOf)
+        aArgs.push_back(makeArg(rAllRows));
+    ScCall(pCallable, aArgs);
+    formula::FormulaConstTokenRef xRes = PopToken();
+    nGlobalError = FormulaError::NONE;
+    return xRes;
+}
+
+double ScInterpreter::GroupByAggregateValue(const formula::FormulaCallableRef& pCallable,
+    const ScMatrixRef& xValues, SCSIZE nCol, const std::vector<SCSIZE>& rRows,
+    const std::vector<SCSIZE>& rAllRows)
+{
+    ScMatrixRef xTmp = GetNewMat(1, 1, /*bEmpty*/true);
+    if (!xTmp)
+        return 0.0;
+    PutMatrixValue(GroupByAggregate(pCallable, xValues, nCol, rRows, rAllRows), xTmp, 0, 0);
+    return xTmp->IsValue(0, 0) ? xTmp->GetDouble(0, 0) : 0.0;
+}
+
+/** Shared argument handling of GROUPBY and PIVOTBY.
+    @return whether the data has a header row */
+static bool lcl_gbHasHeaders(sal_Int32 nMode, const ScMatrix& rValues, SCSIZE nRows)
+{
+    if (nMode == 1 || nMode == 3)
+        return true;
+    if (nMode == 0 || nMode == 2)
+        return false;
+    // Automatic: a text value above a number means a header row.
+    return nRows >= 2 && !rValues.IsValue(0, 0) && !rValues.IsEmpty(0, 0) && rValues.IsValue(0, 1);
+}
+
+// GROUPBY(row_fields; values; function; [field_headers]; [total_depth]; [sort_order];
+//         [filter_array]; [field_relationship])
+void ScInterpreter::ScGroupBy()
+{
+    sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount(nParamCount, 3, 8))
+        return;
+
+    bool bTable = false;
+    if (nParamCount >= 8)
+        bTable = GetDoubleWithDefault(0.0) == 1.0;
+    ScMatrixRef xFilter;
+    if (nParamCount >= 7)
+        xFilter = GroupByOptionalMatrix();
+    ScMatrixRef xSort;
+    if (nParamCount >= 6)
+        xSort = GroupByOptionalMatrix();
+    bool bAutoDepth = true;
+    sal_Int32 nDepth = 0;
+    if (nParamCount >= 5)
+    {
+        if (IsMissing())
+            Pop();
+        else
+        {
+            bAutoDepth = false;
+            nDepth = static_cast<sal_Int32>(GetDouble());
+        }
+    }
+    sal_Int32 nHeaderMode = -1;
+    if (nParamCount >= 4)
+    {
+        if (IsMissing())
+            Pop();
+        else
+            nHeaderMode = static_cast<sal_Int32>(GetDouble());
+    }
+    formula::FormulaCallableRef pCallable = GetCallable();
+    ScMatrixRef xValues = GetMatrix();
+    ScMatrixRef xFields = GetMatrix();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    if (!pCallable || !xValues || !xFields || nHeaderMode < -1 || nHeaderMode > 3)
+    {
+        PushIllegalArgument();
+        return;
+    }
+
+    SCSIZE nFC, nFR, nVC, nVR;
+    xFields->GetDimensions(nFC, nFR);
+    xValues->GetDimensions(nVC, nVR);
+    if (nFR != nVR || nFC == 0 || nVC == 0)
+    {
+        PushIllegalArgument();
+        return;
+    }
+    bool bHeaders = lcl_gbHasHeaders(nHeaderMode, *xValues, nVR);
+    // Field headers are shown when asked for, and automatically with several field levels.
+    bool bShowHeaders = nHeaderMode == 3 || nHeaderMode == 2 || (nHeaderMode == -1 && bHeaders && nFC > 1);
+
+    std::vector<SCSIZE> aRows;
+    for (SCSIZE r = bHeaders ? 1 : 0; r < nVR; ++r)
+    {
+        if (xFilter)
+        {
+            SCSIZE nC, nR;
+            xFilter->GetDimensions(nC, nR);
+            if (nR != nVR || nC != 1)
+            {
+                PushIllegalArgument();
+                return;
+            }
+            if (!xFilter->IsValue(0, r) || xFilter->GetDouble(0, r) == 0.0)
+                continue;
+        }
+        aRows.push_back(r);
+    }
+    if (aRows.empty())
+    {
+        PushError(FormulaError::NestedArray); // #CALC! for an empty result
+        return;
+    }
+
+    if (bAutoDepth)
+        nDepth = (!bTable && nFC > 1) ? 2 : 1;
+    if (std::abs(nDepth) > 1 && (bTable || nFC < 2))
+    {
+        PushIllegalArgument();
+        return;
+    }
+
+    ScGroupByBuilder aBuilder;
+    aBuilder.mxFields = xFields;
+    aBuilder.mnFieldCols = nFC;
+    aBuilder.mbTable = bTable;
+    aBuilder.mnDepth = std::abs(nDepth);
+    aBuilder.mbTop = nDepth < 0;
+    if (!GroupBySortSpec(xSort, nFC + nVC, aBuilder.maSort))
+    {
+        PushIllegalArgument();
+        return;
+    }
+    aBuilder.maValueOf = [&](const std::vector<SCSIZE>& rList, SCSIZE nCol)
+        { return GroupByAggregateValue(pCallable, xValues, nCol, rList, aRows); };
+    std::vector<GbEntry> aEntries = aBuilder.Build(aRows);
+
+    SCSIZE nOutCols = nFC + nVC;
+    SCSIZE nOutRows = aEntries.size() + (bShowHeaders ? 1 : 0);
+    ScMatrixRef xRes = GetNewMat(nOutCols, nOutRows, /*bEmpty*/true);
+    if (!xRes)
+    {
+        PushError(FormulaError::MatrixSize);
+        return;
+    }
+    SCSIZE nOut = 0;
+    if (bShowHeaders)
+    {
+        for (SCSIZE c = 0; c < nOutCols; ++c)
+        {
+            if (bHeaders)
+                lcl_gbPutKey(*xRes, c < nFC ? lcl_gbKey(*xFields, c, 0) : lcl_gbKey(*xValues, c - nFC, 0), c, 0);
+            else
+                xRes->PutString(mrStrPool.intern(c < nFC ? OUString("Row Field " + OUString::number(c + 1))
+                                                         : OUString("Value " + OUString::number(c - nFC + 1))), c, 0);
+        }
+        nOut = 1;
+    }
+    for (const GbEntry& rEntry : aEntries)
+    {
+        for (SCSIZE c = 0; c < nFC; ++c)
+        {
+            if (rEntry.meKind == GbEntry::Kind::Grand)
+            {
+                if (c == 0)
+                    xRes->PutString(mrStrPool.intern(lcl_gbTotalLabel(nFC > 1)), c, nOut);
+                else
+                    xRes->PutString(svl::SharedString::getEmptyString(), c, nOut);
+            }
+            else if (c < rEntry.maLabels.size())
+                lcl_gbPutKey(*xRes, rEntry.maLabels[c], c, nOut);
+            else
+                xRes->PutString(svl::SharedString::getEmptyString(), c, nOut);
+        }
+        for (SCSIZE v = 0; v < nVC; ++v)
+            PutMatrixValue(GroupByAggregate(pCallable, xValues, v, rEntry.maRows, aRows).get(),
+                           xRes, nFC + v, nOut);
+        ++nOut;
+    }
+    PushMatrix(xRes);
+}
+
+// PIVOTBY(row_fields; col_fields; values; function; [field_headers]; [row_total_depth];
+//         [row_sort_order]; [col_total_depth]; [col_sort_order]; [filter_array]; [relative_to])
+void ScInterpreter::ScPivotBy()
+{
+    sal_uInt8 nParamCount = GetByte();
+    if (!MustHaveParamCount(nParamCount, 4, 11))
+        return;
+
+    sal_Int32 nRelative = 0;
+    if (nParamCount >= 11)
+        nRelative = static_cast<sal_Int32>(GetDoubleWithDefault(0.0));
+    ScMatrixRef xFilter;
+    if (nParamCount >= 10)
+        xFilter = GroupByOptionalMatrix();
+    ScMatrixRef xColSort;
+    if (nParamCount >= 9)
+        xColSort = GroupByOptionalMatrix();
+    bool bAutoColDepth = true;
+    sal_Int32 nColDepth = 0;
+    if (nParamCount >= 8)
+    {
+        if (IsMissing())
+            Pop();
+        else
+        {
+            bAutoColDepth = false;
+            nColDepth = static_cast<sal_Int32>(GetDouble());
+        }
+    }
+    ScMatrixRef xRowSort;
+    if (nParamCount >= 7)
+        xRowSort = GroupByOptionalMatrix();
+    bool bAutoRowDepth = true;
+    sal_Int32 nRowDepth = 0;
+    if (nParamCount >= 6)
+    {
+        if (IsMissing())
+            Pop();
+        else
+        {
+            bAutoRowDepth = false;
+            nRowDepth = static_cast<sal_Int32>(GetDouble());
+        }
+    }
+    sal_Int32 nHeaderMode = -1;
+    if (nParamCount >= 5)
+    {
+        if (IsMissing())
+            Pop();
+        else
+            nHeaderMode = static_cast<sal_Int32>(GetDouble());
+    }
+    formula::FormulaCallableRef pCallable = GetCallable();
+    ScMatrixRef xValues = GetMatrix();
+    ScMatrixRef xColFields = GetMatrix();
+    ScMatrixRef xRowFields = GetMatrix();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    if (!pCallable || !xValues || !xRowFields || !xColFields || nHeaderMode < -1 || nHeaderMode > 3
+        || nRelative < 0 || nRelative > 4)
+    {
+        PushIllegalArgument();
+        return;
+    }
+
+    SCSIZE nRC, nRR, nCC, nCR, nVC, nVR;
+    xRowFields->GetDimensions(nRC, nRR);
+    xColFields->GetDimensions(nCC, nCR);
+    xValues->GetDimensions(nVC, nVR);
+    if (nRR != nVR || nCR != nVR || nRC == 0 || nCC == 0 || nVC == 0)
+    {
+        PushIllegalArgument();
+        return;
+    }
+    bool bHeaders = lcl_gbHasHeaders(nHeaderMode, *xValues, nVR);
+    bool bShowHeaders = nHeaderMode == 3 || nHeaderMode == 2;
+
+    std::vector<SCSIZE> aRows;
+    for (SCSIZE r = bHeaders ? 1 : 0; r < nVR; ++r)
+    {
+        if (xFilter)
+        {
+            SCSIZE nC, nR;
+            xFilter->GetDimensions(nC, nR);
+            if (nR != nVR || nC != 1)
+            {
+                PushIllegalArgument();
+                return;
+            }
+            if (!xFilter->IsValue(0, r) || xFilter->GetDouble(0, r) == 0.0)
+                continue;
+        }
+        aRows.push_back(r);
+    }
+    if (aRows.empty())
+    {
+        PushError(FormulaError::NestedArray);
+        return;
+    }
+    if (bAutoRowDepth)
+        nRowDepth = nRC > 1 ? 2 : 1;
+    if (bAutoColDepth)
+        nColDepth = nCC > 1 ? 2 : 1;
+    if ((std::abs(nRowDepth) > 1 && nRC < 2) || (std::abs(nColDepth) > 1 && nCC < 2))
+    {
+        PushIllegalArgument();
+        return;
+    }
+
+    auto valueOf = [&](const std::vector<SCSIZE>& rList, SCSIZE nCol)
+        { return GroupByAggregateValue(pCallable, xValues, nCol, rList, aRows); };
+    ScGroupByBuilder aRowBuilder;
+    aRowBuilder.mxFields = xRowFields;
+    aRowBuilder.mnFieldCols = nRC;
+    aRowBuilder.mnDepth = std::abs(nRowDepth);
+    aRowBuilder.mbTop = nRowDepth < 0;
+    aRowBuilder.maValueOf = valueOf;
+    ScGroupByBuilder aColBuilder;
+    aColBuilder.mxFields = xColFields;
+    aColBuilder.mnFieldCols = nCC;
+    aColBuilder.mnDepth = std::abs(nColDepth);
+    aColBuilder.mbTop = nColDepth < 0;
+    aColBuilder.maValueOf = valueOf;
+    if (!GroupBySortSpec(xRowSort, nRC + nVC, aRowBuilder.maSort)
+        || !GroupBySortSpec(xColSort, nCC + nVC, aColBuilder.maSort))
+    {
+        PushIllegalArgument();
+        return;
+    }
+    std::vector<GbEntry> aRowEntries = aRowBuilder.Build(aRows);
+    std::vector<GbEntry> aColEntries = aColBuilder.Build(aRows);
+
+    // Header rows: one per column field level, plus the value names when there are
+    // several value columns or headers are shown.
+    bool bValueRow = nVC > 1 || bShowHeaders;
+    SCSIZE nHeadRows = nCC + (bValueRow ? 1 : 0);
+    SCSIZE nOutCols = nRC + aColEntries.size() * nVC;
+    SCSIZE nOutRows = nHeadRows + aRowEntries.size();
+    ScMatrixRef xRes = GetNewMat(nOutCols, nOutRows, /*bEmpty*/true);
+    if (!xRes)
+    {
+        PushError(FormulaError::MatrixSize);
+        return;
+    }
+    const svl::SharedString& rEmpty = svl::SharedString::getEmptyString();
+    for (SCSIZE r = 0; r < nHeadRows; ++r)
+        for (SCSIZE c = 0; c < nRC; ++c)
+            xRes->PutString(rEmpty, c, r);
+    if (bShowHeaders)
+        for (SCSIZE c = 0; c < nRC; ++c)
+        {
+            if (bHeaders)
+                lcl_gbPutKey(*xRes, lcl_gbKey(*xRowFields, c, 0), c, nHeadRows - 1);
+            else
+                xRes->PutString(mrStrPool.intern("Row Field " + OUString::number(c + 1)), c, nHeadRows - 1);
+        }
+
+    for (size_t nCol = 0; nCol < aColEntries.size(); ++nCol)
+    {
+        const GbEntry& rCol = aColEntries[nCol];
+        for (SCSIZE v = 0; v < nVC; ++v)
+        {
+            SCSIZE nOutCol = nRC + nCol * nVC + v;
+            for (SCSIZE r = 0; r < nCC; ++r)
+            {
+                if (rCol.meKind == GbEntry::Kind::Grand)
+                {
+                    if (r == 0 && v == 0)
+                        xRes->PutString(mrStrPool.intern(lcl_gbTotalLabel(nCC > 1)), nOutCol, r);
+                    else
+                        xRes->PutString(rEmpty, nOutCol, r);
+                }
+                else if (r < rCol.maLabels.size() && v == 0)
+                    lcl_gbPutKey(*xRes, rCol.maLabels[r], nOutCol, r);
+                else
+                    xRes->PutString(rEmpty, nOutCol, r);
+            }
+            if (bValueRow)
+            {
+                if (bHeaders)
+                    lcl_gbPutKey(*xRes, lcl_gbKey(*xValues, v, 0), nOutCol, nCC);
+                else
+                    xRes->PutString(mrStrPool.intern("Value " + OUString::number(v + 1)), nOutCol, nCC);
+            }
+        }
+    }
+
+    for (size_t nRow = 0; nRow < aRowEntries.size(); ++nRow)
+    {
+        const GbEntry& rRow = aRowEntries[nRow];
+        SCSIZE nOutRow = nHeadRows + nRow;
+        for (SCSIZE c = 0; c < nRC; ++c)
+        {
+            if (rRow.meKind == GbEntry::Kind::Grand)
+            {
+                if (c == 0)
+                    xRes->PutString(mrStrPool.intern(lcl_gbTotalLabel(nRC > 1)), c, nOutRow);
+                else
+                    xRes->PutString(rEmpty, c, nOutRow);
+            }
+            else if (c < rRow.maLabels.size())
+                lcl_gbPutKey(*xRes, rRow.maLabels[c], c, nOutRow);
+            else
+                xRes->PutString(rEmpty, c, nOutRow);
+        }
+        for (size_t nCol = 0; nCol < aColEntries.size(); ++nCol)
+        {
+            const GbEntry& rCol = aColEntries[nCol];
+            std::vector<SCSIZE> aCell;
+            std::set_intersection(rRow.maRows.begin(), rRow.maRows.end(), rCol.maRows.begin(),
+                                  rCol.maRows.end(), std::back_inserter(aCell));
+            for (SCSIZE v = 0; v < nVC; ++v)
+            {
+                SCSIZE nOutCol = nRC + nCol * nVC + v;
+                if (aCell.empty())
+                {
+                    xRes->PutString(rEmpty, nOutCol, nOutRow);
+                    continue;
+                }
+                // The reference set of PERCENTOF.
+                std::vector<SCSIZE> aRef;
+                switch (nRelative)
+                {
+                    case 0: aRef = rCol.maRows; break;  // column total
+                    case 1: aRef = rRow.maRows; break;  // row total
+                    case 2: aRef = aRows; break;        // grand total
+                    case 3: // parent column total
+                        std::set_intersection(rRow.maRows.begin(), rRow.maRows.end(),
+                            rCol.maParentRows.begin(), rCol.maParentRows.end(), std::back_inserter(aRef));
+                        break;
+                    default: // parent row total
+                        std::set_intersection(rRow.maParentRows.begin(), rRow.maParentRows.end(),
+                            rCol.maRows.begin(), rCol.maRows.end(), std::back_inserter(aRef));
+                        break;
+                }
+                PutMatrixValue(GroupByAggregate(pCallable, xValues, v, aCell, aRef).get(),
+                               xRes, nOutCol, nOutRow);
+            }
+        }
+    }
+    PushMatrix(xRes);
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

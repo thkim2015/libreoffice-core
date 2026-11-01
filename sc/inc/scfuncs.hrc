@@ -4611,6 +4611,56 @@ const TranslateId ocPHONETIC_ARY[] =
     NC_("ocPHONETIC", "The cell or range containing the text.")
 };
 
+// -=*# Resource for function GROUPBY #*=-
+const TranslateId ocGROUPBY_ARY[] =
+{
+    NC_("ocGROUPBY", "Groups rows by one or more fields and aggregates the values of each group."),
+    NC_("ocGROUPBY", "Row fields"),
+    NC_("ocGROUPBY", "The column-oriented range or array whose values group the rows."),
+    NC_("ocGROUPBY", "Values"),
+    NC_("ocGROUPBY", "The column-oriented range or array of values to aggregate."),
+    NC_("ocGROUPBY", "Function"),
+    NC_("ocGROUPBY", "The aggregation, such as SUM, AVERAGE, COUNT or a LAMBDA."),
+    NC_("ocGROUPBY", "Field headers"),
+    NC_("ocGROUPBY", "0 - no headers. 1 - headers, not shown. 2 - no headers, generated. 3 - headers, shown. Omitted - automatic."),
+    NC_("ocGROUPBY", "Total depth"),
+    NC_("ocGROUPBY", "0 - no totals. 1 - grand totals. 2 - grand totals and subtotals. Negative - at the top."),
+    NC_("ocGROUPBY", "Sort order"),
+    NC_("ocGROUPBY", "Column numbers to sort by, negative for descending order."),
+    NC_("ocGROUPBY", "Filter array"),
+    NC_("ocGROUPBY", "A column of logical values that selects the rows to include."),
+    NC_("ocGROUPBY", "Field relationship"),
+    NC_("ocGROUPBY", "0 - hierarchy (default). 1 - table.")
+};
+
+// -=*# Resource for function PIVOTBY #*=-
+const TranslateId ocPIVOTBY_ARY[] =
+{
+    NC_("ocPIVOTBY", "Groups rows and columns by fields and aggregates the values of each intersection."),
+    NC_("ocPIVOTBY", "Row fields"),
+    NC_("ocPIVOTBY", "The column-oriented range or array whose values group the rows."),
+    NC_("ocPIVOTBY", "Column fields"),
+    NC_("ocPIVOTBY", "The column-oriented range or array whose values group the columns."),
+    NC_("ocPIVOTBY", "Values"),
+    NC_("ocPIVOTBY", "The column-oriented range or array of values to aggregate."),
+    NC_("ocPIVOTBY", "Function"),
+    NC_("ocPIVOTBY", "The aggregation, such as SUM, AVERAGE, COUNT or a LAMBDA."),
+    NC_("ocPIVOTBY", "Field headers"),
+    NC_("ocPIVOTBY", "0 - no headers. 1 - headers, not shown. 2 - no headers, generated. 3 - headers, shown. Omitted - automatic."),
+    NC_("ocPIVOTBY", "Row total depth"),
+    NC_("ocPIVOTBY", "0 - no totals. 1 - grand totals. 2 - grand totals and subtotals. Negative - at the top."),
+    NC_("ocPIVOTBY", "Row sort order"),
+    NC_("ocPIVOTBY", "Column numbers to sort the rows by, negative for descending order."),
+    NC_("ocPIVOTBY", "Column total depth"),
+    NC_("ocPIVOTBY", "0 - no totals. 1 - grand totals. 2 - grand totals and subtotals. Negative - at the left."),
+    NC_("ocPIVOTBY", "Column sort order"),
+    NC_("ocPIVOTBY", "Column numbers to sort the columns by, negative for descending order."),
+    NC_("ocPIVOTBY", "Filter array"),
+    NC_("ocPIVOTBY", "A column of logical values that selects the rows to include."),
+    NC_("ocPIVOTBY", "Relative to"),
+    NC_("ocPIVOTBY", "The reference of PERCENTOF. 0 - column totals. 1 - row totals. 2 - grand total. 3 - parent column total. 4 - parent row total.")
+};
+
 // -=*# Resource for function TRIMRANGE #*=-
 const TranslateId ocTRIMRANGE_ARY[] =
 {

@@ -925,6 +925,8 @@ const FunctionData saFuncTable2024[] =
     { "COM.MICROSOFT.VALUETOTEXT",         "VALUETOTEXT",         NOID,   NOID,   1,  2,  V, { VR }, FuncFlags::MACROCALL_NEW },
     { "COM.MICROSOFT.PERCENTOF",           "PERCENTOF",           NOID,   NOID,   2,  2,  V, { RO }, FuncFlags::MACROCALL_NEW },
     { "COM.MICROSOFT.TRIMRANGE",           "TRIMRANGE",           NOID,   NOID,   1,  3,  R, { RO, VR }, FuncFlags::MACROCALL_NEW },
+    { "COM.MICROSOFT.GROUPBY",             "GROUPBY",             NOID,   NOID,   3,  8,  A, { VA, VA, VV }, FuncFlags::MACROCALL_NEW | FuncFlags::VOLATILE },
+    { "COM.MICROSOFT.PIVOTBY",             "PIVOTBY",             NOID,   NOID,   4, 11,  A, { VA, VA, VA, VV }, FuncFlags::MACROCALL_NEW | FuncFlags::VOLATILE },
 };
 
 

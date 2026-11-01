@@ -652,6 +652,8 @@ const XclFunctionInfo saFuncTable_2024[] =
     EXC_FUNCENTRY_V_VR(  ocRegexReplace, 3, 5, 0,  "REGEXREPLACE" ),
     EXC_FUNCENTRY_V_VR(  ocValueToText,1,  2,  0,  "VALUETOTEXT" ),
     EXC_FUNCENTRY_V_RO(  ocPercentOf,  2,  2,  0,  "PERCENTOF" ),
+    EXC_FUNCENTRY_V_VR(  ocGroupBy,    3,  8,  0,  "GROUPBY" ),
+    EXC_FUNCENTRY_V_VR(  ocPivotBy,    4, 11,  0,  "PIVOTBY" ),
     { ocTrimRange, NOID, 1, 3, R, { RO, VR },       EXC_FUNCFLAG_IMPORTONLY, EXC_FUNCNAME( "TRIMRANGE" ) },
     { ocTrimRange,  255, 2, 4, R, { RO_E, RO, VR }, EXC_FUNCFLAG_EXPORTONLY, EXC_FUNCNAME( "TRIMRANGE" ) },
 };

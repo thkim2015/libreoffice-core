@@ -1325,6 +1325,8 @@ bool FormulaCompiler::IsOpCodeVolatile( OpCode eOp )
         case ocMap:
         case ocReduce:
         case ocScan:
+        case ocGroupBy:
+        case ocPivotBy:
             bRet = true;
             break;
         default:
@@ -1408,6 +1410,8 @@ bool FormulaCompiler::IsMatrixFunction( OpCode eOpCode )
         case ocMakeArray :
         case ocRegexExtract :
         case ocTrimRange :
+        case ocGroupBy :
+        case ocPivotBy :
             return true;
         default:
         {
@@ -1921,6 +1925,8 @@ void FormulaCompiler::Factor()
                     case ocScan:
                     case ocRegexExtract:
                     case ocTrimRange:
+                    case ocGroupBy:
+                    case ocPivotBy:
                         mpArr->SetDynamicArrayFunction( true);
                     break;
                     default:

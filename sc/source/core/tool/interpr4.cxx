@@ -4101,6 +4101,8 @@ void ScInterpreter::DispatchOpCode( OpCode eOp )
         case ocValueToText      : ScValueToText();              break;
         case ocPercentOf        : ScPercentOf();                break;
         case ocTrimRange        : ScTrimRange();                break;
+        case ocGroupBy          : ScGroupBy();                  break;
+        case ocPivotBy          : ScPivotBy();                  break;
         case ocToCol            : ScToCol();                    break;
         case ocToRow            : ScToRow();                    break;
         case ocUnique           : ScUnique();                   break;

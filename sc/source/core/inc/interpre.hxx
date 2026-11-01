@@ -795,6 +795,16 @@ private:
     void ScPhonetic();
     void ScPercentOf();
     void ScTrimRange();
+    void ScGroupBy();
+    void ScPivotBy();
+    ScMatrixRef GroupByOptionalMatrix();
+    static bool GroupBySortSpec(const ScMatrixRef& xSort, SCSIZE nMaxCol, std::vector<sal_Int32>& rSpec);
+    formula::FormulaConstTokenRef GroupByAggregate(const formula::FormulaCallableRef& pCallable,
+        const ScMatrixRef& xValues, SCSIZE nCol, const std::vector<SCSIZE>& rRows,
+        const std::vector<SCSIZE>& rAllRows);
+    double GroupByAggregateValue(const formula::FormulaCallableRef& pCallable,
+        const ScMatrixRef& xValues, SCSIZE nCol, const std::vector<SCSIZE>& rRows,
+        const std::vector<SCSIZE>& rAllRows);
     void ScToCol();
     void ScToRow();
     void ScUnique();

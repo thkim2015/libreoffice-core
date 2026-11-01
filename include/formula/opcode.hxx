@@ -580,7 +580,9 @@ enum OpCode : sal_uInt16
         ocTrimRange         = 533,
         ocDbcs              = 534,
         ocPhonetic          = 535,
-        ocStopTwoParameters = 536, /* last function with two or more parameters' OpCode + 1 */
+        ocGroupBy           = 536,
+        ocPivotBy           = 537,
+        ocStopTwoParameters = 538, /* last function with two or more parameters' OpCode + 1 */
 
         ocStopFunction      = ocStopTwoParameters,  /* last function's OpCode + 1 */
         ocLastOpcodeId      = ocStopFunction - 1, /* last OpCode */
@@ -1122,6 +1124,8 @@ inline std::string OpCodeEnumToString(OpCode eCode)
     case ocTrimRange: return "TrimRange";
     case ocDbcs: return "Dbcs";
     case ocPhonetic: return "Phonetic";
+    case ocGroupBy: return "GroupBy";
+    case ocPivotBy: return "PivotBy";
     case ocTTT: return "TTT";
     case ocDebugVar: return "DebugVar";
     case ocDataToken1: return "DataToken1";

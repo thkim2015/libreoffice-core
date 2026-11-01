@@ -88,7 +88,7 @@ struct ScFuncDescCore
      * For every parameter:
      *     Boolean flag whether the parameter is optional.
      */
-    sal_uInt8 aOptionalArgs[7];
+    sal_uInt8 aOptionalArgs[11];
     /*
      * Limited number of maximum (variable) parameters, or 0 if no specific
      * limit other than the general VAR_ARGS-1 value.
@@ -824,6 +824,8 @@ ScFunctionList::ScFunctionList( bool bEnglishFunctionNames )
         { ocValueToText, ENTRY(ocVALUETOTEXT_ARY), 0, ID_FUNCTION_GRP_TEXT, HID_FUNC_VALUETOTEXT_MS, 2, { 0, 1 }, 0 },
         { ocPercentOf, ENTRY(ocPERCENTOF_ARY), 0, ID_FUNCTION_GRP_MATH, HID_FUNC_PERCENTOF_MS, 2, { 0, 0 }, 0 },
         { ocTrimRange, ENTRY(ocTRIMRANGE_ARY), 0, ID_FUNCTION_GRP_TABLE, HID_FUNC_TRIMRANGE_MS, 3, { 0, 1, 1 }, 0 },
+        { ocGroupBy, ENTRY(ocGROUPBY_ARY), 0, ID_FUNCTION_GRP_TABLE, HID_FUNC_GROUPBY_MS, 8, { 0, 0, 0, 1, 1, 1, 1, 1 }, 0 },
+        { ocPivotBy, ENTRY(ocPIVOTBY_ARY), 0, ID_FUNCTION_GRP_TABLE, HID_FUNC_PIVOTBY_MS, 11, { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1 }, 0 },
         { ocDbcs, ENTRY(ocDBCS_ARY), 0, ID_FUNCTION_GRP_TEXT, HID_FUNC_DBCS_MS, 1, { 0 }, 0 },
         { ocPhonetic, ENTRY(ocPHONETIC_ARY), 0, ID_FUNCTION_GRP_TEXT, HID_FUNC_PHONETIC_MS, 1, { 0 }, 0 },
     };
