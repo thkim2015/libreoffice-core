@@ -556,6 +556,8 @@ void ScDPOutput::MultiFieldCell(SCCOL nCol, SCROW nRow, SCTAB nTab, bool bRowFie
     if (!mbShowHeaders)
     {
         // Excel: field headers off leaves the cell empty, without a filter button
+        // (clear it: the data caption may have been written there first)
+        mpDocument->SetEmptyCell(ScAddress(nCol, nRow, nTab));
         mpStyleOutput->addFieldCell(nCol, nRow, /*bFrame*/ false);
         return;
     }
@@ -587,6 +589,7 @@ void ScDPOutput::FieldCell(
 {
     if (!mbShowHeaders && !rData.mbPageDim)
     {
+        mpDocument->SetEmptyCell(ScAddress(nCol, nRow, nTab));
         mpStyleOutput->addFieldCell(nCol, nRow, bInTable);
         return;
     }
