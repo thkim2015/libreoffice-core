@@ -41,6 +41,11 @@
 #include <dbfunc.hxx>
 #include <unonames.hxx>
 #include <dpdimsave.hxx>
+#include <dpcache.hxx>
+#include <dptabdat.hxx>
+#include <dpfilteredcache.hxx>
+#include <compiler.hxx>
+#include <tokenarray.hxx>
 #include <hints.hxx>
 #include <dputil.hxx>
 #include <globstr.hrc>
@@ -121,6 +126,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         // ZetaOffice: top-left cell of the output; setting it on a table moves the table there
         { u"ZetaOutputPosition"_ustr, 0,  cppu::UnoType<table::CellAddress>::get(), 0, 0 },
         { u"ZetaCellInput"_ustr, 0,  cppu::UnoType<uno::Sequence<uno::Any>>::get(), 0, 0 },
+        // ZetaOffice: calculated fields { name, formula, name, formula, ... }
+        { u"ZetaCalculatedFields"_ustr, 0,  cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -735,6 +742,68 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
         return;
     }
 
+    if ( aPropertyName == u"ZetaCalculatedFields"_ustr )
+    {
+        // ZetaOffice: replace the calculated fields of the cache with the list
+        // { name, formula, ... } and make the table again (Excel: calculated fields
+        // belong to the cache). All formulas are compiled first, so a bad one changes
+        // nothing: it throws IllegalArgumentException "formula:<name>".
+        uno::Sequence<OUString> aList;
+        if ( !(aValue >>= aList) || aList.getLength() % 2 )
+            throw lang::IllegalArgumentException();
+        ScDocShell* pDocSh = GetDocShell();
+        if ( !pDocSh || !dynamic_cast<ScDataPilotTableObj*>(this) )
+            throw uno::RuntimeException();
+        ScDocument& rDoc = pDocSh->GetDocument();
+        pDPObject->GetSource();
+        ScDPTableData* pTableData = pDPObject->GetTableData();
+        if ( !pTableData )
+            throw uno::RuntimeException();
+        const ScDPCache& rCache = pTableData->GetCacheTable().getCache();
+        const sal_Int32 nCount = aList.getLength() / 2;
+        std::vector<std::shared_ptr<ScTokenArray>> aArrays;
+        for ( sal_Int32 i = 0; i < nCount; ++i )
+        {
+            const OUString& rName = aList[2 * i];
+            if ( rName.isEmpty() )
+                throw lang::IllegalArgumentException(u"name"_ustr, getXWeak(), 1);
+            ScCompiler aComp( rDoc, ScAddress(ScAddress::INITIALIZE_INVALID), rDoc.GetGrammar(), true, false );
+            for ( SCCOL nCol = 0; nCol < rCache.GetColumnCount(); ++nCol )
+                aComp.SetAvailablePivotFields( rCache.GetDimensionName( nCol ) );
+            for ( sal_Int32 k = 0; k < nCount; ++k )
+                if ( k != i )
+                    aComp.SetAvailablePivotFields( aList[2 * k] );
+            std::shared_ptr<ScTokenArray> pArray( aComp.CompileString( aList[2 * i + 1] ) );
+            if ( pArray && pArray->GetCodeError() == FormulaError::NONE && pArray->GetLen() )
+                aComp.CompileTokenArray();
+            if ( !pArray || pArray->GetCodeError() != FormulaError::NONE || !pArray->GetLen() )
+                throw lang::IllegalArgumentException( "formula:" + rName, getXWeak(), 1 );
+            aArrays.push_back( pArray );
+        }
+        std::vector<std::pair<OUString, sal_Int32>> aOld;
+        for ( const auto& pField : rCache.GetCalculatedFields() )
+            aOld.emplace_back( pField->maFieldName, pField->mnIndex );
+        for ( const auto& [rOldName, nOldIndex] : aOld )
+        {
+            bool bKeep = false;
+            for ( sal_Int32 i = 0; i < nCount && !bKeep; ++i )
+                bKeep = aList[2 * i].equalsIgnoreAsciiCase( rOldName );
+            if ( !bKeep )
+                pDPObject->RemoveCalculatedFieldFromCache( rOldName );
+        }
+        const sal_Int32 nBase = static_cast<sal_Int32>( rCache.GetColumnCount() + rCache.GetGroupFieldCount() );
+        for ( sal_Int32 i = 0; i < nCount; ++i )
+        {
+            const ScDPCache::CalculatedField* pExisting = rCache.GetCalculatedFieldByName( aList[2 * i] );
+            const sal_Int32 nIndex = pExisting ? pExisting->mnIndex
+                : nBase + static_cast<sal_Int32>( rCache.GetCalculatedFieldCount() );
+            pDPObject->InsertCalculatedFieldToCache( nIndex, aList[2 * i], aArrays[i] );
+        }
+        ScDPObject aNewObj( *pDPObject );
+        ScDBDocFunc( *pDocSh ).DataPilotUpdate( pDPObject, &aNewObj, false, true );
+        return;
+    }
+
     if ( aPropertyName == u"ZetaOutputPosition"_ustr )
     {
         // ZetaOffice: move the table (Excel "Move PivotTable"). Like the pivot layout
@@ -960,6 +1029,20 @@ Any SAL_CALL ScDataPilotDescriptorBase::getPropertyValue( const OUString& aPrope
                 const std::optional<OUString> & pGrandTotalName = aNewData.GetGrandTotalName();
                 if (pGrandTotalName)
                     aRet <<= *pGrandTotalName;      // same behavior as in ScDPSource
+            }
+            else if ( aPropertyName == u"ZetaCalculatedFields"_ustr )
+            {
+                std::vector<OUString> aList;
+                pDPObject->GetSource();
+                if ( ScDPTableData* pTableData = pDPObject->GetTableData() )
+                {
+                    for ( const auto& pField : pTableData->GetCacheTable().getCache().GetCalculatedFields() )
+                    {
+                        aList.push_back( pField->maFieldName );
+                        aList.push_back( pField->maCalculation );
+                    }
+                }
+                aRet <<= comphelper::containerToSequence( aList );
             }
             else if ( aPropertyName == u"ZetaOutputPosition"_ustr )
             {
