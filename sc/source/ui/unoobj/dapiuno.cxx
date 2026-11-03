@@ -128,6 +128,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         { u"ZetaCellInput"_ustr, 0,  cppu::UnoType<uno::Sequence<uno::Any>>::get(), 0, 0 },
         // ZetaOffice: calculated fields { name, formula, name, formula, ... }
         { u"ZetaCalculatedFields"_ustr, 0,  cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
+        // ZetaOffice: hide the header row above the column fields (xlsx firstHeaderRow="0")
+        { u"ZetaHideHeader"_ustr, 0,  cppu::UnoType<bool>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -871,6 +873,10 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
             if ( aValue >>= aStrVal )
                 aNewData.SetGrandTotalName(aStrVal);
         }
+        else if ( aPropertyName == u"ZetaHideHeader"_ustr )
+        {
+            pDPObject->SetHideHeader( ::cppu::any2bool( aValue ) );
+        }
         else if ( aPropertyName == u"ZetaStyleInfo"_ustr )
         {
             // ZetaOffice: per-pivot Excel style (written to xlsx pivotTableStyleInfo)
@@ -1043,6 +1049,10 @@ Any SAL_CALL ScDataPilotDescriptorBase::getPropertyValue( const OUString& aPrope
                     }
                 }
                 aRet <<= comphelper::containerToSequence( aList );
+            }
+            else if ( aPropertyName == u"ZetaHideHeader"_ustr )
+            {
+                aRet <<= pDPObject->GetHideHeader();
             }
             else if ( aPropertyName == u"ZetaOutputPosition"_ustr )
             {
