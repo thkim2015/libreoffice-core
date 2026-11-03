@@ -1364,7 +1364,11 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
         sheet::DataPilotFieldOrientation eOrient = pDim->GetOrientation();
 
-        if (eOrient == sheet::DataPilotFieldOrientation_HIDDEN)
+        // ZetaOffice: a field off every axis that still hides items (slicer filter)
+        // keeps its items like Excel: <pivotField showAll="0"><items>...h="1"...
+        const bool bHiddenWithItems = eOrient == sheet::DataPilotFieldOrientation_HIDDEN
+                                      && pDim->HasInvisibleMember();
+        if (eOrient == sheet::DataPilotFieldOrientation_HIDDEN && !bHiddenWithItems)
         {
             if(bDimInTabularMode)
             {
@@ -1537,7 +1541,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         }
 
         auto pAttList = sax_fastparser::FastSerializerHelper::createAttrList();
-        pAttList->add(XML_axis, toOOXMLAxisType(eOrient));
+        if (!bHiddenWithItems)
+            pAttList->add(XML_axis, toOOXMLAxisType(eOrient));
         if (bAppearsInData)
             pAttList->add(XML_dataField, ToPsz10(true));
 
@@ -1565,6 +1570,11 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                 bHasDefaultSubtotal = true;
             else if (!pAttList->hasAttribute(nAttToken))
                 pAttList->add(nAttToken, ToPsz10(true));
+        }
+        if (bHiddenWithItems && aSubtotalSequence.empty())
+        {
+            aSubtotalSequence.push_back("default"_ostr);
+            bHasDefaultSubtotal = true;
         }
         // XML_defaultSubtotal is true by default; only write it if it's false
         if (!bHasDefaultSubtotal)
