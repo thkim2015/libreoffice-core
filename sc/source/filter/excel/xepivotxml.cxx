@@ -15,6 +15,8 @@
 #include <dpitemdata.hxx>
 #include <dpobject.hxx>
 #include <dpsave.hxx>
+#include <dptabdat.hxx>
+#include <dpfilteredcache.hxx>
 #include <dputil.hxx>
 #include <document.hxx>
 #include <generalfunction.hxx>
@@ -763,6 +765,22 @@ void XclExpXmlPivotTableManager::Initialize()
     ScDPCollection* pDPColl = rDoc.GetDPCollection();
     if (!pDPColl)
         return;
+
+    // ZetaOffice: a cache reload appends the group fields of every table sharing the cache,
+    // so the same group field can be there twice. Make the table data again for such
+    // tables - that writes the group fields of one table into the cache afresh.
+    {
+        std::vector<ScDPObject*> aShared;
+        for (size_t i = 0; i < pDPColl->GetCount(); ++i)
+        {
+            ScDPObject& rDPObj = (*pDPColl)[i];
+            ScDPTableData* pTableData = rDPObj.IsSheetData() ? rDPObj.GetTableData() : nullptr;
+            if (pTableData && pTableData->GetCacheTable().getCache().GetAllReferences().size() > 1)
+                aShared.push_back(&rDPObj);
+        }
+        for (ScDPObject* pObj : aShared)
+            pObj->ClearTableData();
+    }
 
     // Update caches from DPObject
     for (size_t i = 0; i < pDPColl->GetCount(); ++i)
