@@ -72,6 +72,7 @@
 #include <comphelper/propertysequence.hxx>
 #include <cppuhelper/queryinterface.hxx>
 #include <comphelper/sequence.hxx>
+#include <unordered_set>
 #include <cppuhelper/exc_hlp.hxx>
 
 using namespace com::sun::star;
@@ -1911,6 +1912,23 @@ void SAL_CALL ScDataPilotFieldObj::setPropertyValue( const OUString& aPropertyNa
     SolarMutexGuard aGuard;
     // zeta: set ShowDetail of many items with a single table update
     // (setting it per item through getItems() rebuilds the table every time)
+    // zeta: set the hidden items (all other items visible) with a single table update
+    if ( aPropertyName == "ZetaHiddenItems" )
+    {
+        Sequence< OUString > aNames;
+        ScDPObject* pDPObj = nullptr;
+        ScDPSaveDimension* pDim = (aValue >>= aNames) ? GetDPDimension( &pDPObj ) : nullptr;
+        if ( pDim )
+        {
+            std::unordered_set< OUString > aHidden( aNames.begin(), aNames.end() );
+            for ( ScDPSaveMember* pMember : pDim->GetMembers() )
+                pMember->SetIsVisible( aHidden.find( pMember->GetName() ) == aHidden.end() );
+            for ( const OUString& rName : aNames )
+                pDim->GetMemberByName( rName )->SetIsVisible( false );
+            SetDPObject( pDPObj );
+        }
+        return;
+    }
     if ( aPropertyName == "ZetaHideDetails" || aPropertyName == "ZetaShowDetails" )
     {
         Sequence< OUString > aNames;
@@ -2160,6 +2178,15 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
         aRet <<= getName();
     else if ( aPropertyName == "ZetaHideDetails" || aPropertyName == "ZetaShowDetails" )
         aRet <<= Sequence< OUString >(); // lets clients detect the batch setter
+    else if ( aPropertyName == "ZetaHiddenItems" )
+    {
+        std::vector< OUString > aOut;
+        if ( ScDPSaveDimension* pDim = GetDPDimension() )
+            for ( const ScDPSaveMember* pMember : pDim->GetMembers() )
+                if ( pMember->HasIsVisible() && !pMember->GetIsVisible() )
+                    aOut.push_back( pMember->GetName() );
+        aRet <<= comphelper::containerToSequence( aOut );
+    }
     else if (aPropertyName == SC_UNONAME_POS)
     {
         // zeta: getRowFields() etc. enumerate in source order, so expose the layout order

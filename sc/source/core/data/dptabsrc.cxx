@@ -718,6 +718,42 @@ void ScDPSource::FilterCacheByPageDimensions()
         r.mnFieldIndex = static_cast<sal_Int32>(nField);
         r.mpFilter = std::make_shared<ScDPFilteredCache::SingleFilter>(rData);
     }
+
+    // ZetaOffice: like Excel, hidden items of a field that is not on an axis
+    // (hidden or data only - e.g. a slicer connected to this table) also filter
+    // the source rows.
+    {
+        ScDPDimensions* pDims = GetDimensionsObject();
+        const tools::Long nDimCount = pDims->getCount();
+        for (tools::Long i = 0; i < nDimCount; ++i)
+        {
+            if (IsDataLayoutDimension(i))
+                continue;
+            const sheet::DataPilotFieldOrientation eOrient = GetOrientation(i);
+            if (eOrient != sheet::DataPilotFieldOrientation_HIDDEN
+                && eOrient != sheet::DataPilotFieldOrientation_DATA)
+                continue;
+            ScDPDimension* pDim = pDims->getByIndex(i);
+            if (!pDim || !pDim->HasHiddenMember() || pDim->GetSourceDim() >= 0)
+                continue;
+            ScDPMembers* pMems = pDim->GetHierarchiesObject()->getByIndex(0)->
+                GetLevelsObject()->getByIndex(0)->GetMembersObject();
+            const tools::Long nMemCount = pMems->getCount();
+            ScDPFilteredCache::Criterion aFilter;
+            aFilter.mnFieldIndex = static_cast<sal_Int32>(pDim->GetDimension());
+            aFilter.mpFilter = std::make_shared<ScDPFilteredCache::GroupFilter>();
+            ScDPFilteredCache::GroupFilter* pGrpFilter =
+                static_cast<ScDPFilteredCache::GroupFilter*>(aFilter.mpFilter.get());
+            for (tools::Long j = 0; j < nMemCount; ++j)
+            {
+                ScDPMember* pMem = pMems->getByIndex(j);
+                if (pMem->isVisible())
+                    pGrpFilter->addMatchItem(ScDPItemData(pMem->FillItemData()));
+            }
+            if (pGrpFilter->getMatchItemCount() < o3tl::make_unsigned(nMemCount))
+                aCriteria.push_back(std::move(aFilter));
+        }
+    }
     if (!aCriteria.empty())
     {
         std::unordered_set<sal_Int32> aCatDims;

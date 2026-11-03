@@ -294,6 +294,7 @@ public:
 
     const std::optional<OUString> & GetLayoutName() const;
     const std::optional<OUString> & GetSubtotalName() const;
+    bool                    HasHiddenMember() const { return mbHasHiddenMember; }
 
                             // XNamed
     virtual OUString SAL_CALL getName() override;
