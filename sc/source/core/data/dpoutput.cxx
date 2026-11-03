@@ -553,6 +553,12 @@ void ScDPOutput::HeaderCell( SCCOL nCol, SCROW nRow, SCTAB nTab,
 
 void ScDPOutput::MultiFieldCell(SCCOL nCol, SCROW nRow, SCTAB nTab, bool bRowField)
 {
+    if (!mbShowHeaders)
+    {
+        // Excel: field headers off leaves the cell empty, without a filter button
+        mpStyleOutput->addFieldCell(nCol, nRow, /*bFrame*/ false);
+        return;
+    }
     const OUString& rCaption = bRowField ? maRowHeaderCaption : maColHeaderCaption;
     ScSetStringParam aCaptionParam;
     aCaptionParam.setTextInput();
@@ -579,6 +585,11 @@ void ScDPOutput::MultiFieldCell(SCCOL nCol, SCROW nRow, SCTAB nTab, bool bRowFie
 void ScDPOutput::FieldCell(
     SCCOL nCol, SCROW nRow, SCTAB nTab, const ScDPOutLevelData& rData, bool bInTable)
 {
+    if (!mbShowHeaders && !rData.mbPageDim)
+    {
+        mpStyleOutput->addFieldCell(nCol, nRow, bInTable);
+        return;
+    }
     // Avoid unwanted automatic format detection.
     ScSetStringParam aParam;
     aParam.mbDetectNumberFormat = false;
@@ -687,7 +698,7 @@ void ScDPOutput::CalcSizes()
 
 sal_Int32 ScDPOutput::GetHeaderCaptionCell(const ScAddress& rPos)
 {
-    if (rPos.Tab() != maStartPos.Tab())
+    if (rPos.Tab() != maStartPos.Tab() || !mbShowHeaders)
         return 0;
     CalcSizes();
     if (!mbHasCompactRowField)

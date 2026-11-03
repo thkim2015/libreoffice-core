@@ -141,6 +141,7 @@ private:
 
     sc::PivotTableStyleInfo maStyleInfo;
     OUString maRowHeaderCaption; // ZetaOffice: Excel rowHeaderCaption
+    bool mbShowHeaders = true;   // ZetaOffice: Excel showHeaders (field headers)
     OUString maColHeaderCaption; // ZetaOffice: Excel colHeaderCaption
 
     void              CreateObjects();
@@ -193,6 +194,8 @@ public:
     bool GetHideHeader() const { return mbHideHeader; }
     SC_DLLPUBLIC void SetHeaderCaptions(const OUString& rRow, const OUString& rCol);
     const OUString& GetRowHeaderCaption() const { return maRowHeaderCaption; }
+    SC_DLLPUBLIC void SetShowHeaders(bool bShow);
+    bool GetShowHeaders() const { return mbShowHeaders; }
     const OUString& GetColHeaderCaption() const { return maColHeaderCaption; }
     /// ZetaOffice: 1 = "Row Labels" cell, 2 = "Column Labels" cell of the output, else 0
     SC_DLLPUBLIC sal_Int32 GetHeaderCaptionCell(const ScAddress& rPos);

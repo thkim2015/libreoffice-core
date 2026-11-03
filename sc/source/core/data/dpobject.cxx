@@ -334,6 +334,7 @@ ScDPObject::ScDPObject(const ScDPObject& rOther)
     , mbHideHeader(rOther.mbHideHeader)
     , maStyleInfo(rOther.maStyleInfo)
     , maRowHeaderCaption(rOther.maRowHeaderCaption)
+    , mbShowHeaders(rOther.mbShowHeaders)
     , maColHeaderCaption(rOther.maColHeaderCaption)
 {
     if (rOther.mpSaveData)
@@ -371,6 +372,7 @@ ScDPObject& ScDPObject::operator= (const ScDPObject& rOther)
         maStyleInfo = rOther.maStyleInfo;
         maRowHeaderCaption = rOther.maRowHeaderCaption;
         maColHeaderCaption = rOther.maColHeaderCaption;
+        mbShowHeaders = rOther.mbShowHeaders;
 
         if (rOther.mpSaveData)
             mpSaveData.reset(new ScDPSaveData(*rOther.mpSaveData));
@@ -417,6 +419,13 @@ void ScDPObject::SetHeaderCaptions(const OUString& rRow, const OUString& rCol)
     maColHeaderCaption = rCol;
     if (mpOutput)
         mpOutput->SetHeaderCaptions(rRow, rCol);
+}
+
+void ScDPObject::SetShowHeaders(bool bShow)
+{
+    mbShowHeaders = bShow;
+    if (mpOutput)
+        mpOutput->SetShowHeaders(bShow);
 }
 
 sal_Int32 ScDPObject::GetHeaderCaptionCell(const ScAddress& rPos)
@@ -552,6 +561,7 @@ void ScDPObject::CreateOutput()
     mpOutput.reset(new ScDPOutput(mpDocument, mxSource, maOutputRange.aStart, bFilterButton, bExpandCollapse, *this, mbHideHeader));
     mpOutput->SetHeaderLayout(mbHeaderLayout);
     mpOutput->SetHeaderCaptions(maRowHeaderCaption, maColHeaderCaption);
+    mpOutput->SetShowHeaders(mbShowHeaders);
     if (mpSaveData->hasFormats())
         mpOutput->setFormats(mpSaveData->getFormats());
 

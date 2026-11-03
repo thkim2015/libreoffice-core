@@ -1299,7 +1299,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                                                      rSaveData.GetGrandTotalName().has_value() && !rSaveData.GetGrandTotalName()->isEmpty()),
         // ZetaOffice: header captions typed into the table
         XML_rowHeaderCaption, sax_fastparser::UseIf(rDPObj.GetRowHeaderCaption().toUtf8(), !rDPObj.GetRowHeaderCaption().isEmpty()),
-        XML_colHeaderCaption, sax_fastparser::UseIf(rDPObj.GetColHeaderCaption().toUtf8(), !rDPObj.GetColHeaderCaption().isEmpty()));
+        XML_colHeaderCaption, sax_fastparser::UseIf(rDPObj.GetColHeaderCaption().toUtf8(), !rDPObj.GetColHeaderCaption().isEmpty()),
+        XML_showHeaders, sax_fastparser::UseIf(ToPsz10(false), !rDPObj.GetShowHeaders()));
 
     // NB: Excel's range does not include page field area (if any).
     ScRange aOutRange = rDPObj.GetOutputRangeByType(sheet::DataPilotOutputRangeType::TABLE);

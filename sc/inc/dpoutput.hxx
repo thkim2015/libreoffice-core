@@ -91,6 +91,7 @@ private:
     bool mbExpandCollapse:1; // true: show expand/collapse buttons
     bool mbHideHeader : 1;
     bool mbSpillError : 1 = false;  // true: output range blocked by non-empty cells
+    bool mbShowHeaders = true;   // ZetaOffice: false = field header cells stay empty (xlsx showHeaders="0")
     OUString maRowHeaderCaption; // ZetaOffice: Excel rowHeaderCaption (empty = "Row Labels")
     OUString maColHeaderCaption; // ZetaOffice: Excel colHeaderCaption (empty = "Column Labels")
 
@@ -158,6 +159,7 @@ public:
         maRowHeaderCaption = rRow;
         maColHeaderCaption = rCol;
     }
+    void SetShowHeaders(bool bShow) { mbShowHeaders = bShow; }
     /// ZetaOffice: 1 = compact form "Row Labels" cell, 2 = "Column Labels" cell, else 0
     sal_Int32 GetHeaderCaptionCell(const ScAddress& rPos);
 

@@ -133,6 +133,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         { u"ZetaHideHeader"_ustr, 0,  cppu::UnoType<bool>::get(), 0, 0 },
         // ZetaOffice: { row header caption, column header caption } (xlsx rowHeaderCaption/colHeaderCaption)
         { u"ZetaHeaderCaptions"_ustr, 0,  cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
+        // ZetaOffice: field headers (Excel DisplayFieldCaptions, xlsx showHeaders)
+        { u"ZetaShowHeaders"_ustr, 0,  cppu::UnoType<bool>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -898,6 +900,10 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
                 throw lang::IllegalArgumentException();
             pDPObject->SetHeaderCaptions( aCaptions[0], aCaptions[1] );
         }
+        else if ( aPropertyName == u"ZetaShowHeaders"_ustr )
+        {
+            pDPObject->SetShowHeaders( ::cppu::any2bool( aValue ) );
+        }
         else if ( aPropertyName == u"ZetaStyleInfo"_ustr )
         {
             // ZetaOffice: per-pivot Excel style (written to xlsx pivotTableStyleInfo)
@@ -1079,6 +1085,10 @@ Any SAL_CALL ScDataPilotDescriptorBase::getPropertyValue( const OUString& aPrope
             {
                 aRet <<= uno::Sequence<OUString>{ pDPObject->GetRowHeaderCaption(),
                                                   pDPObject->GetColHeaderCaption() };
+            }
+            else if ( aPropertyName == u"ZetaShowHeaders"_ustr )
+            {
+                aRet <<= pDPObject->GetShowHeaders();
             }
             else if ( aPropertyName == u"ZetaOutputPosition"_ustr )
             {
