@@ -327,6 +327,29 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
     // Get DPObject early so we can build a base→group field mapping for the source field loop.
     ScDPObject* pDPObject
         = rCache.GetAllReferences().empty() ? nullptr : *rCache.GetAllReferences().begin();
+    // ZetaOffice: the references are a set of pointers in no fixed order - prefer one
+    // that knows the names of all group fields, else the group fields are left out
+    if (pDPObject && nGroupFieldCount > 0)
+    {
+        for (ScDPObject* pRef : rCache.GetAllReferences())
+        {
+            ScDPSaveData* pRefSave = pRef ? pRef->GetSaveData() : nullptr;
+            if (!pRefSave || !pRefSave->GetDimensionData())
+                continue;
+            bool bAll = true;
+            for (size_t gi = nCount; bAll && gi < nCount + nGroupFieldCount; ++gi)
+            {
+                const OUString aRefName = pRef->GetDimName(gi, o3tl::temporary(bool()));
+                bAll = !aRefName.isEmpty()
+                       && pRefSave->GetDimensionData()->GetNamedGroupDim(aRefName);
+            }
+            if (bAll)
+            {
+                pDPObject = pRef;
+                break;
+            }
+        }
+    }
 
     // Build a map: base source field index → parent group cacheField index.
     // This is needed to write the "par" attribute on base fields (e.g. <fieldGroup par="3"/>).
