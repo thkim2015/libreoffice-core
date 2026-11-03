@@ -333,6 +333,8 @@ ScDPObject::ScDPObject(const ScDPObject& rOther)
     , mbEnableGetPivotData(rOther.mbEnableGetPivotData)
     , mbHideHeader(rOther.mbHideHeader)
     , maStyleInfo(rOther.maStyleInfo)
+    , maRowHeaderCaption(rOther.maRowHeaderCaption)
+    , maColHeaderCaption(rOther.maColHeaderCaption)
 {
     if (rOther.mpSaveData)
         mpSaveData.reset(new ScDPSaveData(*rOther.mpSaveData));
@@ -367,6 +369,8 @@ ScDPObject& ScDPObject::operator= (const ScDPObject& rOther)
         mbEnableGetPivotData = rOther.mbEnableGetPivotData;
         mbHideHeader = rOther.mbHideHeader;
         maStyleInfo = rOther.maStyleInfo;
+        maRowHeaderCaption = rOther.maRowHeaderCaption;
+        maColHeaderCaption = rOther.maColHeaderCaption;
 
         if (rOther.mpSaveData)
             mpSaveData.reset(new ScDPSaveData(*rOther.mpSaveData));
@@ -406,6 +410,20 @@ void ScDPObject::SetHeaderLayout (bool bUseGrid)
 }
 
 void ScDPObject::SetHideHeader(bool bHideHeader) { mbHideHeader = bHideHeader; }
+
+void ScDPObject::SetHeaderCaptions(const OUString& rRow, const OUString& rCol)
+{
+    maRowHeaderCaption = rRow;
+    maColHeaderCaption = rCol;
+    if (mpOutput)
+        mpOutput->SetHeaderCaptions(rRow, rCol);
+}
+
+sal_Int32 ScDPObject::GetHeaderCaptionCell(const ScAddress& rPos)
+{
+    CreateOutput();
+    return mpOutput ? mpOutput->GetHeaderCaptionCell(rPos) : 0;
+}
 
 void ScDPObject::SetOutRange(const ScRange& rRange)
 {
@@ -533,6 +551,7 @@ void ScDPObject::CreateOutput()
 
     mpOutput.reset(new ScDPOutput(mpDocument, mxSource, maOutputRange.aStart, bFilterButton, bExpandCollapse, *this, mbHideHeader));
     mpOutput->SetHeaderLayout(mbHeaderLayout);
+    mpOutput->SetHeaderCaptions(maRowHeaderCaption, maColHeaderCaption);
     if (mpSaveData->hasFormats())
         mpOutput->setFormats(mpSaveData->getFormats());
 

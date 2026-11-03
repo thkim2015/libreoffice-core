@@ -1296,7 +1296,10 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         XML_colGrandTotals, sax_fastparser::UseIf(ToPsz10(false), !rSaveData.GetColumnGrand()),
         // ZetaOffice: grand total caption typed into the table
         XML_grandTotalCaption, sax_fastparser::UseIf(rSaveData.GetGrandTotalName().value_or(OUString()).toUtf8(),
-                                                     rSaveData.GetGrandTotalName().has_value() && !rSaveData.GetGrandTotalName()->isEmpty()));
+                                                     rSaveData.GetGrandTotalName().has_value() && !rSaveData.GetGrandTotalName()->isEmpty()),
+        // ZetaOffice: header captions typed into the table
+        XML_rowHeaderCaption, sax_fastparser::UseIf(rDPObj.GetRowHeaderCaption().toUtf8(), !rDPObj.GetRowHeaderCaption().isEmpty()),
+        XML_colHeaderCaption, sax_fastparser::UseIf(rDPObj.GetColHeaderCaption().toUtf8(), !rDPObj.GetColHeaderCaption().isEmpty()));
 
     // NB: Excel's range does not include page field area (if any).
     ScRange aOutRange = rDPObj.GetOutputRangeByType(sheet::DataPilotOutputRangeType::TABLE);

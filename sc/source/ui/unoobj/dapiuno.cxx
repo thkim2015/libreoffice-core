@@ -131,6 +131,8 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotDescriptorBaseMap()
         { u"ZetaCalculatedFields"_ustr, 0,  cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
         // ZetaOffice: hide the header row above the column fields (xlsx firstHeaderRow="0")
         { u"ZetaHideHeader"_ustr, 0,  cppu::UnoType<bool>::get(), 0, 0 },
+        // ZetaOffice: { row header caption, column header caption } (xlsx rowHeaderCaption/colHeaderCaption)
+        { u"ZetaHeaderCaptions"_ustr, 0,  cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
     };
     return aDataPilotDescriptorBaseMap_Impl;
 }
@@ -738,6 +740,17 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
         if ( !pDocSh )
             throw uno::RuntimeException();
         const ScAddress aPos( static_cast<SCCOL>(aAddr.Column), static_cast<SCROW>(aAddr.Row), static_cast<SCTAB>(aAddr.Sheet) );
+        // the compact form "Row Labels"/"Column Labels" cell sets that caption (Excel);
+        // any text is taken, empty text is refused with "caption"
+        if ( const sal_Int32 nCaption = pDPObject->GetHeaderCaptionCell( aPos ) )
+        {
+            if ( aText.isEmpty() )
+                throw lang::IllegalArgumentException( u"caption"_ustr, getXWeak(), 1 );
+            pDPObject->SetHeaderCaptions( nCaption == 1 ? aText : pDPObject->GetRowHeaderCaption(),
+                                          nCaption == 2 ? aText : pDPObject->GetColHeaderCaption() );
+            SetDPObject( pDPObject );
+            return;
+        }
         TranslateId pErrorId;
         if ( !ScDBFunc::DataPilotCellInput( *pDocSh, aPos, aText, pErrorId ) )
             throw lang::IllegalArgumentException(
@@ -877,6 +890,13 @@ void SAL_CALL ScDataPilotDescriptorBase::setPropertyValue( const OUString& aProp
         else if ( aPropertyName == u"ZetaHideHeader"_ustr )
         {
             pDPObject->SetHideHeader( ::cppu::any2bool( aValue ) );
+        }
+        else if ( aPropertyName == u"ZetaHeaderCaptions"_ustr )
+        {
+            uno::Sequence<OUString> aCaptions;
+            if ( !(aValue >>= aCaptions) || aCaptions.getLength() != 2 )
+                throw lang::IllegalArgumentException();
+            pDPObject->SetHeaderCaptions( aCaptions[0], aCaptions[1] );
         }
         else if ( aPropertyName == u"ZetaStyleInfo"_ustr )
         {
@@ -1054,6 +1074,11 @@ Any SAL_CALL ScDataPilotDescriptorBase::getPropertyValue( const OUString& aPrope
             else if ( aPropertyName == u"ZetaHideHeader"_ustr )
             {
                 aRet <<= pDPObject->GetHideHeader();
+            }
+            else if ( aPropertyName == u"ZetaHeaderCaptions"_ustr )
+            {
+                aRet <<= uno::Sequence<OUString>{ pDPObject->GetRowHeaderCaption(),
+                                                  pDPObject->GetColHeaderCaption() };
             }
             else if ( aPropertyName == u"ZetaOutputPosition"_ustr )
             {

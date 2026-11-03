@@ -1374,6 +1374,7 @@ void PivotTable::finalizeImport()
             pSaveData->SetExpandCollapse(maDefModel.mbShowDrill);
         }
         mpDPObject->SetHideHeader(maLocationModel.mnFirstHeaderRow == 0);
+        mpDPObject->SetHeaderCaptions(maDefModel.maRowHeaderCaption, maDefModel.maColHeaderCaption);
         // finalize all fields, this finds field names and creates grouping fields
         finalizeFieldsImport();
 

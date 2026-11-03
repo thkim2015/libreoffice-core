@@ -553,7 +553,12 @@ void ScDPOutput::HeaderCell( SCCOL nCol, SCROW nRow, SCTAB nTab,
 
 void ScDPOutput::MultiFieldCell(SCCOL nCol, SCROW nRow, SCTAB nTab, bool bRowField)
 {
-    mpDocument->SetString(nCol, nRow, nTab, ScResId(bRowField ? STR_PIVOT_ROW_LABELS : STR_PIVOT_COL_LABELS));
+    const OUString& rCaption = bRowField ? maRowHeaderCaption : maColHeaderCaption;
+    ScSetStringParam aCaptionParam;
+    aCaptionParam.setTextInput();
+    mpDocument->SetString(nCol, nRow, nTab,
+                          !rCaption.isEmpty() ? rCaption : ScResId(bRowField ? STR_PIVOT_ROW_LABELS : STR_PIVOT_COL_LABELS),
+                          &aCaptionParam);
 
     ScMF nMergeFlag = ScMF::Button;
     for (auto& rData : mpRowFields)
@@ -678,6 +683,22 @@ void ScDPOutput::CalcSizes()
     else
         mnTabEndRow = mnDataStartRow;     // single row will remain empty
     mbSizesValid = true;
+}
+
+sal_Int32 ScDPOutput::GetHeaderCaptionCell(const ScAddress& rPos)
+{
+    if (rPos.Tab() != maStartPos.Tab())
+        return 0;
+    CalcSizes();
+    if (!mbHasCompactRowField)
+        return 0;
+    // same cells as outputRowHeader / outputColumnHeaders write with MultiFieldCell
+    if (!mpRowFields.empty() && rPos.Col() == mnTabStartCol && rPos.Row() == mnDataStartRow - 1)
+        return 1;
+    if (!mpColFields.empty() && mnMemberStartRow > mnTabStartRow && rPos.Col() == mnDataStartCol
+        && rPos.Row() == mnTabStartRow)
+        return 2;
+    return 0;
 }
 
 sal_Int32 ScDPOutput::GetPositionType(const ScAddress& rPos)

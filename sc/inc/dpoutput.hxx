@@ -91,6 +91,8 @@ private:
     bool mbExpandCollapse:1; // true: show expand/collapse buttons
     bool mbHideHeader : 1;
     bool mbSpillError : 1 = false;  // true: output range blocked by non-empty cells
+    OUString maRowHeaderCaption; // ZetaOffice: Excel rowHeaderCaption (empty = "Row Labels")
+    OUString maColHeaderCaption; // ZetaOffice: Excel colHeaderCaption (empty = "Column Labels")
 
     void            DataCell( SCCOL nCol, SCROW nRow, SCTAB nTab,
                                 const css::sheet::DataResult& rData );
@@ -151,6 +153,13 @@ public:
 
     void            SetHeaderLayout(bool bUseGrid);
     bool            GetHeaderLayout() const { return mbHeaderLayout;}
+    void SetHeaderCaptions(const OUString& rRow, const OUString& rCol)
+    {
+        maRowHeaderCaption = rRow;
+        maColHeaderCaption = rCol;
+    }
+    /// ZetaOffice: 1 = compact form "Row Labels" cell, 2 = "Column Labels" cell, else 0
+    sal_Int32 GetHeaderCaptionCell(const ScAddress& rPos);
 
     void setFormats(sc::PivotTableFormats const& rPivotTableFormats)
     {
