@@ -955,6 +955,14 @@ struct RowOrColumnItemsData
     OUString msName;
 };
 
+// ZetaOffice: key of the data layout field in RowOrColumnMemberResultData (its level name is
+// localized, its dimension name differs from the save data; neither can clash with this)
+const OUString& zetaDataLayoutKey()
+{
+    static const OUString aKey(u"\u0001ZetaDataLayout"_ustr);
+    return aKey;
+}
+
 /** Contains all the data necessary for writing the row/column items as required by OOXML */
 struct RowOrColumnMemberResultData
 {
@@ -995,6 +1003,12 @@ struct RowOrColumnMemberResultData
     {
         return maLookUpIndexForMemberName[sDimensionName][sMemberName];
     }
+
+    bool has(OUString const& sDimensionName, OUString const& sMemberName) const
+    {
+        auto it = maLookUpIndexForMemberName.find(sDimensionName);
+        return it != maLookUpIndexForMemberName.end() && it->second.contains(sMemberName);
+    }
 };
 
 /** Implementation of a results visitor, to gather information used for rowItems and columnItems*/
@@ -1011,20 +1025,24 @@ public:
 
     sheet::DataPilotFieldOrientation meCurrentOrientation = sheet::DataPilotFieldOrientation_HIDDEN;
     OUString maLevelName;
+    bool mbDataLayout = false;
 
     bool filterOrientation(sheet::DataPilotFieldOrientation eOrientation) override
     {
         return eOrientation == sheet::DataPilotFieldOrientation_HIDDEN;
     }
 
-    void startDimension(sal_Int32 /*nDimensionIndex*/, uno::Reference<uno::XInterface> const& /*xDimension*/, sheet::DataPilotFieldOrientation eOrientation) override
+    void startDimension(sal_Int32 /*nDimensionIndex*/, uno::Reference<uno::XInterface> const& xDimension, sheet::DataPilotFieldOrientation eOrientation) override
     {
         meCurrentOrientation = eOrientation;
+        uno::Reference<beans::XPropertySet> xProp(xDimension, uno::UNO_QUERY);
+        mbDataLayout = xProp.is() && ScUnoHelpFunctions::GetBoolProperty(xProp, SC_UNO_DP_ISDATALAYOUT);
     }
 
     void endDimension() override
     {
         meCurrentOrientation = sheet::DataPilotFieldOrientation_HIDDEN;
+        mbDataLayout = false;
     }
 
     void startLevel(sal_Int32 /*nLevelIndex*/, uno::Reference<uno::XInterface> const& /*xLevel*/, OUString const& rLevelName) override
@@ -1053,7 +1071,7 @@ public:
 
     void gatherFieldsData(RowOrColumnMemberResultData& rMemberResultData, sheet::MemberResult const& rResult, sal_Int32 nIndex)
     {
-        auto& rItemsData = rMemberResultData.addItemsData(maLevelName, nIndex);
+        auto& rItemsData = rMemberResultData.addItemsData(mbDataLayout ? zetaDataLayoutKey() : maLevelName, nIndex);
         assert(!rItemsData.mbSet);
 
         rItemsData.mbSet = true;
@@ -1094,6 +1112,11 @@ void writeRowColumnItems(sal_Int32 nItemElement, RowOrColumnMemberResultData& rM
     }
 
     pStream->startElement(nItemElement, XML_count, OString::number(rMemberResultData.maItemsData.size()));
+    // ZetaOffice: with the data layout field on this axis every item names its data field
+    // (attribute i, Excel), carried over the rows that repeat it
+    const bool bHasDataField = std::find(rMemberResultData.maFieldOrder.begin(), rMemberResultData.maFieldOrder.end(),
+                                         zetaDataLayoutKey()) != rMemberResultData.maFieldOrder.end();
+    sal_Int32 nDataIndex = 0;
     for (auto& rItemMap : rMemberResultData.maItemsData)
     {
         bool bIsGrandTotal = false;
@@ -1108,6 +1131,30 @@ void writeRowColumnItems(sal_Int32 nItemElement, RowOrColumnMemberResultData& rM
                 bIsGrandTotal = true;
         }
 
+        if (bHasDataField)
+        {
+            RowOrColumnItemsData const& rData = rItemMap[zetaDataLayoutKey()];
+            if (!rData.msName.isEmpty() && rMemberResultData.has(zetaDataLayoutKey(), rData.msName))
+                nDataIndex = rMemberResultData.lookup(zetaDataLayoutKey(), rData.msName);
+            else if (!rData.mbContinue)
+                nDataIndex = 0;
+            // the grand total rows come as subtotals of a member that is no item ("Total")
+            if (bIsSubtotal && !bIsGrandTotal)
+            {
+                for (OUString const& rFieldName : rMemberResultData.maFieldOrder)
+                {
+                    RowOrColumnItemsData const& rField = rItemMap[rFieldName];
+                    if (rFieldName != zetaDataLayoutKey() && rField.mbSubtotal
+                        && !rMemberResultData.has(rFieldName, rField.msName))
+                    {
+                        bIsGrandTotal = true;
+                        bIsSubtotal = false;
+                        break;
+                    }
+                }
+            }
+        }
+
         // Count how many leading fields repeat from the previous column item.
         // These are omitted and their count is stored in the "r" attribute.
         size_t nRepeat = 0;
@@ -1119,30 +1166,23 @@ void writeRowColumnItems(sal_Int32 nItemElement, RowOrColumnMemberResultData& rM
             nRepeat++;
         }
 
-        // Write the <i> start element with optional t and r attributes.
+        // Write the <i> start element with optional t, r and i attributes.
+        auto pItemAttrs = sax_fastparser::FastSerializerHelper::createAttrList();
+        if (bIsGrandTotal)
+            pItemAttrs->add(XML_t, "grand");
+        else if (bIsSubtotal)
+            pItemAttrs->add(XML_t, "default");
+        if (nRepeat > 0 && !bIsGrandTotal)
+            pItemAttrs->add(XML_r, OString::number(nRepeat));
+        if (nDataIndex > 0)
+            pItemAttrs->add(XML_i, OString::number(nDataIndex));
+        pStream->startElement(XML_i, pItemAttrs);
         if (bIsGrandTotal)
         {
-            if (nRepeat > 0)
-                pStream->startElement(XML_i, XML_t, "grand",
-                                      XML_r, OString::number(nRepeat));
-            else
-                pStream->startElement(XML_i, XML_t, "grand");
+            // Excel: a grand total item is one <x/>, whatever fields the axis has
             pStream->singleElement(XML_x);
-        }
-        else if (bIsSubtotal)
-        {
-            if (nRepeat > 0)
-                pStream->startElement(XML_i, XML_t, "default",
-                                      XML_r, OString::number(nRepeat));
-            else
-                pStream->startElement(XML_i, XML_t, "default");
-        }
-        else
-        {
-            if (nRepeat > 0)
-                pStream->startElement(XML_i, XML_r, OString::number(nRepeat));
-            else
-                pStream->startElement(XML_i);
+            pStream->endElement(XML_i);
+            continue;
         }
 
         // Write <x> elements for all non-repeated fields that have a valid item index.
@@ -1247,11 +1287,17 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                 if (nPos == -2 && nDataDimCount <= 1)
                     break;
                 aColFields.push_back(nPos);
-                aColumnMemberResultData.maFieldOrder.push_back(rDim.GetName());
+                aColumnMemberResultData.maFieldOrder.push_back(nPos == -2 ? zetaDataLayoutKey() : rDim.GetName());
             break;
             case sheet::DataPilotFieldOrientation_ROW:
+                // ZetaOffice: like columns, a single data field has no data layout field (Excel)
+                if (nPos == -2 && nDataDimCount <= 1)
+                {
+                    bDataOnRows = false;
+                    break;
+                }
                 aRowFields.push_back(nPos);
-                aRowMemberResultData.maFieldOrder.push_back(rDim.GetName());
+                aRowMemberResultData.maFieldOrder.push_back(nPos == -2 ? zetaDataLayoutKey() : rDim.GetName());
             break;
             case sheet::DataPilotFieldOrientation_PAGE:
                 aPageFields.push_back(nPos);
@@ -1268,6 +1314,18 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             const auto eLayoutMode = rDim.GetLayoutInfo()->LayoutMode;
             bTabularMode |= (eLayoutMode == sheet::DataPilotFieldLayoutMode::TABULAR_LAYOUT);
             bCompactMode &= ScDPIsCompactLayout(eLayoutMode);
+        }
+    }
+
+    // ZetaOffice: the data layout field's items are the data fields, in data field order
+    for (RowOrColumnMemberResultData* pData : { &aRowMemberResultData, &aColumnMemberResultData })
+    {
+        pData->initLookupFor(zetaDataLayoutKey());
+        for (size_t n = 0; n < aDataFields.size(); ++n)
+        {
+            const OUString& rName = aDataFields[n].mpDim->GetName();
+            pData->addLookupEntryFor(zetaDataLayoutKey(), rName, static_cast<sal_Int32>(n));
+            pData->addLookupEntryFor(zetaDataLayoutKey(), ScDPUtil::getSourceDimensionName(rName), static_cast<sal_Int32>(n));
         }
     }
 

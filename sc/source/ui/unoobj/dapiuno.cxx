@@ -155,8 +155,9 @@ std::span<const SfxItemPropertyMapEntry> lcl_GetDataPilotFieldMap()
         { SC_UNONAME_ISGROUP,      0,  cppu::UnoType<bool>::get(),                          0, 0 },
         { SC_UNONAME_LAYOUTINFO,   0,  cppu::UnoType<DataPilotFieldLayoutInfo>::get(),     MAYBEVOID, 0 },
         { SC_UNONAME_ORIENT,       0,  cppu::UnoType<DataPilotFieldOrientation>::get(),    MAYBEVOID, 0 },
-        // zeta: position of the field within its orientation (save data order), read-only
-        { SC_UNONAME_POS,          0,  cppu::UnoType<sal_Int32>::get(),                    READONLY, 0 },
+        // zeta: position of the field within its orientation (save data order). Reading skips
+        // the data layout field; writing counts it (Excel field list: the Values item can be anywhere)
+        { SC_UNONAME_POS,          0,  cppu::UnoType<sal_Int32>::get(),                    0, 0 },
         { SC_UNONAME_REFERENCE,    0,  cppu::UnoType<DataPilotFieldReference>::get(),      MAYBEVOID, 0 },
         { SC_UNONAME_SELPAGE,      0,  cppu::UnoType<OUString>::get(),                     0, 0 },
         { SC_UNONAME_SHOWEMPTY,    0,  cppu::UnoType<bool>::get(),                          0, 0 },
@@ -1947,6 +1948,19 @@ void SAL_CALL ScDataPilotFieldObj::setPropertyValue( const OUString& aPropertyNa
     SolarMutexGuard aGuard;
     // zeta: set ShowDetail of many items with a single table update
     // (setting it per item through getItems() rebuilds the table every time)
+    // zeta: move the field to a position among the fields of its orientation
+    if ( aPropertyName == SC_UNONAME_POS )
+    {
+        sal_Int32 nNew = 0;
+        ScDPObject* pDPObj = nullptr;
+        ScDPSaveDimension* pDim = ( (aValue >>= nNew) && nNew >= 0 ) ? GetDPDimension( &pDPObj ) : nullptr;
+        if ( !pDim )
+            throw IllegalArgumentException();
+        // SetPosition inserts before the nNew-th field of the orientation (1-based)
+        pDPObj->GetSaveData()->SetPosition( pDim, nNew + 1 );
+        SetDPObject( pDPObj );
+        return;
+    }
     // zeta: set the hidden items (all other items visible) with a single table update
     if ( aPropertyName == "ZetaHiddenItems" )
     {
