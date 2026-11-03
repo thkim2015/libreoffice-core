@@ -1144,8 +1144,10 @@ void writeRowColumnItems(sal_Int32 nItemElement, RowOrColumnMemberResultData& rM
                 for (OUString const& rFieldName : rMemberResultData.maFieldOrder)
                 {
                     RowOrColumnItemsData const& rField = rItemMap[rFieldName];
-                    if (rFieldName != zetaDataLayoutKey() && rField.mbSubtotal
-                        && !rMemberResultData.has(rFieldName, rField.msName))
+                    // the data layout field has no subtotals of its own: when it is the outer
+                    // field, its subtotal rows are the grand totals of each data field
+                    if (rField.mbSubtotal && (rFieldName == zetaDataLayoutKey()
+                        || !rMemberResultData.has(rFieldName, rField.msName)))
                     {
                         bIsGrandTotal = true;
                         bIsSubtotal = false;
