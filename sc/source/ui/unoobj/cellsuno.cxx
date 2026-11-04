@@ -149,6 +149,10 @@
 #include <refundo.hxx>
 #include <columnspanset.hxx>
 #include <CommonProperties.hxx>
+#include <docmodel/theme/ThemeColorType.hxx>
+#include <editeng/brushitem.hxx>
+#include <editeng/colritem.hxx>
+#include <editeng/memberids.h>
 #include <solveruno.hxx>
 
 #include <memory>
@@ -2086,6 +2090,54 @@ static void lcl_SetCellProperty( const SfxItemPropertyMapEntry& rEntry, const un
                 }
             }
             break;
+        case ATTR_FONT_COLOR:
+            {
+                // ZetaOffice: a negative theme index clears the theme color (an unknown
+                // theme type would still be written as a theme color)
+                sal_Int16 nIndex = 0;
+                if ( ( rEntry.nMemberId & ~CONVERT_TWIPS ) == MID_COLOR_THEME_INDEX && ( rValue >>= nIndex ) && nIndex < 0 )
+                {
+                    std::unique_ptr<SvxColorItem> pItem( rSet.Get( ATTR_FONT_COLOR ).Clone() );
+                    pItem->setComplexColor( model::ComplexColor() );
+                    rSet.Put( *pItem );
+                }
+                else
+                    SfxItemPropertySet::setPropertyValue(rEntry, rValue, rSet);
+            }
+            break;
+        case ATTR_BACKGROUND:
+            {
+                // ZetaOffice: theme color of the background (CellBackColorTheme/LumMod/LumOff)
+                const sal_uInt8 nMember = rEntry.nMemberId & ~CONVERT_TWIPS;
+                if ( nMember == ZETA_MID_BACK_THEME || nMember == ZETA_MID_BACK_LUM_MOD || nMember == ZETA_MID_BACK_LUM_OFF )
+                {
+                    sal_Int16 nValue = 0;
+                    if ( !( rValue >>= nValue ) )
+                        throw lang::IllegalArgumentException();
+                    std::unique_ptr<SvxBrushItem> pItem( rSet.Get( ATTR_BACKGROUND ).Clone() );
+                    model::ComplexColor aColor = pItem->getComplexColor();
+                    if ( nMember == ZETA_MID_BACK_THEME )
+                    {
+                        if ( nValue < 0 )
+                            aColor = model::ComplexColor();
+                        else
+                            aColor.setThemeColor( model::convertToThemeColorType( nValue ) );
+                    }
+                    else
+                    {
+                        const bool bMod = nMember == ZETA_MID_BACK_LUM_MOD;
+                        const model::TransformationType eType = bMod ? model::TransformationType::LumMod : model::TransformationType::LumOff;
+                        aColor.removeTransformations( eType );
+                        if ( nValue != ( bMod ? 10000 : 0 ) )
+                            aColor.addTransformation( { eType, nValue } );
+                    }
+                    pItem->setComplexColor( aColor );
+                    rSet.Put( *pItem );
+                }
+                else
+                    SfxItemPropertySet::setPropertyValue(rEntry, rValue, rSet);
+            }
+            break;
         default:
             {
                 SfxItemPropertySet::setPropertyValue(rEntry, rValue, rSet);
@@ -2356,6 +2408,33 @@ void ScCellRangesBase::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntr
                         Degree100 nRot = pDataSet->Get(ATTR_ROTATE_VALUE).GetValue();
                         bool bStacked = static_cast<const ScVerticalStackCell&>(pDataSet->Get(pEntry->nWID)).GetValue();
                         SvxOrientationItem( nRot, bStacked, TypedWhichId<SvxOrientationItem>(0) ).QueryValue( rAny );
+                    }
+                    break;
+                case ATTR_BACKGROUND:
+                    {
+                        // ZetaOffice: theme color of the background
+                        const sal_uInt8 nMember = pEntry->nMemberId & ~CONVERT_TWIPS;
+                        if ( nMember == ZETA_MID_BACK_THEME || nMember == ZETA_MID_BACK_LUM_MOD || nMember == ZETA_MID_BACK_LUM_OFF )
+                        {
+                            const model::ComplexColor& rColor = pDataSet->Get( ATTR_BACKGROUND ).getComplexColor();
+                            sal_Int16 nValue = -1;
+                            if ( nMember == ZETA_MID_BACK_THEME )
+                            {
+                                if ( rColor.isValidThemeType() )
+                                    nValue = static_cast<sal_Int16>( rColor.getThemeColorType() );
+                            }
+                            else
+                            {
+                                const bool bMod = nMember == ZETA_MID_BACK_LUM_MOD;
+                                nValue = bMod ? 10000 : 0;
+                                for ( const auto& rTransform : rColor.getTransformations() )
+                                    if ( rTransform.meType == ( bMod ? model::TransformationType::LumMod : model::TransformationType::LumOff ) )
+                                        nValue = rTransform.mnValue;
+                            }
+                            rAny <<= nValue;
+                        }
+                        else
+                            SfxItemPropertySet::getPropertyValue(*pEntry, *pDataSet, rAny);
                     }
                     break;
                 default:

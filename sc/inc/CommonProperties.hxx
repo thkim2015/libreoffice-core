@@ -9,13 +9,25 @@
 
 #pragma once
 
+// ZetaOffice: theme color of the cell background (index, luminance modulation/offset in 1/100 %),
+// handled in cellsuno.cxx because SvxBrushItem has no member ids for them
+#define ZETA_MID_BACK_THEME   0x40
+#define ZETA_MID_BACK_LUM_MOD 0x41
+#define ZETA_MID_BACK_LUM_OFF 0x42
+
 #define CELL_BACKGROUND_COLOR_PROPERTIES \
     { SC_UNONAME_CELLBACK, ATTR_BACKGROUND, cppu::UnoType<sal_Int32>::get(), 0, MID_BACK_COLOR }, \
     { SC_UNONAME_CELL_BACKGROUND_COMPLEX_COLOR, ATTR_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_BACKGROUND_COMPLEX_COLOR }, \
+    { u"CellBackColorTheme"_ustr, ATTR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), 0, ZETA_MID_BACK_THEME }, \
+    { u"CellBackColorLumMod"_ustr, ATTR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), 0, ZETA_MID_BACK_LUM_MOD }, \
+    { u"CellBackColorLumOff"_ustr, ATTR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), 0, ZETA_MID_BACK_LUM_OFF }, \
 
 #define CHAR_COLOR_PROPERTIES \
     { SC_UNONAME_CCOLOR, ATTR_FONT_COLOR, cppu::UnoType<sal_Int32>::get(), 0, MID_COLOR_RGB }, \
     { SC_UNONAME_CHAR_COMPLEX_COLOR, ATTR_FONT_COLOR, cppu::UnoType<css::util::XComplexColor>::get(), 0, MID_COMPLEX_COLOR }, \
+    { u"CharColorTheme"_ustr, ATTR_FONT_COLOR, cppu::UnoType<sal_Int16>::get(), 0, MID_COLOR_THEME_INDEX }, \
+    { u"CharColorLumMod"_ustr, ATTR_FONT_COLOR, cppu::UnoType<sal_Int16>::get(), 0, MID_COLOR_LUM_MOD }, \
+    { u"CharColorLumOff"_ustr, ATTR_FONT_COLOR, cppu::UnoType<sal_Int16>::get(), 0, MID_COLOR_LUM_OFF }, \
 
 #define CELL_BORDER_PROPERTIES \
     { SC_UNONAME_BOTTBORDER, ATTR_BORDER, cppu::UnoType<table::BorderLine>::get(), 0, BOTTOM_BORDER | CONVERT_TWIPS }, \

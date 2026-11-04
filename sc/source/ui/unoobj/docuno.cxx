@@ -95,6 +95,9 @@
 #include <sfx2/LokControlHandler.hxx>
 #include <docmodel/uno/UnoTheme.hxx>
 #include <docmodel/theme/Theme.hxx>
+#include <docmodel/theme/ColorSet.hxx>
+#include <docmodel/theme/ThemeColorType.hxx>
+#include <ThemeColorChanger.hxx>
 
 #include <cellsuno.hxx>
 #include <columnspanset.hxx>
@@ -196,6 +199,7 @@ static std::span<const SfxItemPropertyMapEntry> lcl_GetDocOptPropertyMap()
         { SC_UNO_MATCHWHOLE,              static_cast<sal_uInt16>(ScPropUnoId::MatchWhole), cppu::UnoType<bool>::get(),                           0, 0},
         { SC_UNO_NAMEDRANGES,             0, cppu::UnoType<sheet::XNamedRanges>::get(),             0, 0},
         { SC_UNO_THEME,                   0, cppu::UnoType<util::XTheme>::get(), 0,  0},
+        { u"ZetaThemeColors"_ustr,        0, cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get(), 0,  0},
         { SC_UNO_DATABASERNG,             0, cppu::UnoType<sheet::XDatabaseRanges>::get(),          0, 0},
         { SC_UNO_NULLDATE,                static_cast<sal_uInt16>(ScPropUnoId::NullDate), cppu::UnoType<util::Date>::get(),                      0, 0},
         { SC_UNO_ROWLABELRNG,             0, cppu::UnoType<sheet::XLabelRanges>::get(),             0, 0},
@@ -3607,6 +3611,47 @@ void SAL_CALL ScModelObj::setPropertyValue(
             rSdrModel.setTheme(rUnoTheme.getTheme());
         }
     }
+    else if (aPropertyName == "ZetaThemeColors")
+    {
+        // ZetaOffice: change the theme colors and recolor the cells, styles and shapes
+        // that use them (as Excel). Preview = true: no undo (gallery live preview).
+        uno::Sequence<beans::PropertyValue> aProps;
+        if (!(aValue >>= aProps))
+            throw lang::IllegalArgumentException();
+        OUString aName;
+        OUString aSchemeName;
+        uno::Sequence<sal_Int32> aColors;
+        bool bPreview = false;
+        for (const beans::PropertyValue& rProp : aProps)
+        {
+            if (rProp.Name == "Name")
+                rProp.Value >>= aName;
+            else if (rProp.Name == "ColorSchemeName")
+                rProp.Value >>= aSchemeName;
+            else if (rProp.Name == "ColorScheme")
+                rProp.Value >>= aColors;
+            else if (rProp.Name == "Preview")
+                rProp.Value >>= bPreview;
+        }
+        if (aColors.getLength() != 12)
+            throw lang::IllegalArgumentException();
+        auto pColorSet = std::make_shared<model::ColorSet>(aSchemeName.isEmpty() ? aName : aSchemeName);
+        for (sal_Int32 i = 0; i < 12; ++i)
+            pColorSet->add(model::convertToThemeColorType(i), Color(ColorTransparency, aColors[i]));
+        ScDocument& rThemeDoc = pDocShell->GetDocument();
+        const bool bUndo = rThemeDoc.IsUndoEnabled();
+        if (bPreview)
+            rThemeDoc.EnableUndo(false);
+        sc::ThemeColorChanger aChanger(*pDocShell);
+        aChanger.apply(pColorSet);
+        if (bPreview)
+            rThemeDoc.EnableUndo(bUndo);
+        if (!aName.isEmpty())
+        {
+            if (auto const& pTheme = getSdrModelFromUnoModel().getTheme())
+                pTheme->SetName(aName);
+        }
+    }
 
     if ( aNewOpt != rOldOpt )
     {
@@ -3815,6 +3860,24 @@ uno::Any SAL_CALL ScModelObj::getPropertyValue( const OUString& aPropertyName )
             if (pTheme)
                 xTheme = model::theme::createXTheme(pTheme);
             aRet <<= xTheme;
+        }
+        else if (aPropertyName == "ZetaThemeColors")
+        {
+            // ZetaOffice: { Name, ColorSchemeName, ColorScheme (12 colors) }
+            uno::Sequence<beans::PropertyValue> aProps;
+            auto const& pTheme = getSdrModelFromUnoModel().getTheme();
+            if (pTheme && pTheme->getColorSet())
+            {
+                auto const& pColorSet = pTheme->getColorSet();
+                uno::Sequence<sal_Int32> aColors(12);
+                auto pColors = aColors.getArray();
+                for (sal_Int32 i = 0; i < 12; ++i)
+                    pColors[i] = sal_Int32(pColorSet->getColor(model::convertToThemeColorType(i)));
+                aProps = { comphelper::makePropertyValue(u"Name"_ustr, pTheme->GetName()),
+                           comphelper::makePropertyValue(u"ColorSchemeName"_ustr, pColorSet->getName()),
+                           comphelper::makePropertyValue(u"ColorScheme"_ustr, aColors) };
+            }
+            aRet <<= aProps;
         }
     }
 
