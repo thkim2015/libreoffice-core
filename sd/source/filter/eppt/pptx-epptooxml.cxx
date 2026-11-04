@@ -503,7 +503,9 @@ struct PPTXLayoutInfo
 const PPTXLayoutInfo aLayoutInfo[] =
 {
     { 0, "Title Slide", "title" },
-    { 1, "Title and text", "tx" },
+    // AUTOLAYOUT_TITLE_CONTENT is what PowerPoint calls Title and Content: its content
+    // placeholder takes text or any object, so it is the "obj" layout rather than "tx".
+    { 1, "Title and object", "obj" },
     { 2, "Title and chart", "chart" },
     { 3, "Title, text on left, text on right", "twoObj" },
     { 4, "Title, text on left and chart on right", "txAndChart" },

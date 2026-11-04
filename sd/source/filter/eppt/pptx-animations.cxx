@@ -39,6 +39,7 @@
 #include <com/sun/star/animations/AnimationColorSpace.hpp>
 #include <com/sun/star/animations/Timing.hpp>
 #include <com/sun/star/animations/ValuePair.hpp>
+#include <com/sun/star/animations/XAnimate.hpp>
 #include <com/sun/star/animations/XAnimateMotion.hpp>
 #include <com/sun/star/animations/XAnimateTransform.hpp>
 #include <com/sun/star/animations/XAnimationNode.hpp>
@@ -61,6 +62,9 @@
 #include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/drawing/XShapes.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
+#include <map>
+#include <optional>
 #include <oox/export/utils.hxx>
 #include <oox/ppt/pptfilterhelpers.hxx>
 #include <basegfx/polygon/b2dpolypolygontools.hxx>
@@ -496,6 +500,36 @@ class PPTXAnimationExport
     void WriteAnimationNode(const NodeContext* pContext);
     /// Collects after effect nodes ("master-element") by their master effect node.
     void CollectAfterEffects(const NodeContext* pContext);
+
+    /// One effect node of the build list (p:bldLst).
+    struct BuildEffect
+    {
+        Reference<XAnimationNode> xNode;
+        Reference<XAnimationNode> xSequence;
+        Reference<XShape> xShape;
+        sal_Int32 nShapeID = -1;
+        sal_Int32 nParagraph = -1;
+        sal_Int16 nNodeType = -1;
+        sal_Int16 nPresetClass = 0;
+        OUString aPresetId;
+    };
+    /// Effects of one shape that PowerPoint treats as one build (p:bldP, p:cTn grpId).
+    struct BuildGroup
+    {
+        sal_Int32 nShapeID = -1;
+        sal_Int32 nGroupId = 0;
+        Reference<XShape> xShape;
+        std::vector<size_t> aItems;
+        bool bParagraphs = false;
+    };
+    void CollectBuildEffects(const NodeContext* pContext,
+                             const Reference<XAnimationNode>& xSequence,
+                             std::vector<BuildEffect>& rEffects);
+    std::vector<BuildGroup> CreateBuildGroups(const std::vector<BuildEffect>& rEffects);
+    void WriteBuildList(const std::vector<BuildEffect>& rEffects,
+                        const std::vector<BuildGroup>& rGroups);
+    /// grpId of the effect nodes (p:cTn with presetClass)
+    std::map<Reference<XAnimationNode>, sal_Int32> maGroupIds;
     void WriteAnimationNodeAnimate(sal_Int32 nXmlNodeType);
     void WriteAnimationNodeAnimateInside(bool bSimple, bool bWriteTo = true);
     void WriteAnimationNodeSeq();
@@ -533,6 +567,57 @@ bool IsAudioURL(std::u16string_view rURL)
 
 /// Returns if rURL has an extension which is a video format.
 bool IsVideoURL(std::u16string_view rURL) { return o3tl::endsWithIgnoreAsciiCase(rURL, ".mp4"); }
+
+/// First target (shape or paragraph) in the subtree of an effect node.
+Any lcl_findEffectTarget(const Reference<XAnimationNode>& xNode)
+{
+    Reference<XAnimate> xAnimate(xNode, UNO_QUERY);
+    if (xAnimate.is() && xAnimate->getTarget().hasValue())
+        return xAnimate->getTarget();
+    Reference<XIterateContainer> xIterate(xNode, UNO_QUERY);
+    if (xIterate.is() && xIterate->getTarget().hasValue())
+        return xIterate->getTarget();
+    Reference<XCommand> xCommand(xNode, UNO_QUERY);
+    if (xCommand.is() && xCommand->getTarget().hasValue())
+        return xCommand->getTarget();
+    Reference<XEnumerationAccess> xAccess(xNode, UNO_QUERY);
+    if (!xAccess.is())
+        return Any();
+    Reference<XEnumeration> xEnum(xAccess->createEnumeration());
+    while (xEnum.is() && xEnum->hasMoreElements())
+    {
+        Reference<XAnimationNode> xChild(xEnum->nextElement(), UNO_QUERY);
+        Any aTarget = lcl_findEffectTarget(xChild);
+        if (aTarget.hasValue())
+            return aTarget;
+    }
+    return Any();
+}
+
+/// Outline depth (NumberingLevel) of every paragraph of the shape text.
+std::vector<sal_Int16> lcl_paragraphDepths(const Reference<XShape>& xShape)
+{
+    std::vector<sal_Int16> aDepths;
+    Reference<XEnumerationAccess> xAccess(xShape, UNO_QUERY);
+    if (!xAccess.is())
+        return aDepths;
+    try
+    {
+        Reference<XEnumeration> xEnum(xAccess->createEnumeration());
+        while (xEnum.is() && xEnum->hasMoreElements())
+        {
+            Reference<css::beans::XPropertySet> xPara(xEnum->nextElement(), UNO_QUERY);
+            sal_Int16 nDepth = 0;
+            if (xPara.is())
+                xPara->getPropertyValue(u"NumberingLevel"_ustr) >>= nDepth;
+            aDepths.push_back(std::max<sal_Int16>(0, nDepth));
+        }
+    }
+    catch (const css::uno::Exception&)
+    {
+    }
+    return aDepths;
+}
 }
 
 namespace oox::core
@@ -959,10 +1044,15 @@ void PPTXAnimationExport::WriteAnimationNodeCommonPropsStart()
     }
     const char* pMasterRel = bAfterEffect ? (bSameClick ? "sameClick" : "nextClick") : nullptr;
 
+    std::optional<OString> sGroupId;
+    if (auto it = maGroupIds.find(rXNode); it != maGroupIds.end())
+        sGroupId = OString::number(it->second);
+
     mpFS->startElementNS(XML_p, XML_cTn, XML_id, OString::number(GetNextAnimationNodeId(rXNode)),
                          XML_dur, sDuration, XML_restart, pRestart, XML_presetID,
                          sax_fastparser::UseIf(OString::number(nPresetId), bPresetId),
-                         XML_presetClass, pPresetClass, XML_fill, pFill, XML_nodeType, pNodeType,
+                         XML_presetClass, pPresetClass, XML_grpId, sGroupId, XML_fill, pFill,
+                         XML_nodeType, pNodeType,
                          XML_autoRev, sax_fastparser::UseIf("1", bAutoReverse), XML_presetSubtype,
                          sax_fastparser::UseIf(OString::number(nPresetSubType), bPresetSubType),
                          XML_repeatCount, sRepeatCount, XML_accel, sAccel, XML_decel, sDecel,
@@ -1265,6 +1355,170 @@ void PPTXAnimationExport::CollectAfterEffects(const NodeContext* pContext)
     }
 }
 
+void PPTXAnimationExport::CollectBuildEffects(const NodeContext* pContext,
+                                              const Reference<XAnimationNode>& xSequence,
+                                              std::vector<BuildEffect>& rEffects)
+{
+    for (const NodeContextPtr& pChild : pContext->getChildNodes())
+    {
+        if (pChild->isAfterEffect() || !pChild->isValid())
+            continue;
+        const sal_Int16 nType = pChild->getEffectNodeType();
+        if (nType == EffectNodeType::MAIN_SEQUENCE || nType == EffectNodeType::INTERACTIVE_SEQUENCE)
+        {
+            CollectBuildEffects(pChild.get(), pChild->getNode(), rEffects);
+            continue;
+        }
+        if (nType != EffectNodeType::ON_CLICK && nType != EffectNodeType::WITH_PREVIOUS
+            && nType != EffectNodeType::AFTER_PREVIOUS)
+        {
+            CollectBuildEffects(pChild.get(), xSequence, rEffects);
+            continue;
+        }
+        // an effect node: its target decides the shape (and paragraph) of the build
+        const Any aTarget = lcl_findEffectTarget(pChild->getNode());
+        BuildEffect aEffect;
+        aEffect.xNode = pChild->getNode();
+        aEffect.xSequence = xSequence;
+        aEffect.nNodeType = nType;
+        aEffect.nPresetClass = pChild->getEffectPresetClass();
+        aEffect.aPresetId = pChild->getEffectPresetId();
+        ParagraphTarget aParagraph;
+        if (aTarget >>= aParagraph)
+        {
+            aEffect.xShape = aParagraph.Shape;
+            aEffect.nParagraph = aParagraph.Paragraph;
+        }
+        else
+            aTarget >>= aEffect.xShape;
+        if (!aEffect.xShape.is())
+            continue;
+        aEffect.nShapeID = mrPowerPointExport.GetShapeID(aEffect.xShape);
+        if (aEffect.nShapeID == -1)
+            continue;
+        rEffects.push_back(aEffect);
+    }
+}
+
+std::vector<PPTXAnimationExport::BuildGroup>
+PPTXAnimationExport::CreateBuildGroups(const std::vector<BuildEffect>& rEffects)
+{
+    // Paragraph effects that follow each other in one sequence with the same shape and preset
+    // are one text build (the way the effect options group text); every other effect is its own.
+    std::vector<BuildGroup> aGroups;
+    std::map<sal_Int32, sal_Int32> aNextGroupId;
+    for (size_t i = 0; i < rEffects.size(); ++i)
+    {
+        const BuildEffect& rEffect = rEffects[i];
+        bool bJoin = false;
+        if (rEffect.nParagraph >= 0 && i > 0 && !aGroups.empty())
+        {
+            const BuildEffect& rPrev = rEffects[i - 1];
+            bJoin = aGroups.back().bParagraphs && rPrev.xSequence == rEffect.xSequence
+                    && rPrev.nShapeID == rEffect.nShapeID && rPrev.nParagraph >= 0
+                    && rPrev.aPresetId == rEffect.aPresetId
+                    && rPrev.nPresetClass == rEffect.nPresetClass;
+        }
+        if (!bJoin)
+        {
+            BuildGroup aGroup;
+            aGroup.nShapeID = rEffect.nShapeID;
+            aGroup.nGroupId = aNextGroupId[rEffect.nShapeID]++;
+            aGroup.xShape = rEffect.xShape;
+            aGroup.bParagraphs = rEffect.nParagraph >= 0;
+            aGroups.push_back(aGroup);
+        }
+        aGroups.back().aItems.push_back(i);
+        maGroupIds[rEffect.xNode] = aGroups.back().nGroupId;
+    }
+    return aGroups;
+}
+
+void PPTXAnimationExport::WriteBuildList(const std::vector<BuildEffect>& rEffects,
+                                         const std::vector<BuildGroup>& rGroups)
+{
+    bool bStarted = false;
+    for (const BuildGroup& rGroup : rGroups)
+    {
+        Reference<css::lang::XServiceInfo> xInfo(rGroup.xShape, UNO_QUERY);
+        Reference<XSimpleText> xText(rGroup.xShape, UNO_QUERY);
+        if (!xInfo.is() || !xText.is()
+            || xInfo->supportsService(u"com.sun.star.drawing.GraphicObjectShape"_ustr)
+            || xInfo->supportsService(u"com.sun.star.drawing.OLE2Shape"_ustr)
+            || xInfo->supportsService(u"com.sun.star.drawing.TableShape"_ustr)
+            || xInfo->supportsService(u"com.sun.star.drawing.GroupShape"_ustr)
+            || xInfo->supportsService(u"com.sun.star.drawing.MediaShape"_ustr))
+            continue;
+
+        const char* pBuild = nullptr;
+        std::optional<OString> sLevel;
+        bool bReverse = false;
+        bool bAnimBg = false;
+        if (rGroup.bParagraphs)
+        {
+            // Same reading as the effect options (text animation tab): 'All paragraphs at once'
+            // when every paragraph starts with the first one, otherwise 'By nth level paragraphs'
+            // where n is the deepest paragraph that starts its own step.
+            const std::vector<sal_Int16> aDepths = lcl_paragraphDepths(rGroup.xShape);
+            auto depthOf = [&aDepths](sal_Int32 nPara) -> sal_Int16 {
+                return (nPara >= 0 && static_cast<size_t>(nPara) < aDepths.size()) ? aDepths[nPara] : 0;
+            };
+            std::vector<sal_Int32> aOrder;
+            std::vector<sal_Int32> aHeads;
+            for (size_t k = 0; k < rGroup.aItems.size(); ++k)
+            {
+                const BuildEffect& rEffect = rEffects[rGroup.aItems[k]];
+                aOrder.push_back(rEffect.nParagraph);
+                if (k == 0 || rEffect.nNodeType != EffectNodeType::WITH_PREVIOUS)
+                    aHeads.push_back(rEffect.nParagraph);
+            }
+            auto descending = [](const std::vector<sal_Int32>& rList) {
+                for (size_t k = 1; k < rList.size(); ++k)
+                    if (rList[k] >= rList[k - 1])
+                        return false;
+                return rList.size() > 1;
+            };
+            bReverse = aHeads.size() > 1 ? descending(aHeads) : descending(aOrder);
+            bool bAllAtOnce = false;
+            if (aOrder.size() > 1 && aHeads.size() == 1)
+            {
+                sal_Int16 nFirst = SAL_MAX_INT16;
+                for (sal_Int32 nPara : aOrder)
+                    nFirst = std::min(nFirst, depthOf(nPara));
+                bAllAtOnce = std::count_if(aOrder.begin(), aOrder.end(),
+                                           [&](sal_Int32 nPara) { return depthOf(nPara) == nFirst; })
+                             > 1;
+            }
+            if (bAllAtOnce)
+                pBuild = "allAtOnce";
+            else
+            {
+                sal_Int32 nLevel = 1;
+                for (sal_Int32 nPara : aHeads)
+                    nLevel = std::max<sal_Int32>(nLevel, depthOf(nPara) + 1);
+                nLevel = std::min<sal_Int32>(nLevel, 5);
+                pBuild = "p";
+                if (nLevel > 1)
+                    sLevel = OString::number(nLevel);
+            }
+        }
+        else if (xText->getString().isEmpty())
+            bAnimBg = true;
+
+        if (!bStarted)
+        {
+            mpFS->startElementNS(XML_p, XML_bldLst);
+            bStarted = true;
+        }
+        mpFS->singleElementNS(XML_p, XML_bldP, XML_spid, OString::number(rGroup.nShapeID),
+                              XML_grpId, OString::number(rGroup.nGroupId), XML_build, pBuild,
+                              XML_bldLvl, sLevel, XML_animBg, sax_fastparser::UseIf("1", bAnimBg),
+                              XML_rev, sax_fastparser::UseIf("1", bReverse));
+    }
+    if (bStarted)
+        mpFS->endElementNS(XML_p, XML_bldLst);
+}
+
 void PPTXAnimationExport::WriteAnimationNode(const NodeContext* pContext)
 {
     const NodeContext* pSavedContext = mpContext;
@@ -1349,12 +1603,19 @@ void PPTXAnimationExport::WriteAnimations(const Reference<XDrawPage>& rXDrawPage
     CollectAfterEffects(pNodeContext.get());
     if (pNodeContext->isValid())
     {
+        // PowerPoint reads the text build ('By 1st level paragraphs' etc.) from p:bldLst
+        std::vector<BuildEffect> aBuildEffects;
+        maGroupIds.clear();
+        CollectBuildEffects(pNodeContext.get(), Reference<XAnimationNode>(), aBuildEffects);
+        const std::vector<BuildGroup> aBuildGroups = CreateBuildGroups(aBuildEffects);
+
         mpFS->startElementNS(XML_p, XML_timing);
         mpFS->startElementNS(XML_p, XML_tnLst);
 
         WriteAnimationNode(pNodeContext);
 
         mpFS->endElementNS(XML_p, XML_tnLst);
+        WriteBuildList(aBuildEffects, aBuildGroups);
         mpFS->endElementNS(XML_p, XML_timing);
     }
 }
