@@ -1952,7 +1952,27 @@ void DrawingML::WritePattFill( const Reference< XPropertySet >& rXPropSet )
 
 void DrawingML::WritePattFill(const Reference<XPropertySet>& rXPropSet, const css::drawing::Hatch& rHatch)
 {
-        mpFS->startElementNS(XML_a, XML_pattFill, XML_prst, GetHatchPattern(rHatch));
+        // zeta: PowerPoint 무늬 이름을 빗금 이름으로 넣은 채우기는 그 이름을 prst로 쓴다
+        static constexpr std::string_view aPresets[] = {
+            "pct5", "pct10", "pct20", "pct25", "pct30", "pct40", "pct50", "pct60", "pct70", "pct75", "pct80", "pct90",
+            "horz", "vert", "ltHorz", "ltVert", "dkHorz", "dkVert", "narHorz", "narVert", "dashHorz", "dashVert",
+            "cross", "dnDiag", "upDiag", "ltDnDiag", "ltUpDiag", "dkDnDiag", "dkUpDiag", "wdDnDiag", "wdUpDiag",
+            "dashDnDiag", "dashUpDiag", "diagCross", "smCheck", "lgCheck", "smGrid", "lgGrid", "dotGrid",
+            "smConfetti", "lgConfetti", "horzBrick", "diagBrick", "solidDmnd", "openDmnd", "dotDmnd", "plaid",
+            "sphere", "weave", "divot", "shingle", "wave", "trellis", "zigZag" };
+        OString aPreset;
+        if (GetProperty(rXPropSet, u"FillHatchName"_ustr))
+        {
+            OUString aName;
+            mAny >>= aName;
+            const OString aAscii = OUStringToOString(aName, RTL_TEXTENCODING_ASCII_US);
+            for (std::string_view aItem : aPresets)
+                if (aAscii == aItem)
+                    aPreset = aAscii;
+        }
+        if (aPreset.isEmpty())
+            aPreset = GetHatchPattern(rHatch);
+        mpFS->startElementNS(XML_a, XML_pattFill, XML_prst, aPreset);
 
         sal_Int32 nAlpha = MAX_PERCENT;
         if (GetProperty(rXPropSet, u"FillTransparence"_ustr))

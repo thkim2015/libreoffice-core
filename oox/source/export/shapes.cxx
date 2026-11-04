@@ -779,6 +779,76 @@ static OUString lcl_GetTarget(const css::uno::Reference<css::frame::XModel>& xMo
     return sTarget;
 }
 
+// PowerPoint 'Action Settings' (presentation OnClick + Bookmark) as <a:hlinkClick>.
+// Shared by custom shapes, text boxes and placeholders so that slide jumps and
+// end-show actions on text survive a pptx round trip.
+static void lcl_WriteClickAction(const FSHelperPtr& pFS, oox::core::XmlFilterBase* pFB,
+                                 const Reference<XPropertySet>& rXPropSet)
+{
+    if (!rXPropSet.is() || !pFB)
+        return;
+    Reference<XPropertySetInfo> xInfo = rXPropSet->getPropertySetInfo();
+    if (!xInfo.is())
+        return;
+
+    OUString sBookmark;
+    if (xInfo->hasPropertyByName(u"Bookmark"_ustr))
+        rXPropSet->getPropertyValue(u"Bookmark"_ustr) >>= sBookmark;
+
+    if (xInfo->hasPropertyByName(u"OnClick"_ustr))
+    {
+        OUString sPPAction;
+        presentation::ClickAction eClickAction = presentation::ClickAction_NONE;
+        rXPropSet->getPropertyValue(u"OnClick"_ustr) >>= eClickAction;
+        switch (eClickAction)
+        {
+            case presentation::ClickAction_STOPPRESENTATION:
+                sPPAction = "ppaction://hlinkshowjump?jump=endshow";
+                break;
+            case presentation::ClickAction_NEXTPAGE:
+                sPPAction = "ppaction://hlinkshowjump?jump=nextslide";
+                break;
+            case presentation::ClickAction_LASTPAGE:
+                sPPAction = "ppaction://hlinkshowjump?jump=lastslide";
+                break;
+            case presentation::ClickAction_PREVPAGE:
+                sPPAction = "ppaction://hlinkshowjump?jump=previousslide";
+                break;
+            case presentation::ClickAction_FIRSTPAGE:
+                sPPAction = "ppaction://hlinkshowjump?jump=firstslide";
+                break;
+            case presentation::ClickAction_BOOKMARK:
+                if (!sBookmark.isEmpty())
+                    sBookmark = "#" + sBookmark;
+                break;
+            default:
+                break;
+        }
+        if (!sPPAction.isEmpty())
+            pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), "", XML_action,
+                                 sPPAction);
+    }
+    if (sBookmark.isEmpty())
+        return;
+
+    bool bExtURL = URLTransformer().isExternalURL(sBookmark);
+    sBookmark = bExtURL ? sBookmark : lcl_GetTarget(pFB->getModel(), sBookmark);
+
+    OUString sRelId;
+    if (!sBookmark.isEmpty())
+    {
+        sRelId = pFB->addRelation(pFS->getOutputStream(),
+                                  bExtURL ? oox::getRelationship(Relationship::HYPERLINK)
+                                          : oox::getRelationship(Relationship::SLIDE),
+                                  sBookmark, bExtURL);
+    }
+    if (bExtURL)
+        pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
+    else
+        pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_action,
+                             sBookmark.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump");
+}
+
 ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
 {
     SAL_INFO("oox.shape", "write custom shape");
@@ -1004,65 +1074,7 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
         // // export <hlinkClick> element
         // mpFS->singleElementNS(XML_a, XML_hlinkClick, pAttrListHlinkClick);
 
-        OUString sBookmark;
-        if (GetProperty(rXPropSet, u"Bookmark"_ustr))
-            mAny >>= sBookmark;
-
-        if (GetProperty(rXPropSet, u"OnClick"_ustr))
-        {
-            OUString sPPAction;
-            presentation::ClickAction eClickAction = presentation::ClickAction_NONE;
-            mAny >>= eClickAction;
-            if (eClickAction != presentation::ClickAction_NONE)
-            {
-                switch (eClickAction)
-                {
-                    case presentation::ClickAction_STOPPRESENTATION:
-                        sPPAction = "ppaction://hlinkshowjump?jump=endshow";
-                        break;
-                    case presentation::ClickAction_NEXTPAGE:
-                        sPPAction = "ppaction://hlinkshowjump?jump=nextslide";
-                        break;
-                    case presentation::ClickAction_LASTPAGE:
-                        sPPAction = "ppaction://hlinkshowjump?jump=lastslide";
-                        break;
-                    case presentation::ClickAction_PREVPAGE:
-                        sPPAction = "ppaction://hlinkshowjump?jump=previousslide";
-                        break;
-                    case presentation::ClickAction_FIRSTPAGE:
-                        sPPAction = "ppaction://hlinkshowjump?jump=firstslide";
-                        break;
-                    case presentation::ClickAction_BOOKMARK:
-                        sBookmark = "#" + sBookmark;
-                        break;
-                    default:
-                        break;
-                }
-            }
-            if (!sPPAction.isEmpty())
-                pFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), "", XML_action,
-                                     sPPAction);
-        }
-        if (!sBookmark.isEmpty())
-        {
-            bool bExtURL = URLTransformer().isExternalURL(sBookmark);
-            sBookmark = bExtURL ? sBookmark : lcl_GetTarget(GetFB()->getModel(), sBookmark);
-
-            OUString sRelId;
-            if (!sBookmark.isEmpty())
-            {
-                sRelId = mpFB->addRelation(mpFS->getOutputStream(),
-                                           bExtURL ? oox::getRelationship(Relationship::HYPERLINK)
-                                                   : oox::getRelationship(Relationship::SLIDE),
-                                           sBookmark, bExtURL);
-            }
-            if (bExtURL)
-                mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
-            else
-                mpFS->singleElementNS(
-                    XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId, XML_action,
-                    sBookmark.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump");
-        }
+        lcl_WriteClickAction(pFS, mpFB, rXPropSet);
         AddExtLst(pFS, rXPropSet);
         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
         pFS->singleElementNS(mnXmlNamespace, XML_cNvSpPr);
@@ -2134,6 +2146,8 @@ ShapeExport& ShapeExport::WriteNonVisualDrawingProperties( const Reference< XSha
     pFS->startElementNS(mnXmlNamespace, XML_cNvPr,
                               XML_id, OString::number(GetNewShapeID(xShape)),
                               XML_name, pName );
+    if (GetDocumentType() == DOCUMENT_PPTX)
+        lcl_WriteClickAction(pFS, mpFB, xShapeProps);
     AddExtLst(pFS, xShapeProps);
     pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
 
@@ -2755,6 +2769,8 @@ ShapeExport& ShapeExport::WriteTextShape( const Reference< XShape >& xShape )
 
             mpFS->singleElementNS(XML_a, XML_hlinkClick, FSNS(XML_r, XML_id), sRelId);
         }
+        else if (GetDocumentType() == DOCUMENT_PPTX)
+            lcl_WriteClickAction(pFS, mpFB, xShapeProps);
         AddExtLst(pFS, xShapeProps);
         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
     }

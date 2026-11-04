@@ -926,13 +926,26 @@ void PPTXAnimationExport::WriteAnimationNodeCommonPropsStart()
     if (fRepeatCount != 0)
         sRepeatCount = OString::number(static_cast<sal_Int32>(fRepeatCount * 1000.0));
 
+    // zeta: 부드럽게 시작/종료(PowerPoint 효과 옵션) — ST_PositiveFixedPercentage(100000 = 100%)
+    std::optional<OString> sAccel;
+    std::optional<OString> sDecel;
+    if (nType != EffectNodeType::TIMING_ROOT && nType != EffectNodeType::MAIN_SEQUENCE)
+    {
+        const double fAccel = rXNode->getAcceleration();
+        const double fDecel = rXNode->getDecelerate();
+        if (fAccel > 0.0)
+            sAccel = OString::number(static_cast<sal_Int32>((fAccel > 1.0 ? 1.0 : fAccel) * 100000.0 + 0.5));
+        if (fDecel > 0.0)
+            sDecel = OString::number(static_cast<sal_Int32>((fDecel > 1.0 ? 1.0 : fDecel) * 100000.0 + 0.5));
+    }
+
     mpFS->startElementNS(XML_p, XML_cTn, XML_id, OString::number(GetNextAnimationNodeId(rXNode)),
                          XML_dur, sDuration, XML_restart, pRestart, XML_presetID,
                          sax_fastparser::UseIf(OString::number(nPresetId), bPresetId),
                          XML_presetClass, pPresetClass, XML_fill, pFill, XML_nodeType, pNodeType,
                          XML_autoRev, sax_fastparser::UseIf("1", bAutoReverse), XML_presetSubtype,
                          sax_fastparser::UseIf(OString::number(nPresetSubType), bPresetSubType),
-                         XML_repeatCount, sRepeatCount);
+                         XML_repeatCount, sRepeatCount, XML_accel, sAccel, XML_decel, sDecel);
 
     WriteAnimationCondList(mpContext->getBeginCondList(), XML_stCondLst);
     WriteAnimationCondList(mpContext->getEndCondList(), XML_endCondLst);
