@@ -407,6 +407,23 @@ void ScDPAggData::Update( const ScDPValue& rNext, ScSubTotalFunc eFunc, const Sc
     if ( eFunc == SUBTOTAL_FUNC_NONE )
         return;
 
+    // ZetaOffice: an already aggregated leaf of a calculated item - Excel adds up the
+    // counts of the leaves and takes the other functions over the leaf values
+    if ( rNext.meType == ScDPValue::ZetaAggregated )
+    {
+        if ( eFunc == SUBTOTAL_FUNC_CNT || eFunc == SUBTOTAL_FUNC_CNT2 )
+        {
+            ++nCount;
+            if ( !SubTotal::SafePlus( fVal, rNext.mfValue - 1.0 ) )
+                nCount = -1;
+            return;
+        }
+        ScDPValue aValue;
+        aValue.Set( rNext.mfValue, ScDPValue::Value );
+        Update( aValue, eFunc, rSubState );
+        return;
+    }
+
     if ( eFunc != SUBTOTAL_FUNC_CNT2 )          // CNT2 counts everything, incl. strings and errors
     {
         if (rNext.meType == ScDPValue::Error)
@@ -535,7 +552,8 @@ void ScDPAggData::Calculate( ScSubTotalFunc eFunc, const ScDPSubTotalState& rSub
 
             case SUBTOTAL_FUNC_CNT:
             case SUBTOTAL_FUNC_CNT2:
-                fResult = nCount;
+                // ZetaOffice: fVal holds the extra counts of calculated item leaves
+                fResult = static_cast<double>(nCount) + fVal;
                 break;
 
             case SUBTOTAL_FUNC_AVE:

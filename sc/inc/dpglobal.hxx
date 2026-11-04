@@ -43,7 +43,8 @@ namespace o3tl {
 
 struct ScDPValue
 {
-    enum Type { Empty = 0, Value, String, Error };
+    // ZetaAggregated (ZetaOffice): an already aggregated leaf of a pivot calculated item
+    enum Type { Empty = 0, Value, String, Error, ZetaAggregated };
 
     double mfValue;
     Type meType;

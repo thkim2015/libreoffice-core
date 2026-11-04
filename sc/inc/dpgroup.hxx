@@ -31,6 +31,7 @@
 
 class ScDocument;
 class ScTokenArray;
+struct ZetaCalcExpr;    // ZetaOffice: compiled calculated item formula (dpgroup.cxx)
 
 typedef ::std::vector<ScDPItemData> ScDPItemDataVec;
 
@@ -129,13 +130,14 @@ class ScDPGroupTableData final : public ScDPTableData
         OUString aName;
         OUString aFormula;
         SCROW nId = -1;
-        std::vector<std::pair<SCROW, double>> aTerms;   // resolved linear terms
+        std::shared_ptr<ZetaCalcExpr> pExpr;            // compiled formula
+        std::vector<std::pair<SCROW, sal_Int32>> aSlots; // formula operands: source item id, or earlier calculated item index
     };
     std::map<sal_Int32, std::vector<ZetaCalcItem>> maZetaCalcItems;
     std::map<sal_Int32, std::vector<SCROW>> maZetaEntries;
     bool mbZetaCalcResolved = false;
     void ZetaResolveCalcItems();
-    void ZetaProcessCalcRows(CalcInfo& rInfo, CalcRowData& rData, bool bAutoShow, size_t nLevel);
+    void ZetaCalcResults(CalcInfo& rInfo, bool bAutoShow);
 
     void FillGroupValues(std::vector<SCROW>& rItems, const std::vector<sal_Int32>& rDims);
     virtual sal_Int32                GetSourceDim( sal_Int32 nDim ) override;
@@ -161,8 +163,8 @@ public:
     /// ZetaOffice: calculated items { name, formula } of a source dimension
     void        ZetaSetCalcItems( sal_Int32 nDim, const std::vector<std::pair<OUString, OUString>>& rItems );
     bool        ZetaIsCalcItem( sal_Int32 nDim, SCROW nId ) const;
-    /** ZetaOffice: parse a calculated item formula (=East+West, =South*2, ='a b'*0.5, =Region[East])
-        into item name terms. Only linear formulas without a constant part are taken. */
+    /** ZetaOffice: check a calculated item formula (=East+West, =East*West+5, ='a b'/2, =Region[East],
+        =MAX(East,West), =IF(East>West,East,0)) and return the item names it uses (coefficient 1). */
     SC_DLLPUBLIC static bool ZetaParseCalcFormula( const OUString& rFormula, const OUString& rFieldName,
                                       std::vector<std::pair<OUString, double>>& rTerms );
     /// ZetaOffice: the formula as Excel stores it - no '=', items as Field[Item]
