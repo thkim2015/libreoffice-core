@@ -22,6 +22,7 @@
 #include <Legend.hxx>
 #include <PropertyMapper.hxx>
 #include <ChartModel.hxx>
+#include <Diagram.hxx>
 #include <ObjectIdentifier.hxx>
 #include <FormattedString.hxx>
 #include <RelativePositionHelper.hxx>
@@ -875,6 +876,20 @@ std::vector<std::shared_ptr<VButton>> lcl_createButtons(
     if (pPivotTableDataProvider->getColumnFields().empty())
         return aButtons;
 
+    // Excel pivot chart field buttons (Diagram ZetaPivotFieldButtons): 2 legend, 8 value, 32 all
+    sal_Int32 nButtons = 61;
+    try
+    {
+        rtl::Reference<Diagram> xDiagram(rModel.getFirstChartDiagram());
+        if (xDiagram.is())
+            xDiagram->getPropertyValue(u"ZetaPivotFieldButtons"_ustr) >>= nButtons;
+    }
+    catch (const uno::Exception&)
+    {
+    }
+    if (!(nButtons & 32))
+        return aButtons;
+
     awt::Size aSize(2000, 700);
     int x = 100;
     int y = 100;
@@ -882,6 +897,8 @@ std::vector<std::shared_ptr<VButton>> lcl_createButtons(
     const std::vector<chart2::data::PivotTableFieldEntry>& aPivotFieldEntries = pPivotTableDataProvider->getColumnFields();
     for (chart2::data::PivotTableFieldEntry const & sColumnFieldEntry : aPivotFieldEntries)
     {
+        if (!(nButtons & (sColumnFieldEntry.Name == "Data" ? 8 : 2)))
+            continue;
         auto pButton = std::make_shared<VButton>();
         aButtons.push_back(pButton);
         pButton->init(xLegendContainer);

@@ -326,6 +326,16 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
         aProps.setProperty( PROP_DisableDataTableDialog, true );
         aProps.setProperty( PROP_DisableComplexChartTypes, true );
 
+        // field buttons: c14:pivotOptions / c16:pivotOptions16 (absent element = off)
+        if( mrModel.mnPivotButtons >= 0 ) try
+        {
+            Reference< beans::XPropertySet > xDiagramProps( getChartDocument()->getFirstDiagram(), UNO_QUERY_THROW );
+            xDiagramProps->setPropertyValue( u"ZetaPivotFieldButtons"_ustr, uno::Any( mrModel.mnPivotButtons ) );
+        }
+        catch( Exception& )
+        {
+        }
+
         /*  Link the chart to its pivot table (spreadsheet documents only), so
             it follows pivot table changes and is exported as a pivot chart
             again. The series keep their cell ranges until the pivot table

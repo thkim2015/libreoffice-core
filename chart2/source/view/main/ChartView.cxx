@@ -1213,6 +1213,22 @@ bool lcl_createLegend( const rtl::Reference< Legend > & xLegend
     return true;
 }
 
+
+sal_Int32 lcl_getPivotFieldButtons(ChartModel& rModel)
+{
+    sal_Int32 nMask = 61;
+    try
+    {
+        rtl::Reference<Diagram> xDiagram(rModel.getFirstChartDiagram());
+        if (xDiagram.is())
+            xDiagram->getPropertyValue(u"ZetaPivotFieldButtons"_ustr) >>= nMask;
+    }
+    catch (const uno::Exception&)
+    {
+    }
+    return nMask;
+}
+
 void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
                        ChartModel& rModel,
                        awt::Rectangle& rRemainingSpace)
@@ -1224,11 +1240,15 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
 
     uno::Reference<beans::XPropertySet> xModelPage(rModel.getPageBackground());
 
+    const sal_Int32 nButtons = lcl_getPivotFieldButtons(rModel);
+    if (!(nButtons & 32))
+        return;
+
     awt::Size aSize(4000, 700); // size of the button
 
     tools::Long x = 0;
 
-    if (!pPivotTableDataProvider->getPageFields().empty())
+    if ((nButtons & 1) && !pPivotTableDataProvider->getPageFields().empty())
     {
         x = 0;
 
@@ -1259,10 +1279,15 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
     if (pPivotTableDataProvider->getRowFields().empty())
         return;
 
+    bool bAnyRowButton = false;
     x = 200;
     const std::vector<chart2::data::PivotTableFieldEntry>& aPivotFieldEntries = pPivotTableDataProvider->getRowFields();
     for (css::chart2::data::PivotTableFieldEntry const & rRowFieldEntry : aPivotFieldEntries)
     {
+        // "Data" is the value field button, the others are axis field buttons
+        if (!(nButtons & (rRowFieldEntry.Name == "Data" ? 8 : 4)))
+            continue;
+        bAnyRowButton = true;
         VButton aButton;
         aButton.init(xPageShapes);
         awt::Point aNewPosition(rRemainingSpace.X + x + 100,
@@ -1281,7 +1306,8 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
         aButton.createShapes(xModelPage);
         x += aSize.Width + 100;
     }
-    rRemainingSpace.Height -= (aSize.Height + 100 + 100);
+    if (bAnyRowButton)
+        rRemainingSpace.Height -= (aSize.Height + 100 + 100);
 }
 
 void formatPage(

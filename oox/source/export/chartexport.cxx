@@ -104,6 +104,7 @@
 #include <com/sun/star/container/XNamed.hpp>
 #include <com/sun/star/container/XChild.hpp>
 #include <rtl/character.hxx>
+#include <rtl/strbuf.hxx>
 #include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
 #include <com/sun/star/sheet/XDataPilotTablesSupplier.hpp>
 #include <chart2/AbstractPivotTableDataProvider.hxx>
@@ -1655,6 +1656,44 @@ void ChartExport::exportChartSpace( const Reference< css::chart::XChartDocument 
     // export additional shapes in chart
     if (!bIsChartex) {
         exportAdditionalShapes(xChartDoc);
+    }
+
+    // pivot chart field buttons (Excel c14:pivotOptions, c16:pivotOptions16)
+    if (!bIsChartex && xNewDoc.is()
+        && dynamic_cast<chart2api::AbstractPivotTableDataProvider*>(xNewDoc->getDataProvider().get()))
+    {
+        sal_Int32 nButtons = 61;
+        try
+        {
+            Reference<XPropertySet> xDiagramProps(xNewDoc->getFirstDiagram(), UNO_QUERY);
+            if (xDiagramProps.is())
+                xDiagramProps->getPropertyValue(u"ZetaPivotFieldButtons"_ustr) >>= nButtons;
+        }
+        catch (const uno::Exception&)
+        {
+        }
+        // no tokens for these namespaces in oox: write the elements as text
+        OStringBuffer aExt("<c:extLst><c:ext uri=\"{781A3756-C4B2-4CAC-9D66-4F8BD8637D16}\" "
+                           "xmlns:c14=\"http://schemas.microsoft.com/office/drawing/2007/8/2/chart\">"
+                           "<c14:pivotOptions>");
+        if (nButtons & 1)
+            aExt.append("<c14:dropZoneFilter val=\"1\"/>");
+        if (nButtons & 4)
+            aExt.append("<c14:dropZoneCategories val=\"1\"/>");
+        if (nButtons & 8)
+            aExt.append("<c14:dropZoneData val=\"1\"/>");
+        if (nButtons & 2)
+            aExt.append("<c14:dropZoneSeries val=\"1\"/>");
+        if (nButtons & 32)
+            aExt.append("<c14:dropZonesVisible val=\"1\"/>");
+        aExt.append("</c14:pivotOptions></c:ext>");
+        if (nButtons & 16)
+            aExt.append("<c:ext uri=\"{E28EC0CA-F0BB-4C9C-879D-F8772B89E7AC}\" "
+                        "xmlns:c16=\"http://schemas.microsoft.com/office/drawing/2014/chart\">"
+                        "<c16:pivotOptions16><c16:showExpandCollapseFieldButtons val=\"1\"/>"
+                        "</c16:pivotOptions16></c:ext>");
+        aExt.append("</c:extLst>");
+        pFS->write(std::string_view(aExt));
     }
 
     pFS->endElement( FSNS( nChartNS, XML_chartSpace ) );

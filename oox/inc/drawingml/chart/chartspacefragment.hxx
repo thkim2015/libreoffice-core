@@ -40,6 +40,9 @@ public:
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
     virtual void        onCharacters( const OUString& rChars ) override;
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext(
+                            const OUString& rNamespace, const OUString& rName,
+                            const css::uno::Reference< css::xml::sax::XFastAttributeList >& rxAttribs ) override;
 };
 
 

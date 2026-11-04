@@ -102,7 +102,8 @@ enum
     PROP_DIAGRAM_DATATABLEVBORDER,
     PROP_DIAGRAM_DATATABLEOUTLINE,
     PROP_DIAGRAM_EXTERNALDATA,
-    PROP_DIAGRAM_STYLE_INDEX
+    PROP_DIAGRAM_STYLE_INDEX,
+    PROP_DIAGRAM_ZETA_PIVOT_FIELD_BUTTONS
 };
 
 void lcl_AddPropertiesToVector(
@@ -202,6 +203,13 @@ void lcl_AddPropertiesToVector(
                   PROP_DIAGRAM_STYLE_INDEX,
                   cppu::UnoType<OUString>::get(),
                   beans::PropertyAttribute::MAYBEVOID );
+    // Pivot chart field buttons as in Excel: 1 report filter, 2 legend,
+    // 4 axis, 8 value, 16 expand/collapse, 32 all buttons visible
+    rOutProperties.emplace_back( "ZetaPivotFieldButtons",
+                  PROP_DIAGRAM_ZETA_PIVOT_FIELD_BUTTONS,
+                  cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 const ::chart::tPropertyValueMap& StaticDiagramDefaults()
@@ -220,6 +228,8 @@ const ::chart::tPropertyValueMap& StaticDiagramDefaults()
         ::chart::PropertyHelper::setPropertyValueDefault< chart2::PieChartSubType >( aMap, PROP_DIAGRAM_OF_PIE_TYPE,
                 chart2::PieChartSubType_NONE);
         ::chart::PropertyHelper::setPropertyValueDefault< sal_Int32 >( aMap, PROP_DIAGRAM_SPLIT_POS, 2 );
+        // Excel default: everything but the legend field buttons
+        ::chart::PropertyHelper::setPropertyValueDefault< sal_Int32 >( aMap, PROP_DIAGRAM_ZETA_PIVOT_FIELD_BUTTONS, 61 );
         ::chart::SceneProperties::AddDefaultsToMap( aMap );
         return aMap;
     }();

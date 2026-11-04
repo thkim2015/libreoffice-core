@@ -61,6 +61,7 @@ struct ChartSpaceModel
     bool                mbShowLabelsOverMax;/// True = show labels over chart maximum.
     bool                mbPivotChart;       /// True = pivot chart.
     OUString            maPivotSource;      /// c:pivotSource/c:name, e.g. [a.xlsx]Sheet1!PivotTable1
+    sal_Int32           mnPivotButtons;     /// c14:pivotOptions + c16:pivotOptions16 bits, -1 = none
     DataSourceRef       maCxData;           /// Data for Chartex.
     bool                mbDate1904;         /// True = default is 1904 date system
 

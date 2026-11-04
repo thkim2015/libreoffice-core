@@ -42,6 +42,45 @@ ChartSpaceFragment::~ChartSpaceFragment()
 {
 }
 
+/*  Excel pivot chart field buttons in chartSpace/extLst/ext:
+    c14:pivotOptions (dropZoneFilter, dropZoneCategories, dropZoneData,
+    dropZoneSeries, dropZonesVisible) and c16:pivotOptions16
+    (showExpandCollapseFieldButtons). oox has no tokens for these
+    namespaces, so they arrive as unknown elements. */
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ChartSpaceFragment::createUnknownChildContext(
+        const OUString& rNamespace, const OUString& rName,
+        const css::uno::Reference< css::xml::sax::XFastAttributeList >& rxAttribs )
+{
+    if( !isCurrentElement( C_TOKEN( ext ) ) )
+        return nullptr;
+    bool bC14 = rNamespace == "http://schemas.microsoft.com/office/drawing/2007/8/2/chart";
+    bool bC16 = rNamespace == "http://schemas.microsoft.com/office/drawing/2014/chart";
+    if( !bC14 && !bC16 )
+        return nullptr;
+    if( rName == "pivotOptions" || rName == "pivotOptions16" )
+    {
+        if( mrModel.mnPivotButtons < 0 )
+            mrModel.mnPivotButtons = 0;
+        return this;
+    }
+    sal_Int32 nBit = 0;
+    if( bC14 && rName == "dropZoneFilter" ) nBit = 1;
+    else if( bC14 && rName == "dropZoneSeries" ) nBit = 2;
+    else if( bC14 && rName == "dropZoneCategories" ) nBit = 4;
+    else if( bC14 && rName == "dropZoneData" ) nBit = 8;
+    else if( bC16 && rName == "showExpandCollapseFieldButtons" ) nBit = 16;
+    else if( bC14 && rName == "dropZonesVisible" ) nBit = 32;
+    if( nBit )
+    {
+        if( mrModel.mnPivotButtons < 0 )
+            mrModel.mnPivotButtons = 0;
+        AttributeList aAttribs( rxAttribs );
+        if( aAttribs.getBool( XML_val, true ) )
+            mrModel.mnPivotButtons |= nBit;
+    }
+    return nullptr;
+}
+
 void ChartSpaceFragment::onCharacters( const OUString& rChars )
 {
     if( isCurrentElement( C_TOKEN( name ) ) && getParentElement() == C_TOKEN( pivotSource ) )
@@ -85,6 +124,8 @@ ContextHandlerRef ChartSpaceFragment::onCreateContext( sal_Int32 nElement, const
                 case C_TOKEN( pivotSource ):
                     mrModel.mbPivotChart = true;
                     return this;
+                case C_TOKEN( extLst ):
+                    return this;
                 case C_TOKEN (externalData):
                     mrModel.maSheetPath = getFragmentPathFromRelId(rAttribs.getStringDefaulted(R_TOKEN(id)));
                     return nullptr;
@@ -112,6 +153,11 @@ ContextHandlerRef ChartSpaceFragment::onCreateContext( sal_Int32 nElement, const
 
         case C_TOKEN( pivotSource ):
             if( nElement == C_TOKEN( name ) )
+                return this;
+            return nullptr;
+
+        case C_TOKEN( extLst ):
+            if( nElement == C_TOKEN( ext ) && getParentElement() == C_TOKEN( chartSpace ) )
                 return this;
             return nullptr;
 

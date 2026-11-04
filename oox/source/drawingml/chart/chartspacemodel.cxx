@@ -30,6 +30,7 @@ ChartSpaceModel::ChartSpaceModel(bool bMSO2007Doc) :
     mbPlotVisOnly( !bMSO2007Doc ),
     mbShowLabelsOverMax( !bMSO2007Doc ),
     mbPivotChart( false ),
+    mnPivotButtons( -1 ),
     mbDate1904(false)
 {
 }
