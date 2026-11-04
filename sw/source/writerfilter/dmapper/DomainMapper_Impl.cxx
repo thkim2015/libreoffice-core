@@ -8900,9 +8900,13 @@ void DomainMapper_Impl::CloseFieldCommand()
                     if( lcl_FindInCommand( pContext->GetCommand(), 'l', sValue ))
                     // \l Outline Level
                     {
-                        sal_Int32 nLevel = sValue.toInt32();
-                        if( !sValue.isEmpty() && nLevel >= 0 && nLevel <= 10 )
-                            xTC->setPropertyValue(getPropertyName(PROP_LEVEL), uno::Any( static_cast<sal_Int16>(nLevel) ));
+                        // Word levels are 1-based; the UNO Level of a ContentIndexMark
+                        // is 0-based (SwXDocumentIndexMark stores Level + 1), and the
+                        // DOCX export writes the 1-based level back as \l.
+                        // Word writes the level quoted (\l "3").
+                        sal_Int32 nLevel = lcl_trim(sValue).toInt32();
+                        if( !sValue.isEmpty() && nLevel >= 1 && nLevel <= 10 )
+                            xTC->setPropertyValue(getPropertyName(PROP_LEVEL), uno::Any( static_cast<sal_Int16>(nLevel - 1) ));
                     }
 //                    if( lcl_FindInCommand( pContext->GetCommand(), 'n', sValue ))
 //                    \n Suppress page numbers
