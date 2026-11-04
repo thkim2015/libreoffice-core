@@ -39,6 +39,7 @@ public:
     virtual             ~ChartSpaceFragment() override;
 
     virtual ::oox::core::ContextHandlerRef onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs ) override;
+    virtual void        onCharacters( const OUString& rChars ) override;
 };
 
 

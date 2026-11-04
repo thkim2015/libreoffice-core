@@ -102,6 +102,11 @@
 #include <com/sun/star/sheet/AddressConvention.hpp>
 
 #include <com/sun/star/container/XNamed.hpp>
+#include <com/sun/star/container/XChild.hpp>
+#include <rtl/character.hxx>
+#include <com/sun/star/sheet/XSpreadsheetDocument.hpp>
+#include <com/sun/star/sheet/XDataPilotTablesSupplier.hpp>
+#include <chart2/AbstractPivotTableDataProvider.hxx>
 #include <com/sun/star/embed/XVisualObject.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 
@@ -1484,6 +1489,69 @@ void ChartExport::ExportContent_( bool bIsChartex )
     }
 }
 
+void ChartExport::exportPivotSource( const Reference< chart2::XChartDocument >& xNewDoc )
+{
+    auto* pPivot = dynamic_cast<chart2api::AbstractPivotTableDataProvider*>(
+        xNewDoc->getDataProvider().get());
+    if (!pPivot || pPivot->getPivotTableName().isEmpty())
+        return;
+
+    const OUString& rName = pPivot->getPivotTableName();
+    OUString aSheet(u"Sheet1"_ustr);
+    // Excel accepts any file name inside the brackets, but needs them
+    OUString aFile(u"Book1.xlsx"_ustr);
+    try
+    {
+        Reference<container::XChild> xChild(xNewDoc, UNO_QUERY);
+        Reference<frame::XModel> xParent(xChild.is() ? xChild->getParent() : nullptr, UNO_QUERY);
+        if (xParent.is())
+        {
+            OUString aURL = xParent->getURL();
+            sal_Int32 nSlash = aURL.lastIndexOf('/');
+            if (nSlash >= 0 && nSlash + 1 < aURL.getLength())
+                aFile = aURL.copy(nSlash + 1);
+        }
+        Reference<sheet::XSpreadsheetDocument> xSpread(xParent, UNO_QUERY);
+        if (xSpread.is())
+        {
+            Reference<container::XIndexAccess> xSheets(xSpread->getSheets(), UNO_QUERY_THROW);
+            for (sal_Int32 i = 0; i < xSheets->getCount(); ++i)
+            {
+                Reference<sheet::XDataPilotTablesSupplier> xSup(xSheets->getByIndex(i), UNO_QUERY);
+                Reference<container::XNamed> xNamed(xSup, UNO_QUERY);
+                if (xSup.is() && xNamed.is() && xSup->getDataPilotTables()->hasByName(rName))
+                {
+                    aSheet = xNamed->getName();
+                    break;
+                }
+            }
+        }
+    }
+    catch (const uno::Exception&)
+    {
+    }
+
+    bool bQuote = false;
+    for (sal_Int32 i = 0; i < aSheet.getLength(); ++i)
+    {
+        sal_Unicode c = aSheet[i];
+        if (!(rtl::isAsciiAlphanumeric(c) || c == '_' || c > 0x7f))
+            bQuote = true;
+    }
+    OUString aRef = "[" + aFile + "]" + aSheet;
+    if (bQuote)
+        aRef = "'" + aRef.replaceAll("'", "''") + "'";
+    aRef += "!" + rName;
+
+    FSHelperPtr pFS = GetFS();
+    pFS->startElement(FSNS(XML_c, XML_pivotSource));
+    pFS->startElement(FSNS(XML_c, XML_name));
+    pFS->writeEscaped(aRef);
+    pFS->endElement(FSNS(XML_c, XML_name));
+    pFS->singleElement(FSNS(XML_c, XML_fmtId), XML_val, "0");
+    pFS->endElement(FSNS(XML_c, XML_pivotSource));
+}
+
 void ChartExport::exportChartSpace( const Reference< css::chart::XChartDocument >& xChartDoc,
                                     bool bIncludeTable,
                                     bool bIsChartex)
@@ -1564,6 +1632,10 @@ void ChartExport::exportChartSpace( const Reference< css::chart::XChartDocument 
                     OUString::number(nStyleIdx));
         }
     }
+
+    // pivot chart: Excel links the chart to its pivot table by name
+    if (!bIsChartex && xNewDoc.is())
+        exportPivotSource(xNewDoc);
 
     //XML_chart
     exportChart(xChartDoc, bIsChartex);

@@ -60,6 +60,7 @@ struct ChartSpaceModel
     bool                mbPlotVisOnly;      /// True = plot visible cells in a sheet only.
     bool                mbShowLabelsOverMax;/// True = show labels over chart maximum.
     bool                mbPivotChart;       /// True = pivot chart.
+    OUString            maPivotSource;      /// c:pivotSource/c:name, e.g. [a.xlsx]Sheet1!PivotTable1
     DataSourceRef       maCxData;           /// Data for Chartex.
     bool                mbDate1904;         /// True = default is 1904 date system
 

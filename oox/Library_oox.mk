@@ -40,6 +40,7 @@ $(eval $(call gb_Library_use_api,oox,\
 $(eval $(call gb_Library_use_libraries,oox,\
     $(call gb_Helper_optional,AVMEDIA,avmedia) \
     basegfx \
+    chart2api \
     comphelper \
     cppu \
     cppuhelper \

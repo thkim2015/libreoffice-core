@@ -42,6 +42,12 @@ ChartSpaceFragment::~ChartSpaceFragment()
 {
 }
 
+void ChartSpaceFragment::onCharacters( const OUString& rChars )
+{
+    if( isCurrentElement( C_TOKEN( name ) ) && isPreviousElement( C_TOKEN( pivotSource ) ) )
+        mrModel.maPivotSource += rChars;
+}
+
 ContextHandlerRef ChartSpaceFragment::onCreateContext( sal_Int32 nElement, const AttributeList& rAttribs )
 {
     bool bMSO2007Document = getFilter().isMSO2007Document();
@@ -78,7 +84,7 @@ ContextHandlerRef ChartSpaceFragment::onCreateContext( sal_Int32 nElement, const
                     return nullptr;
                 case C_TOKEN( pivotSource ):
                     mrModel.mbPivotChart = true;
-                    return nullptr;
+                    return this;
                 case C_TOKEN (externalData):
                     mrModel.maSheetPath = getFragmentPathFromRelId(rAttribs.getStringDefaulted(R_TOKEN(id)));
                     return nullptr;
@@ -103,6 +109,11 @@ ContextHandlerRef ChartSpaceFragment::onCreateContext( sal_Int32 nElement, const
                     return nullptr;
             }
         break;
+
+        case C_TOKEN( pivotSource ):
+            if( nElement == C_TOKEN( name ) )
+                return this;
+            return nullptr;
 
         case C_TOKEN( chart ):
             switch( nElement )

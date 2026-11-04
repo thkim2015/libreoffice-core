@@ -186,6 +186,8 @@ private:
     void InitPlotArea();
 
     void ExportContent_(bool bIsChartex);
+    void exportPivotSource( const css::uno::Reference<
+                            css::chart2::XChartDocument >& xNewDoc );
     void exportChartSpace( const css::uno::Reference<
                            css::chart::XChartDocument >& rChartDoc,
                            bool bIncludeTable,

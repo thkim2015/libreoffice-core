@@ -27,6 +27,9 @@
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/chart2/XDataSeriesContainer.hpp>
 #include <com/sun/star/chart2/XTitled.hpp>
+#include <com/sun/star/chart2/data/XDataReceiver.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <chart2/AbstractPivotTableDataProvider.hxx>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/util/DateTime.hpp>
 #include <oox/core/xmlfilterbase.hxx>
@@ -322,6 +325,31 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
         PropertySet aProps( getChartDocument() );
         aProps.setProperty( PROP_DisableDataTableDialog, true );
         aProps.setProperty( PROP_DisableComplexChartTypes, true );
+
+        /*  Link the chart to its pivot table (spreadsheet documents only), so
+            it follows pivot table changes and is exported as a pivot chart
+            again. The series keep their cell ranges until the pivot table
+            changes. Name: "[file]Sheet!PivotTable" or "'[file]Sheet'!..." */
+        const OUString& rSrc = mrModel.maPivotSource;
+        sal_Int32 nBracket = rSrc.indexOf( ']' );
+        sal_Int32 nBang = rSrc.indexOf( '!', nBracket < 0 ? 0 : nBracket + 1 );
+        OUString aPivotName = nBang < 0 ? OUString() : rSrc.copy( nBang + 1 ).trim();
+        if( !aPivotName.isEmpty() ) try
+        {
+            Reference< lang::XMultiServiceFactory > xFactory( getFilter().getModelFactory(), UNO_QUERY_THROW );
+            Reference< XDataProvider > xProvider( xFactory->createInstance(
+                u"com.sun.star.chart2.data.PivotTableDataProvider"_ustr ), UNO_QUERY );
+            auto* pPivot = dynamic_cast< chart2api::AbstractPivotTableDataProvider* >( xProvider.get() );
+            if( pPivot )
+            {
+                pPivot->setPivotTableName( aPivotName );
+                Reference< XDataReceiver > xReceiver( getChartDocument(), UNO_QUERY_THROW );
+                xReceiver->attachDataProvider( xProvider );
+            }
+        }
+        catch( Exception& )
+        {
+        }
     }
 
     if (!mrModel.maSheetPath.isEmpty())
