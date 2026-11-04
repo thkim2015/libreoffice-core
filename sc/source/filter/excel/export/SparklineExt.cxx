@@ -46,6 +46,10 @@ void SparklineExt::SaveXml(XclExpXmlStream& rStream)
     for (auto const& pSparklineGroup : aSparklineGroups)
     {
         auto const aSparklineVector = pSparklineList->getSparklinesFor(pSparklineGroup);
+        // a group whose sparklines were all deleted or moved stays in the list;
+        // Excel refuses a file with an empty <x14:sparklines>
+        if (aSparklineVector.empty())
+            continue;
         addSparklineGroup(rStream, *pSparklineGroup, aSparklineVector);
     }
 
@@ -212,7 +216,12 @@ SparklineBuffer::SparklineBuffer(const XclExpRoot& rRoot, XclExtLstRef const& xE
 {
     auto& rDocument = GetDoc();
     auto* pSparklineList = rDocument.GetSparklineList(GetCurrScTab());
-    if (pSparklineList && !pSparklineList->getSparklineGroups().empty())
+    if (!pSparklineList)
+        return;
+    bool bAny = false;
+    for (auto const& pGroup : pSparklineList->getSparklineGroups())
+        bAny = bAny || !pSparklineList->getSparklinesFor(pGroup).empty();
+    if (bAny)
     {
         xExtLst->AddRecord(new xcl::exp::SparklineExt(GetRoot()));
     }

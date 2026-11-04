@@ -2399,11 +2399,22 @@ void XclExpStyle::SaveXml( XclExpXmlStream& rStrm )
     OString sName;
     OString sBuiltinId;
     const char* pBuiltinId = nullptr;
+    OString sLevel;
+    const char* pLevel = nullptr;
     if( IsBuiltIn() )
     {
         sName = OString( lcl_StyleNameFromId( mnStyleId ) );
         sBuiltinId = OString::number( std::min( static_cast<sal_Int32>( CELL_STYLE_MAX_BUILTIN_ID - 1 ), static_cast <sal_Int32>( mnStyleId ) ) );
         pBuiltinId = sBuiltinId.getStr();
+        // outline styles: Excel names them RowLevel_n / ColLevel_n and needs iLevel (0-based),
+        // otherwise every level is read back as level 1
+        if( (mnStyleId == EXC_STYLE_ROWLEVEL) || (mnStyleId == EXC_STYLE_COLLEVEL) )
+        {
+            sName = OString::Concat( mnStyleId == EXC_STYLE_ROWLEVEL ? "RowLevel_" : "ColLevel_" )
+                    + OString::number( mnLevel + 1 );
+            sLevel = OString::number( mnLevel );
+            pLevel = sLevel.getStr();
+        }
     }
     else
         sName = maName.toUtf8();
@@ -2416,8 +2427,8 @@ void XclExpStyle::SaveXml( XclExpXmlStream& rStrm )
             XML_name,      sName,
             XML_xfId,      OString::number(nXFId),
 // builtinId of 54 or above is invalid according to OpenXML SDK validator.
-            XML_builtinId, pBuiltinId
-            // OOXTODO: XML_iLevel,
+            XML_builtinId, pBuiltinId,
+            XML_iLevel,    pLevel
             // OOXTODO: XML_hidden,
             // XML_customBuiltin,  ToPsz( ! IsBuiltIn() )
     );
