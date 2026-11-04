@@ -24,6 +24,7 @@
 #include <com/sun/star/script/XEventAttacherManager.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/form/XFormsSupplier.hpp>
+#include <com/sun/star/form/XFormsSupplier2.hpp>
 #include <com/sun/star/form/XForm.hpp>
 #include <com/sun/star/form/FormComponentType.hpp>
 #include <com/sun/star/awt/XTextLayoutConstrains.hpp>
@@ -357,9 +358,14 @@ void SwHTMLWriter::OutHiddenForms()
     if( !xDrawPage.is() )
         return;
 
-    uno::Reference< form::XFormsSupplier > xFormsSupplier( xDrawPage, uno::UNO_QUERY );
+    uno::Reference< form::XFormsSupplier2 > xFormsSupplier( xDrawPage, uno::UNO_QUERY );
     OSL_ENSURE( xFormsSupplier.is(),
             "XFormsSupplier not received from XDrawPage" );
+
+    // Don't create the forms collection just to find out that it is empty:
+    // creating it needs the form component, which may not be available.
+    if( !xFormsSupplier.is() || !xFormsSupplier->hasForms() )
+        return;
 
     uno::Reference< container::XNameContainer > xTmp = xFormsSupplier->getForms();
     OSL_ENSURE( xTmp.is(), "XForms not received" );
