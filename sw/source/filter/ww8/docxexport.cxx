@@ -2400,12 +2400,9 @@ sal_Int32 DocxExport::getWordCompatibilityMode()
 
     // Note: up to this point, WordCompatibilityMode is allowed to be increased.
     // Place any maximum compatibility mode restrictions after this comment.
-    if (m_nWordCompatibilityMode > 12)
-    {
-        // If this is a Word 2007-only format, don't allow a compatibility mode greater than that
-        if (GetFilter().getVersion() == oox::core::ECMA_376_1ST_EDITION)
-            m_nWordCompatibilityMode = 12;
-    }
+    // ZetaOffice: the "MS Word 2007 XML" filter (ECMA-376 1st edition) is the app's only .docx
+    // writer and targets Word 2013+, so do not cap the mode at 12 for it. Otherwise every saved
+    // file - even one created by Word with mode 15 - opens in Word as [Compatibility Mode].
     if (m_nWordCompatibilityMode > 14)
     {
         // Word ignores noLeading in compatibilityMode 15
