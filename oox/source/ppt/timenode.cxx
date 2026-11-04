@@ -587,6 +587,8 @@ namespace oox::ppt {
                             }
                         }
                         break;
+                    case NP_ITERATEINTERVALPCT:
+                        break; // handled after the children are inserted
                     case NP_ITERATEINTERVAL:
                         if( xIterateContainer.is() )
                         {
@@ -620,6 +622,30 @@ namespace oox::ppt {
                 [&rFilter, &xNode, &pSlide] (TimeNodePtr const & child) {
                     child->addNode(rFilter, xNode, pSlide);
                 } );
+
+            // p:iterate/p:tmPct: the delay is a fraction of the duration of one iteration
+            if( maNodeProperties[ NP_ITERATEINTERVALPCT ].hasValue() )
+            {
+                Reference< XIterateContainer > xIterate( xNode, UNO_QUERY );
+                double fPercent = 0.0;
+                if( xIterate.is() && ( maNodeProperties[ NP_ITERATEINTERVALPCT ] >>= fPercent ) )
+                {
+                    double fDuration = 0.0;
+                    Reference< XEnumerationAccess > xAccess( xNode, UNO_QUERY );
+                    if( xAccess.is() )
+                    {
+                        Reference< XEnumeration > xEnum( xAccess->createEnumeration() );
+                        while( xEnum.is() && xEnum->hasMoreElements() )
+                        {
+                            Reference< XAnimationNode > xChild( xEnum->nextElement(), UNO_QUERY );
+                            double fChild = 0.0;
+                            if( xChild.is() && ( xChild->getDuration() >>= fChild ) && fChild > fDuration )
+                                fDuration = fChild;
+                        }
+                    }
+                    xIterate->setIterateInterval( fPercent * ( fDuration > 0.0 ? fDuration : 1.0 ) );
+                }
+            }
 
             switch( mnNodeType )
             {

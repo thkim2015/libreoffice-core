@@ -650,9 +650,10 @@ OUString getConvertedSubType( sal_Int16 nPresetClass, sal_Int32 nPresetId, sal_I
         case PPT_TOKEN( tmPct ):
             if( mbIterate )
             {
-                // TODO: should use duration to get iterate interval in second.
+                // The interval is a percentage of the iterated effect duration; it is
+                // converted to seconds in TimeNode::setNode once the children exist.
                 double fPercent = static_cast<double>(rAttribs.getUnsigned( XML_val, 0 )) / 100000.0;
-                mpNode->getNodeProperties()[ NP_ITERATEINTERVAL ] <<= fPercent;
+                mpNode->getNodeProperties()[ NP_ITERATEINTERVALPCT ] <<= fPercent;
             }
             return this;
         default:
