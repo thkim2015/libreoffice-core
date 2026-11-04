@@ -123,6 +123,10 @@ ContextHandlerRef PivotTableFilterContext::onCreateContext( sal_Int32 nElement, 
         break;
         case XLS_TOKEN( filterColumn ):
             if( nElement == XLS_TOKEN( top10 ) ) mrTableFilter.importTop10( rAttribs );
+            if( nElement == XLS_TOKEN( customFilters ) ) return this;
+        break;
+        case XLS_TOKEN( customFilters ):
+            if( nElement == XLS_TOKEN( customFilter ) ) mrTableFilter.importCustomFilter( rAttribs );
         break;
     }
     return nullptr;

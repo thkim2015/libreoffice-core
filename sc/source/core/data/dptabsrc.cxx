@@ -610,7 +610,8 @@ void ScDPSource::FillCalcInfo(bool bIsRow, ScDPTableData::CalcInfo& rInfo, bool 
             // no layout flags for column fields, only for row fields
             pLevel->SetEnableLayout( bIsRow );
 
-            if ( pLevel->GetAutoShow().IsEnabled )
+            // ZetaOffice: label/value filters hide members in the AutoShow pass too
+            if ( pLevel->GetAutoShow().IsEnabled || !pLevel->GetZetaFilter().isEmpty() )
                 rHasAutoShow = true;
 
             if (bIsRow)
@@ -2054,6 +2055,7 @@ ScDPLevel::ScDPLevel( ScDPSource* pSrc, sal_Int32 nD, sal_Int32 nH, sal_Int32 nL
     aSortInfo( OUString(), true, sheet::DataPilotFieldSortMode::NAME ),   // default: sort by name
     nSortMeasure( 0 ),
     nAutoMeasure( 0 ),
+    nZetaMeasure( 0 ),
     bShowEmpty( false ),
     bEnableLayout( false ),
     bRepeatItemLabels( false )
@@ -2104,6 +2106,22 @@ void ScDPLevel::EvaluateSortOrder()
                 ::std::sort( aGlobalOrder.begin(), aGlobalOrder.end(), aComp );
             }
             break;
+    }
+
+    // ZetaOffice: measure of a value filter (4th token = data field name)
+    if ( !maZetaFilter.isEmpty() )
+    {
+        const OUString aField = maZetaFilter.getToken(3, '\t');
+        tools::Long nCount = pSource->GetDataDimensionCount();
+        nZetaMeasure = 0;
+        for (tools::Long n = 0; n < nCount; ++n)
+        {
+            if (ScDPUtil::getSourceDimensionName(pSource->GetDataDimName(n)) == ScDPUtil::getSourceDimensionName(aField))
+            {
+                nZetaMeasure = n;
+                break;
+            }
+        }
     }
 
     if ( !aAutoShowInfo.IsEnabled )
@@ -2239,6 +2257,7 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDPLevel::getPropertySetInfo()
         { SC_UNO_DP_SORTING,  0,  cppu::UnoType<sheet::DataPilotFieldSortInfo>::get(),         0, 0 },
         { SC_UNO_DP_SUBTOTAL, 0,  cppu::UnoType<uno::Sequence<sheet::GeneralFunction>>::get(), 0, 0 },
         { SC_UNO_DP_SUBTOTAL2, 0, cppu::UnoType<uno::Sequence<sal_Int16>>::get(), 0, 0 },
+        { u"ZetaFilter"_ustr, 0, cppu::UnoType<OUString>::get(), 0, 0 },
     };
     static uno::Reference<beans::XPropertySetInfo> aRef =
         new SfxItemPropertySetInfo( aDPLevelMap_Impl );
@@ -2268,6 +2287,8 @@ void SAL_CALL ScDPLevel::setPropertyValue( const OUString& aPropertyName, const 
         aValue >>= aAutoShowInfo;
     else if ( aPropertyName == SC_UNO_DP_LAYOUT )
         aValue >>= aLayoutInfo;
+    else if ( aPropertyName == "ZetaFilter" )
+        aValue >>= maZetaFilter;
     else
     {
         OSL_FAIL("unknown property");
@@ -2305,6 +2326,8 @@ uno::Any SAL_CALL ScDPLevel::getPropertyValue( const OUString& aPropertyName )
         aRet <<= aAutoShowInfo;
     else if ( aPropertyName == SC_UNO_DP_LAYOUT )
         aRet <<= aLayoutInfo;
+    else if ( aPropertyName == "ZetaFilter" )
+        aRet <<= maZetaFilter;
     else if (aPropertyName == SC_UNO_DP_LAYOUTNAME)
     {
         // read only property

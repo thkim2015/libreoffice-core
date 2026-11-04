@@ -115,6 +115,8 @@ private:
     std::unique_ptr<css::sheet::DataPilotFieldSortInfo> pSortInfo; // (level)
     std::unique_ptr<css::sheet::DataPilotFieldAutoShowInfo> pAutoShowInfo; // (level)
     std::unique_ptr<css::sheet::DataPilotFieldLayoutInfo> pLayoutInfo; // (level)
+    // ZetaOffice: Excel label/value filter "type\tvalue1\tvalue2\tdatafield" (level), empty = none
+    OUString maZetaFilter;
 
 public:
     typedef std::unordered_set<OUString> MemberSetType;
@@ -201,6 +203,9 @@ public:
         { return pLayoutInfo.get(); }
 
     SC_DLLPUBLIC void SetLayoutInfo(const css::sheet::DataPilotFieldLayoutInfo* pNew);
+
+    const OUString& GetZetaFilter() const { return maZetaFilter; }
+    void SetZetaFilter(const OUString& rFilter) { maZetaFilter = rFilter; }
 
     SC_DLLPUBLIC void SetCurrentPage( const OUString* pPage ); // NULL = no selection (all)
     OUString GetCurrentPage() const; // only for ODF compatibility

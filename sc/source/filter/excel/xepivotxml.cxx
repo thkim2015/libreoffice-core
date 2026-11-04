@@ -34,6 +34,7 @@
 #include <sax/tools/converter.hxx>
 #include <sax/fastattribs.hxx>
 #include <sax/fshelper.hxx>
+#include <o3tl/string_view.hxx>
 #include <svl/numformat.hxx>
 #include <miscuno.hxx>
 #include <rtl/math.hxx>
@@ -1456,6 +1457,9 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
     // ZetaOffice: top/bottom N item filters (LO AutoShow) collected per field for <filters>
     struct Top10Filter { size_t mnField; tools::Long mnMeasure; bool mbTop; sal_Int32 mnCount; };
     std::vector<Top10Filter> aTop10Filters;
+    // ZetaOffice: label/value filters ("type\tvalue1\tvalue2\tdatafield") per field
+    struct ZetaFilter { size_t mnField; tools::Long mnMeasure; OUString maType, ma1, ma2; };
+    std::vector<ZetaFilter> aZetaFilters;
 
     pPivotStrm->startElement(XML_pivotFields,
         XML_count, OString::number(static_cast<tools::Long>(aCachedDims.size())));
@@ -1739,6 +1743,33 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             }
         }
 
+        if (const OUString& rZeta = pDim->GetZetaFilter(); !rZeta.isEmpty()
+            && (eOrient == sheet::DataPilotFieldOrientation_ROW
+                || eOrient == sheet::DataPilotFieldOrientation_COLUMN))
+        {
+            sal_Int32 nTok = 0;
+            ZetaFilter aZ{ i, -1, rZeta.getToken(0, '\t', nTok), OUString(), OUString() };
+            aZ.ma1 = nTok >= 0 ? rZeta.getToken(0, '\t', nTok) : OUString();
+            aZ.ma2 = nTok >= 0 ? rZeta.getToken(0, '\t', nTok) : OUString();
+            const OUString aField = nTok >= 0 ? rZeta.getToken(0, '\t', nTok) : OUString();
+            bool bOk = aZ.maType.startsWith("caption");
+            if (aZ.maType.startsWith("value"))
+            {
+                const OUString aSrc = ScDPUtil::getSourceDimensionName(aField);
+                for (size_t n = 0; n < aDataFields.size(); ++n)
+                    if (ScDPUtil::getSourceDimensionName(aDataFields[n].mpDim->GetName()) == aSrc)
+                    {
+                        aZ.mnMeasure = static_cast<tools::Long>(n);
+                        bOk = true;
+                        break;
+                    }
+                if (bOk && !pAttList->hasAttribute(XML_measureFilter))
+                    pAttList->add(XML_measureFilter, ToPsz10(true));
+            }
+            if (bOk)
+                aZetaFilters.push_back(aZ);
+        }
+
         tools::Long nSubTotalCount = pDim->GetSubTotalsCount();
         std::vector<OString> aSubtotalSequence;
         bool bHasDefaultSubtotal = false;
@@ -1945,10 +1976,82 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                                   XML_showLastColumn, "1");
     }
 
-    if (!aTop10Filters.empty())
+    if (!aTop10Filters.empty() || !aZetaFilters.empty())
     {
-        pPivotStrm->startElement(XML_filters, XML_count, OString::number(static_cast<sal_Int32>(aTop10Filters.size())));
+        pPivotStrm->startElement(XML_filters, XML_count, OString::number(static_cast<sal_Int32>(aTop10Filters.size() + aZetaFilters.size())));
         sal_Int32 nFilterId = 1;
+        // Excel's shapes (Excel 2021): plain equal = <filters><filter val/>, the rest = customFilters
+        // with the wildcard pattern / comparison operator; between = and="1" gte+lte, not between = lt+gt
+        for (const ZetaFilter& rZ : aZetaFilters)
+        {
+            const bool bCaption = rZ.maType.startsWith("caption");
+            const std::u16string_view aKind = bCaption ? rZ.maType.subView(7) : rZ.maType.subView(5);
+            rtl::Reference<sax_fastparser::FastAttributeList> pFilterAttr = sax_fastparser::FastSerializerHelper::createAttrList();
+            pFilterAttr->add(XML_fld, OString::number(static_cast<sal_Int32>(rZ.mnField)));
+            pFilterAttr->add(XML_type, rZ.maType.toUtf8());
+            pFilterAttr->add(XML_evalOrder, "-1");
+            pFilterAttr->add(XML_id, OString::number(nFilterId++));
+            if (bCaption)
+            {
+                pFilterAttr->add(XML_stringValue1, rZ.ma1.toUtf8());
+                if (aKind == u"Between" || aKind == u"NotBetween")
+                    pFilterAttr->add(XML_stringValue2, rZ.ma2.toUtf8());
+            }
+            else
+                pFilterAttr->add(XML_iMeasureFld, OString::number(rZ.mnMeasure));
+            pPivotStrm->startElement(XML_filter, pFilterAttr);
+            pPivotStrm->startElement(XML_autoFilter, XML_ref, "A1");
+            pPivotStrm->startElement(XML_filterColumn, XML_colId, "0");
+            const OString a1 = rZ.ma1.toUtf8(), a2 = rZ.ma2.toUtf8();
+            auto custom = [&](const char* pOp, const OString& rVal)
+            {
+                if (pOp)
+                    pPivotStrm->singleElement(XML_customFilter, XML_operator, pOp, XML_val, rVal);
+                else
+                    pPivotStrm->singleElement(XML_customFilter, XML_val, rVal);
+            };
+            const bool bWild = rZ.ma1.indexOf('*') >= 0 || rZ.ma1.indexOf('?') >= 0;
+            if (bCaption && aKind == u"Equal" && !bWild)
+            {
+                pPivotStrm->startElement(XML_filters);
+                pPivotStrm->singleElement(XML_filter, XML_val, a1);
+                pPivotStrm->endElement(XML_filters);
+            }
+            else if (aKind == u"Between")
+            {
+                pPivotStrm->startElement(XML_customFilters, XML_and, "1");
+                custom("greaterThanOrEqual", a1);
+                custom("lessThanOrEqual", a2);
+                pPivotStrm->endElement(XML_customFilters);
+            }
+            else if (aKind == u"NotBetween")
+            {
+                pPivotStrm->startElement(XML_customFilters);
+                custom("lessThan", a1);
+                custom("greaterThan", a2);
+                pPivotStrm->endElement(XML_customFilters);
+            }
+            else
+            {
+                const bool bNot = o3tl::starts_with(aKind, u"Not");
+                const std::u16string_view aBase = bNot ? aKind.substr(3) : aKind;
+                OString aVal = a1;
+                if (aBase == u"BeginsWith") aVal = a1 + "*";
+                else if (aBase == u"EndsWith") aVal = "*" + a1;
+                else if (aBase == u"Contains") aVal = "*" + a1 + "*";
+                const char* pOp = bNot ? "notEqual" : nullptr;
+                if (aKind == u"GreaterThan") pOp = "greaterThan";
+                else if (aKind == u"GreaterThanOrEqual") pOp = "greaterThanOrEqual";
+                else if (aKind == u"LessThan") pOp = "lessThan";
+                else if (aKind == u"LessThanOrEqual") pOp = "lessThanOrEqual";
+                pPivotStrm->startElement(XML_customFilters);
+                custom(pOp, aVal);
+                pPivotStrm->endElement(XML_customFilters);
+            }
+            pPivotStrm->endElement(XML_filterColumn);
+            pPivotStrm->endElement(XML_autoFilter);
+            pPivotStrm->endElement(XML_filter);
+        }
         for (const Top10Filter& rF : aTop10Filters)
         {
             pPivotStrm->startElement(XML_filter, XML_fld, OString::number(static_cast<sal_Int32>(rF.mnField)),

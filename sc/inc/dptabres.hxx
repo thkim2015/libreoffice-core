@@ -803,6 +803,10 @@ private:
     bool                    bInitialized:1;
     tools::Long                    nAutoMeasure;
     tools::Long                    nAutoCount;
+    OUString                maZetaType;     // ZetaOffice: filter type (Excel name), empty = none
+    OUString                maZeta1, maZeta2;
+    double                  mfZeta1 = 0.0, mfZeta2 = 0.0;
+    tools::Long             mnZetaMeasure = 0;
 
     ScDPResultMember*        FindMember(   SCROW  iData ) const;
     ScDPResultMember*        AddMember( const ScDPParentDimData& aData );
@@ -885,6 +889,11 @@ public:
     const OUString& GetName() const { return aDimensionName; }
 
     bool IsSortByData() const { return bSortByData; }
+
+    // ZetaOffice: Excel label/value filter of this field (set from the level)
+    void ZetaInitFilter(const ScDPLevel* pLevel);
+    bool ZetaHasFilter() const { return !maZetaType.isEmpty(); }
+    bool ZetaKeep(const OUString& rCaption, const ScDPDataMember* pData) const;
     bool IsSortAscending() const { return bSortAscending; }
     tools::Long                GetSortMeasure() const  { return nSortMeasure; }
 

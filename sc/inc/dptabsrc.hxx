@@ -464,6 +464,8 @@ private:
     ::std::vector<sal_Int32>    aGlobalOrder;       // result of sorting by name or position
     sal_Int32                   nSortMeasure;       // measure (index of data dimension) to sort by
     sal_Int32                   nAutoMeasure;       // measure (index of data dimension) for AutoShow
+    OUString                    maZetaFilter;       // ZetaOffice: Excel label/value filter (see ScDPSaveDimension)
+    sal_Int32                   nZetaMeasure;       // measure for a value filter
     bool                        bShowEmpty:1;
     bool                        bEnableLayout:1;      // enabled only for row fields, not for the innermost one
     bool                        bRepeatItemLabels:1;
@@ -521,6 +523,8 @@ public:
     ::std::vector<sal_Int32>&  GetGlobalOrder()                 { return aGlobalOrder; }
     sal_Int32                  GetSortMeasure() const              { return nSortMeasure; }
     sal_Int32                  GetAutoMeasure() const              { return nAutoMeasure; }
+    const OUString&            GetZetaFilter() const               { return maZetaFilter; }
+    sal_Int32                  GetZetaMeasure() const              { return nZetaMeasure; }
 
     bool IsOutlineLayout() const
     {
