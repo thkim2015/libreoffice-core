@@ -64,6 +64,7 @@
 #include <IDocumentStatistics.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <IDocumentExternalData.hxx>
+#include <IDocumentMarkAccess.hxx>
 #include <viewopt.hxx>
 #include <docary.hxx>
 #include <pam.hxx>
@@ -4621,8 +4622,19 @@ OUString MSWordExportBase::BookmarkToWord(const OUString& rBookmark, bool* pIsMo
     if (auto it = m_aBookmarkToWord.find(sLookup); it != m_aBookmarkToWord.end())
         return it->second;
 
+#ifdef EMSCRIPTEN
+    // Word: 목차가 가리키는 제목 책갈피는 _Toc로 시작해야 목차 줄의 쪽 번호가 PAGEREF 필드로 나가고(EndURL),
+    // Word에서도 숨은 책갈피로 보인다. __RefHeading___Toc42_190… → _Toc42_190…
+    OUString sWordName = sLookup;
+    if (OUString sRest; sLookup.startsWith(IDocumentMarkAccess::GetCrossRefHeadingBookmarkNamePrefix(), &sRest)
+                        && sRest.startsWith("_Toc") && m_aWordBookmarks.find(sRest) == m_aWordBookmarks.end())
+        sWordName = sRest;
+    OUString sRet
+        = INetURLObject::encode(sWordName.replace(' ', '_'), // Spaces are prohibited in bookmark name
+#else
     OUString sRet
         = INetURLObject::encode(sLookup.replace(' ', '_'), // Spaces are prohibited in bookmark name
+#endif
                                 INetURLObject::PART_REL_SEGMENT_EXTRA,
                                 INetURLObject::EncodeMechanism::All, RTL_TEXTENCODING_ASCII_US);
     // Unicode letters are allowed

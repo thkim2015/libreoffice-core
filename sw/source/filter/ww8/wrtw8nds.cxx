@@ -337,6 +337,22 @@ sal_Int32 SwWW8AttrIter::SearchNext( sal_Int32 nStartPos )
         }
     }
 
+#ifdef EMSCRIPTEN
+    // Word: 목차 줄의 쪽 번호는 PAGEREF 필드다. docx 내보내기는 하이퍼링크가 끝나는 글 덩이를 PAGEREF로 감싸므로
+    // 쪽 번호(마지막 탭 뒤)를 따로 된 글 덩이로 나눈다. 안 나누면 '제목<탭>1' 전체가 필드 결과가 된다.
+    if (const SwSectionNode* pTOXSectNd = m_rNode.FindSectionNode();
+        pTOXSectNd && pTOXSectNd->GetSection().GetType() == SectionType::ToxContent)
+    {
+        const auto nTab = aText.rfind(u'\t');
+        if (nTab != std::u16string_view::npos)
+        {
+            const sal_Int32 nSplit = static_cast<sal_Int32>(nTab) + 1;
+            if (nSplit > nStartPos && nSplit < nMinPos && nSplit < static_cast<sal_Int32>(aText.size()))
+                nMinPos = nSplit;
+        }
+    }
+#endif
+
     if (mrSwFormatDrop.GetWholeWord() && nStartPos <= m_rNode.GetDropLen(0))
         nMinPos = m_rNode.GetDropLen(0);
     else if(nStartPos <= mrSwFormatDrop.GetChars())
