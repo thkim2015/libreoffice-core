@@ -1689,10 +1689,28 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
         pAttList->add(XML_showAll, ToPsz10(false));
 
-        // ZetaOffice: item sort by label (Excel sortType ascending/descending)
-        if (const sheet::DataPilotFieldSortInfo* pSortInfo = pDim->GetSortInfo();
-            pSortInfo && pSortInfo->Mode == sheet::DataPilotFieldSortMode::NAME)
-            pAttList->add(XML_sortType, pSortInfo->IsAscending ? "ascending" : "descending");
+        // ZetaOffice: item sort (Excel sortType ascending/descending). By label (NAME) or by a
+        // data field (DATA) - the latter also needs autoSortScope pointing at that data field.
+        tools::Long nSortDataIdx = -1;
+        if (const sheet::DataPilotFieldSortInfo* pSortInfo = pDim->GetSortInfo(); pSortInfo)
+        {
+            bool bSort = pSortInfo->Mode == sheet::DataPilotFieldSortMode::NAME;
+            if (pSortInfo->Mode == sheet::DataPilotFieldSortMode::DATA)
+            {
+                const OUString aSortSrc = ScDPUtil::getSourceDimensionName(pSortInfo->Field);
+                for (size_t n = 0; n < aDataFields.size(); ++n)
+                {
+                    if (ScDPUtil::getSourceDimensionName(aDataFields[n].mpDim->GetName()) == aSortSrc)
+                    {
+                        nSortDataIdx = static_cast<tools::Long>(n);
+                        bSort = true;
+                        break;
+                    }
+                }
+            }
+            if (bSort)
+                pAttList->add(XML_sortType, pSortInfo->IsAscending ? "ascending" : "descending");
+        }
 
         tools::Long nSubTotalCount = pDim->GetSubTotalsCount();
         std::vector<OString> aSubtotalSequence;
@@ -1744,6 +1762,21 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             }
 
             pPivotStrm->endElement(XML_items);
+        }
+        if (nSortDataIdx >= 0)
+        {
+            // Same shape as Excel: data field reference (field -2) with the data field index
+            pPivotStrm->startElement(XML_autoSortScope);
+            pPivotStrm->startElement(XML_pivotArea, XML_dataOnly, ToPsz10(false),
+                                     XML_outline, ToPsz10(false), XML_fieldPosition, "0");
+            pPivotStrm->startElement(XML_references, XML_count, "1");
+            pPivotStrm->startElement(XML_reference, XML_field, "4294967294", XML_count, "1",
+                                     XML_selected, ToPsz10(false));
+            pPivotStrm->singleElement(XML_x, XML_v, OString::number(nSortDataIdx));
+            pPivotStrm->endElement(XML_reference);
+            pPivotStrm->endElement(XML_references);
+            pPivotStrm->endElement(XML_pivotArea);
+            pPivotStrm->endElement(XML_autoSortScope);
         }
         pPivotStrm->endElement(XML_pivotField);
     }
