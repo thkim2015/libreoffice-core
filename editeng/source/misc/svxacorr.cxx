@@ -2359,13 +2359,13 @@ SvxAutoCorrectLanguageLists::~SvxAutoCorrectLanguageLists()
 
 bool SvxAutoCorrectLanguageLists::IsFileChanged_Imp()
 {
-    // Access the file system only every 2 minutes to check the date stamp
+    // Access the file system only every 2 seconds to check the date stamp
     bool bRet = false;
 
-    tools::Time nMinTime( 0, 2 );
+    tools::Time nMinTime( 0, 0, 2 );
     tools::Time nAktTime( tools::Time::SYSTEM );
-    if( aLastCheckTime <= nAktTime) // overflow?
-        return false;
+    if( nAktTime < aLastCheckTime ) // passed midnight
+        aLastCheckTime = tools::Time( tools::Time::EMPTY );
     nAktTime -= aLastCheckTime;
     if( nAktTime > nMinTime )     // min time past
     {

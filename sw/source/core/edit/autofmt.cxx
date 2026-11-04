@@ -2911,6 +2911,11 @@ void SwEditShell::AutoFormat( const SvxSwAutoFormatFlags* pAFlags, bool bCurrent
 
 void SwEditShell::AutoFormatBySplitNode()
 {
+    // Options changed in the configuration after start-up only reach the
+    // SvxAutoCorrect flags (ConfigItem::Notify), not the copy used here.
+    if (SvxAutoCorrect* pAutoCorr = SvxAutoCorrCfg::Get().GetAutoCorrect())
+        SetAutoFormatFlags(&pAutoCorr->GetSwFlags());
+
     CurrShell aCurr( this );
     SwPaM* pCursor = GetCursor();
     if( pCursor->IsMultiSelection() || !pCursor->Move( fnMoveBackward, GoInNode ) )

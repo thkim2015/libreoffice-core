@@ -1578,6 +1578,10 @@ Reference< XShape > const & Shape::createAndInsert(
         {
             putPropertyToGrabBag(u"mso-sp-fPublished"_ustr, Any(mbFPublished));
         }
+        if (mbTxBox)
+        {
+            putPropertyToGrabBag(u"mso-sp-txBox"_ustr, Any(mbTxBox));
+        }
         if (!msTitle.isEmpty())
         {
             xSet->setPropertyValue(u"Title"_ustr, Any(msTitle));
