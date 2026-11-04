@@ -940,7 +940,15 @@ void SvxAutoCorrect::FnCapitalStartSentence( SvxAutoCorrDoc& rDoc,
         else if (pWordStt && !rCC.isDigit(aText, pStr - pStart))
         {
 #ifdef EMSCRIPTEN
-            // Word: 'a--b'가 'a—b'로 바뀐 뒤에도 문장 첫 낱말로 보고 'A—b'로 고친다(en/em 대시도 낱말 안 글자로 친다)
+            // Word: 'a--b'는 문장 첫 낱말로 보고 'A—b'로 고친다. 대문자 고침이 대시 바꾸기보다 먼저라 이때 글은 아직 'a--b'다
+            // — 글자 사이 '--'와 바뀐 뒤의 en/em 대시도 낱말 안 글자로 친다.
+            if (*pStr == '-' && pWordStt - 1 == pStr && (pStart + 2) <= pStr && pStr[-1] == '-'
+                && rCC.isLetter(aText, pStr - 2 - pStart))
+            {
+                pStr -= 2;
+                pWordStt = pStr;
+            }
+            else
             if( (lcl_IsInArr( u"-'\u2013\u2014", *pStr ) || *pStr == cApostrophe) && // These characters are allowed in words
 #else
             if( (lcl_IsInArr( u"-'", *pStr ) || *pStr == cApostrophe) && // These characters are allowed in words
