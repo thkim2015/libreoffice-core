@@ -336,9 +336,11 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
         OUString aPivotName = nBang < 0 ? OUString() : rSrc.copy( nBang + 1 ).trim();
         if( !aPivotName.isEmpty() ) try
         {
-            Reference< lang::XMultiServiceFactory > xFactory( getFilter().getModelFactory(), UNO_QUERY_THROW );
-            Reference< XDataProvider > xProvider( xFactory->createInstance(
-                u"com.sun.star.chart2.data.PivotTableDataProvider"_ustr ), UNO_QUERY );
+            Reference< lang::XMultiServiceFactory > xFactory( getFilter().getModelFactory() );
+            Reference< XDataProvider > xProvider;
+            if( xFactory.is() )
+                xProvider.set( xFactory->createInstance(
+                    u"com.sun.star.chart2.data.PivotTableDataProvider"_ustr ), UNO_QUERY );
             auto* pPivot = dynamic_cast< chart2api::AbstractPivotTableDataProvider* >( xProvider.get() );
             if( pPivot )
             {

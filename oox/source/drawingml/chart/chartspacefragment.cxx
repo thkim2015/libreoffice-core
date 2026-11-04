@@ -44,7 +44,7 @@ ChartSpaceFragment::~ChartSpaceFragment()
 
 void ChartSpaceFragment::onCharacters( const OUString& rChars )
 {
-    if( isCurrentElement( C_TOKEN( name ) ) && isPreviousElement( C_TOKEN( pivotSource ) ) )
+    if( isCurrentElement( C_TOKEN( name ) ) && getParentElement() == C_TOKEN( pivotSource ) )
         mrModel.maPivotSource += rChars;
 }
 
