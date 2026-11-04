@@ -939,7 +939,12 @@ void SvxAutoCorrect::FnCapitalStartSentence( SvxAutoCorrDoc& rDoc,
         }
         else if (pWordStt && !rCC.isDigit(aText, pStr - pStart))
         {
+#ifdef EMSCRIPTEN
+            // Word: 'a--b'가 'a—b'로 바뀐 뒤에도 문장 첫 낱말로 보고 'A—b'로 고친다(en/em 대시도 낱말 안 글자로 친다)
+            if( (lcl_IsInArr( u"-'\u2013\u2014", *pStr ) || *pStr == cApostrophe) && // These characters are allowed in words
+#else
             if( (lcl_IsInArr( u"-'", *pStr ) || *pStr == cApostrophe) && // These characters are allowed in words
+#endif
                 pWordStt - 1 == pStr &&
                 // Installation at beginning of paragraph. Replaced < by <= (#i38971#)
                 (pStart + 1) <= pStr &&
