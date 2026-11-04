@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <algorithm>
 #include <cmath>
 #include <o3tl/any.hxx>
 #include <o3tl/string_view.hxx>
@@ -957,11 +958,38 @@ void PPTXAnimationExport::WriteAnimationNodeCommonPropsStart()
         {
             const char* sType = convertTextAnimationType(xIterate->getIterateType());
 
-            // ST_TLTime should be unsigned int ([ISO/IEC 29500-1] 19.7.38)
-            sal_uInt32 nTime = static_cast<sal_uInt32>(xIterate->getIterateInterval() * 1000);
+            const double fInterval = xIterate->getIterateInterval();
+            // PowerPoint stores the delay as a percentage of the duration of one
+            // iteration (p:tmPct, 10% by default); fall back to p:tmAbs without a duration.
+            double fDuration = 0.0;
+            Reference<XEnumerationAccess> xAccess(xIterate, UNO_QUERY);
+            if (xAccess.is())
+            {
+                Reference<XEnumeration> xEnum(xAccess->createEnumeration());
+                while (xEnum.is() && xEnum->hasMoreElements())
+                {
+                    Reference<XAnimationNode> xChild(xEnum->nextElement(), UNO_QUERY);
+                    double fChild = 0.0;
+                    if (xChild.is() && (xChild->getDuration() >>= fChild) && fChild > fDuration)
+                        fDuration = fChild;
+                }
+            }
 
             mpFS->startElementNS(XML_p, XML_iterate, XML_type, sType);
-            mpFS->singleElementNS(XML_p, XML_tmAbs, XML_val, OString::number(nTime));
+            if (fDuration > 0.0)
+            {
+                // ST_PositivePercentage ([ISO/IEC 29500-1] 20.1.10.46)
+                const sal_Int32 nPercent
+                    = static_cast<sal_Int32>(std::round(fInterval / fDuration * 100000.0));
+                mpFS->singleElementNS(XML_p, XML_tmPct, XML_val,
+                                      OString::number(std::max<sal_Int32>(0, nPercent)));
+            }
+            else
+            {
+                // ST_TLTime should be unsigned int ([ISO/IEC 29500-1] 19.7.38)
+                sal_uInt32 nTime = static_cast<sal_uInt32>(fInterval * 1000);
+                mpFS->singleElementNS(XML_p, XML_tmAbs, XML_val, OString::number(nTime));
+            }
             mpFS->endElementNS(XML_p, XML_iterate);
         }
     }

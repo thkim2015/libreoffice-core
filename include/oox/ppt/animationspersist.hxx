@@ -45,6 +45,7 @@ namespace oox::ppt {
         NP_VALUES, NP_FORMULA, NP_KEYTIMES, NP_DISPLAY,
         NP_HIDEDURINGSHOW,
         NP_ISNARRATION,
+        NP_ITERATEINTERVALPCT, // p:tmPct (fraction of the child duration)
         NP_SIZE_
     };
 
