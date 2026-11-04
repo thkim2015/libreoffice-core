@@ -48,6 +48,8 @@
 #include <com/sun/star/animations/XAudio.hpp>
 #include <com/sun/star/animations/XTransitionFilter.hpp>
 #include <com/sun/star/animations/XIterateContainer.hpp>
+#include <com/sun/star/animations/Event.hpp>
+#include <com/sun/star/animations/EventTrigger.hpp>
 #include <com/sun/star/container/XEnumerationAccess.hpp>
 #include <com/sun/star/presentation/EffectCommands.hpp>
 #include <xmloff/SoundReference.hxx>
@@ -490,7 +492,10 @@ const char* convertTextAnimationType(sal_Int16 nType)
 
 class PPTXAnimationExport
 {
-    void WriteAnimationNode(const NodeContextPtr& pContext);
+    void WriteAnimationNode(const NodeContextPtr& pContext) { WriteAnimationNode(pContext.get()); }
+    void WriteAnimationNode(const NodeContext* pContext);
+    /// Collects after effect nodes ("master-element") by their master effect node.
+    void CollectAfterEffects(const NodeContext* pContext);
     void WriteAnimationNodeAnimate(sal_Int32 nXmlNodeType);
     void WriteAnimationNodeAnimateInside(bool bSimple, bool bWriteTo = true);
     void WriteAnimationNodeSeq();
@@ -509,6 +514,8 @@ class PPTXAnimationExport
     const NodeContext* mpContext;
 
     std::map<Reference<XAnimationNode>, sal_Int32> maAnimationNodeIdMap;
+    /// PowerPoint 'After animation' (dim / hide): written into the master's p:subTnLst
+    std::map<Reference<XAnimationNode>, std::vector<const NodeContext*>> maAfterEffects;
     sal_Int32 GetNextAnimationNodeId(const Reference<XAnimationNode>& rNode);
     sal_Int32 GetAnimationNodeId(const Reference<XAnimationNode>& rNode);
 
@@ -941,15 +948,29 @@ void PPTXAnimationExport::WriteAnimationNodeCommonPropsStart()
             sDecel = OString::number(static_cast<sal_Int32>((fDecel > 1.0 ? 1.0 : fDecel) * 100000.0 + 0.5));
     }
 
+    // After effect: hidden display, master relation (an END_EVENT of the master = same click,
+    // otherwise the next click) — the way PowerPoint writes 'After animation'.
+    const bool bAfterEffect = mpContext->isAfterEffect();
+    bool bSameClick = false;
+    if (bAfterEffect)
+    {
+        Event aEvent;
+        bSameClick = (rXNode->getBegin() >>= aEvent) && aEvent.Trigger == EventTrigger::END_EVENT;
+    }
+    const char* pMasterRel = bAfterEffect ? (bSameClick ? "sameClick" : "nextClick") : nullptr;
+
     mpFS->startElementNS(XML_p, XML_cTn, XML_id, OString::number(GetNextAnimationNodeId(rXNode)),
                          XML_dur, sDuration, XML_restart, pRestart, XML_presetID,
                          sax_fastparser::UseIf(OString::number(nPresetId), bPresetId),
                          XML_presetClass, pPresetClass, XML_fill, pFill, XML_nodeType, pNodeType,
                          XML_autoRev, sax_fastparser::UseIf("1", bAutoReverse), XML_presetSubtype,
                          sax_fastparser::UseIf(OString::number(nPresetSubType), bPresetSubType),
-                         XML_repeatCount, sRepeatCount, XML_accel, sAccel, XML_decel, sDecel);
+                         XML_repeatCount, sRepeatCount, XML_accel, sAccel, XML_decel, sDecel,
+                         XML_display, sax_fastparser::UseIf("0", bAfterEffect), XML_masterRel,
+                         pMasterRel, XML_afterEffect, sax_fastparser::UseIf("1", bAfterEffect));
 
-    WriteAnimationCondList(mpContext->getBeginCondList(), XML_stCondLst);
+    if (!bAfterEffect || bSameClick)
+        WriteAnimationCondList(mpContext->getBeginCondList(), XML_stCondLst);
     WriteAnimationCondList(mpContext->getEndCondList(), XML_endCondLst);
 
     if (rXNode->getType() == AnimationNodeType::ITERATE)
@@ -996,13 +1017,15 @@ void PPTXAnimationExport::WriteAnimationNodeCommonPropsStart()
     }
 
     const std::vector<NodeContextPtr>& aChildNodes = mpContext->getChildNodes();
+    const auto aAfterIt = maAfterEffects.find(rXNode);
+    const bool bHasAfterEffects = aAfterIt != maAfterEffects.end() && !aAfterIt->second.empty();
     if (!aChildNodes.empty())
     {
-        bool bSubTnLst = false;
+        bool bSubTnLst = bHasAfterEffects;
         mpFS->startElementNS(XML_p, XML_childTnLst);
         for (const NodeContextPtr& pChildContext : aChildNodes)
         {
-            if (pChildContext->isValid())
+            if (pChildContext->isValid() && !pChildContext->isAfterEffect())
             {
                 if (pChildContext->isOnSubTnLst())
                     bSubTnLst = true;
@@ -1017,8 +1040,16 @@ void PPTXAnimationExport::WriteAnimationNodeCommonPropsStart()
             mpFS->startElementNS(XML_p, XML_subTnLst);
             for (const NodeContextPtr& pChildContext : aChildNodes)
             {
-                if (pChildContext->isValid() && pChildContext->isOnSubTnLst())
+                if (pChildContext->isValid() && pChildContext->isOnSubTnLst()
+                    && !pChildContext->isAfterEffect())
                     WriteAnimationNode(pChildContext);
+            }
+            if (bHasAfterEffects)
+            {
+                // copy: writing may not touch the map, but keep the iteration safe
+                const std::vector<const NodeContext*> aAfter(aAfterIt->second);
+                for (const NodeContext* pAfter : aAfter)
+                    WriteAnimationNode(pAfter);
             }
             mpFS->endElementNS(XML_p, XML_subTnLst);
         }
@@ -1220,10 +1251,24 @@ void PPTXAnimationExport::WriteAnimationNodeMedia(const sal_Int16 nParentNodeTyp
     }
 }
 
-void PPTXAnimationExport::WriteAnimationNode(const NodeContextPtr& pContext)
+void PPTXAnimationExport::CollectAfterEffects(const NodeContext* pContext)
+{
+    for (const NodeContextPtr& pChild : pContext->getChildNodes())
+    {
+        if (pChild->isAfterEffect())
+        {
+            if (pChild->isValid())
+                maAfterEffects[pChild->getAfterEffectMaster()].push_back(pChild.get());
+        }
+        else
+            CollectAfterEffects(pChild.get());
+    }
+}
+
+void PPTXAnimationExport::WriteAnimationNode(const NodeContext* pContext)
 {
     const NodeContext* pSavedContext = mpContext;
-    mpContext = pContext.get();
+    mpContext = pContext;
 
     const Reference<XAnimationNode>& rXNode = getCurrentNode();
 
@@ -1300,6 +1345,8 @@ void PPTXAnimationExport::WriteAnimations(const Reference<XDrawPage>& rXDrawPage
 
     auto pNodeContext
         = std::make_unique<NodeContext>(xNode, aSlideShapeIDs, mrPowerPointExport, false, false);
+    maAfterEffects.clear();
+    CollectAfterEffects(pNodeContext.get());
     if (pNodeContext->isValid())
     {
         mpFS->startElementNS(XML_p, XML_timing);

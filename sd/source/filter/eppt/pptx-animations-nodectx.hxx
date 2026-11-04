@@ -42,6 +42,8 @@ class NodeContext
     sal_Int16 mnEffectPresetClass;
     OUString msEffectPresetId;
     OUString msEffectPresetSubType;
+    // "master-element": this node is the after effect (dim / hide) of that effect node.
+    css::uno::Reference<css::animations::XAnimationNode> mxAfterEffectMaster;
 
     bool isValidTarget(const css::uno::Any& rTarget);
 
@@ -66,6 +68,11 @@ public:
     const OUString& getEffectPresetSubType() const { return msEffectPresetSubType; }
     bool isValid() const { return mbValid; }
     bool isOnSubTnLst() const { return mbOnSubTnLst; }
+    bool isAfterEffect() const { return mxAfterEffectMaster.is(); }
+    const css::uno::Reference<css::animations::XAnimationNode>& getAfterEffectMaster() const
+    {
+        return mxAfterEffectMaster;
+    }
     const std::vector<NodeContextPtr>& getChildNodes() const { return maChildNodes; };
     const css::uno::Reference<css::animations::XAnimationNode>& getNodeForCondition() const;
     const std::vector<Cond>& getBeginCondList() const { return maBeginCondList; }

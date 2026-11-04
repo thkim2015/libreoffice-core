@@ -439,12 +439,18 @@ OUString getConvertedSubType( sal_Int16 nPresetClass, sal_Int32 nPresetId, sal_I
         nInt = xAttribs->getOptionalValueToken( XML_masterRel, 0 );
         if( nInt )
         {
-            // TODO
+            // kept for after effects (see fixAfterEffects() in timenode.cxx), same values as
+            // the binary PPT import: 0 = same click, 1 = last click, 2 = next click
             switch(nInt)
             {
             case XML_sameClick:
+                aUserData[ u"master-rel"_ustr ] <<= sal_Int16(0);
+                break;
             case XML_lastClick:
+                aUserData[ u"master-rel"_ustr ] <<= sal_Int16(1);
+                break;
             case XML_nextClick:
+                aUserData[ u"master-rel"_ustr ] <<= sal_Int16(2);
                 break;
             }
         }
