@@ -1590,7 +1590,7 @@ void WW8AttributeOutput::TextVerticalAdjustment( const drawing::TextVerticalAdju
 }
 
 void WW8Export::WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
-        const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat, sal_uInt8 nBreakCode, bool /*bEvenAndOddHeaders*/ )
+        const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat, const SwFrameFormat& rFirstPageFooterFormat, sal_uInt8 nBreakCode, bool /*bEvenAndOddHeaders*/ )
 {
     sal_uLong nCpPos = Fc2Cp( Strm().Tell() );
 
@@ -1614,7 +1614,7 @@ void WW8Export::WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
     //and title hd/ft so we need to differentiate them
     IncrementHdFtIndex();
     m_pSepx->OutHeaderFooter( *this, true, rFirstPageFormat, nCpPos, nHeadFootFlags, WW8_HEADER_FIRST, nBreakCode );
-    m_pSepx->OutHeaderFooter( *this, false, rFirstPageFormat, nCpPos, nHeadFootFlags, WW8_FOOTER_FIRST, nBreakCode );
+    m_pSepx->OutHeaderFooter( *this, false, rFirstPageFooterFormat, nCpPos, nHeadFootFlags, WW8_FOOTER_FIRST, nBreakCode );
 }
 
 namespace
@@ -1930,6 +1930,7 @@ void MSWordExportBase::SectionProperties( const WW8_SepInfo& rSepInfo, WW8_PdAtt
 
     const SwFrameFormat* pPdLeftHeaderFormat = nullptr;
     const SwFrameFormat* pPdLeftFooterFormat = nullptr;
+    const SwFrameFormat* pPdFirstPgFooterFormat = nullptr;
     if (bLeftRightPgChain)
     {
         const SwFrameFormat* pHeaderFormat = pPd->GetStashedFrameFormat(true, true, true);
@@ -1988,13 +1989,21 @@ void MSWordExportBase::SectionProperties( const WW8_SepInfo& rSepInfo, WW8_PdAtt
         }
         else
         {
-            if ( pPd->GetStashedFrameFormat(true, true, true) && pPdLeftHeaderFormat && pPdLeftHeaderFormat->GetHeader().GetHeaderFormat() )
+            // The first page header/footer is not used, but the import stashed the
+            // document's own first page content: write that one, not the shared (i.e.
+            // default) content of the first master, which would put e.g. the default
+            // footer's page number into Word's empty first page footer.
+            const SwFrameFormat* pStashedFirstHeader = pPd->GetStashedFrameFormat(true, false, true);
+            if (pStashedFirstHeader && pStashedFirstHeader->GetHeader().GetHeaderFormat())
             {
-                MSWordSections::SetHeaderFlag( nHeadFootFlags, *pPdLeftHeaderFormat, WW8_HEADER_FIRST );
+                MSWordSections::SetHeaderFlag(nHeadFootFlags, *pStashedFirstHeader, WW8_HEADER_FIRST);
+                pPdFirstPgFormat = pStashedFirstHeader;
             }
-            if ( pPd->GetStashedFrameFormat(false, true, true) && pPdLeftFooterFormat && pPdLeftFooterFormat->GetFooter().GetFooterFormat() )
+            const SwFrameFormat* pStashedFirstFooter = pPd->GetStashedFrameFormat(false, false, true);
+            if (pStashedFirstFooter && pStashedFirstFooter->GetFooter().GetFooterFormat())
             {
-                MSWordSections::SetFooterFlag( nHeadFootFlags, *pPdLeftFooterFormat, WW8_FOOTER_FIRST );
+                MSWordSections::SetFooterFlag(nHeadFootFlags, *pStashedFirstFooter, WW8_FOOTER_FIRST);
+                pPdFirstPgFooterFormat = pStashedFirstFooter;
             }
         }
 
@@ -2050,7 +2059,9 @@ void MSWordExportBase::SectionProperties( const WW8_SepInfo& rSepInfo, WW8_PdAtt
         MSWordSections::SetFooterFlag(nHeadFootFlags, *pPdFormat, WW8_FOOTER_ODD);
     }
 
-    WriteHeadersFooters( nHeadFootFlags, *pPdFormat, *pPdLeftHeaderFormat, *pPdLeftFooterFormat, *pPdFirstPgFormat, nBreakCode, bEvenAndOddHeaders && bEvenAndOddFooters );
+    WriteHeadersFooters( nHeadFootFlags, *pPdFormat, *pPdLeftHeaderFormat, *pPdLeftFooterFormat, *pPdFirstPgFormat,
+                         pPdFirstPgFooterFormat ? *pPdFirstPgFooterFormat : *pPdFirstPgFormat,
+                         nBreakCode, bEvenAndOddHeaders && bEvenAndOddFooters );
 
     SetHdFtPageRoot( pOldPageRoot );
 

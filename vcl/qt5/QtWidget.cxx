@@ -34,6 +34,9 @@
 #include <vcl/event.hxx>
 #include <vcl/toolkit/floatwin.hxx>
 #include <vcl/qt/QtUtils.hxx>
+#ifdef EMSCRIPTEN
+#include <tools/time.hxx>
+#endif
 
 #include <com/sun/star/accessibility/XAccessible.hpp>
 #include <com/sun/star/accessibility/XAccessibleEditableText.hpp>
@@ -82,7 +85,14 @@ void QtWidget::fillSalAbstractMouseEvent(const QInputEvent* pQEvent, const QPoin
     aSalEvent.mnX
         = QGuiApplication::isLeftToRight() ? aPos.X() : round(width() * fRatio) - aPos.X();
     aSalEvent.mnY = aPos.Y();
+#ifdef EMSCRIPTEN
+    // Qt WASM passes emscripten_date_now() (ms since 1970, a double) as a 32-bit
+    // ulong timestamp, which saturates, so every event got the same time and two
+    // clicks on the same spot, however far apart, were taken as a double click.
+    aSalEvent.mnTime = tools::Time::GetSystemTicks();
+#else
     aSalEvent.mnTime = pQEvent->timestamp();
+#endif
     aSalEvent.mnCode = toVclKeyboardModifiers(pQEvent->modifiers()) | toVclMouseButtons(eButtons);
 }
 

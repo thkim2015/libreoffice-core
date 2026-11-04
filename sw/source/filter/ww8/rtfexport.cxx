@@ -317,7 +317,9 @@ void RtfExport::WriteRevTab()
 void RtfExport::WriteHeadersFooters(sal_uInt8 nHeadFootFlags, const SwFrameFormat& rFormat,
                                     const SwFrameFormat& rLeftHeaderFormat,
                                     const SwFrameFormat& rLeftFooterFormat,
-                                    const SwFrameFormat& rFirstPageFormat, sal_uInt8 /*nBreakCode*/,
+                                    const SwFrameFormat& rFirstPageFormat,
+                                    const SwFrameFormat& rFirstPageFooterFormat,
+                                    sal_uInt8 /*nBreakCode*/,
                                     bool /*bEvenAndOddHeaders*/)
 {
     // headers
@@ -338,7 +340,7 @@ void RtfExport::WriteHeadersFooters(sal_uInt8 nHeadFootFlags, const SwFrameForma
         WriteHeaderFooter(rFormat, false, OOO_STRING_SVTOOLS_RTF_FOOTER);
 
     if (nHeadFootFlags & nsHdFtFlags::WW8_FOOTER_FIRST)
-        WriteHeaderFooter(rFirstPageFormat, false, OOO_STRING_SVTOOLS_RTF_FOOTERF, true);
+        WriteHeaderFooter(rFirstPageFooterFormat, false, OOO_STRING_SVTOOLS_RTF_FOOTERF, true);
 }
 
 void RtfExport::OutputField(const SwField* pField, ww::eField eFieldType, const OUString& rFieldCmd,

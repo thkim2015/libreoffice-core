@@ -794,7 +794,7 @@ public:
 
     /// Output the actual headers and footers.
     virtual void WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
-            const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat,
+            const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat, const SwFrameFormat& rFirstPageFooterFormat,
         sal_uInt8 nBreakCode, bool bEvenAndOddHeaders) = 0;
 
     /// Write the field
@@ -817,6 +817,8 @@ public:
 
     // Compute the number format for WW dates
     bool GetNumberFormat(const SwField& rField, OUString& rStr);
+    /// DATE field format that stands for no \\@ switch (Word's default short date).
+    bool IsWordDefaultDateFormat(const SwField& rField);
 
     virtual sal_uInt64 ReplaceCr( sal_uInt8 nChar ) = 0;
 
@@ -1218,7 +1220,7 @@ public:
 
     /// Output the actual headers and footers.
     virtual void WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
-            const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat,
+            const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat, const SwFrameFormat& rFirstPageFooterFormat,
         sal_uInt8 nBreakCode, bool bEvenAndOddHeaders) override;
 
     virtual ExportFormat GetExportFormat() const override { return ExportFormat::DOC; }

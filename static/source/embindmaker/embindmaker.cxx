@@ -1229,11 +1229,13 @@ SAL_IMPLEMENT_MAIN()
             }
         }
         // zeta: sequences that only appear as properties of accumulation-based services
-        // (sc conditional formatting: ColorScale/DataBar/IconSet entries) are never recorded
+        // (sc conditional formatting: ColorScale/DataBar/IconSet entries, paragraph
+        // ParaTabStops) are never recorded
         // above, so JS could not read or create those entries ("unregistered UNO type").
         for (auto const& extra : { u"[]com.sun.star.sheet.XColorScaleEntry"_ustr,
                                    u"[]com.sun.star.sheet.XDataBarEntry"_ustr,
-                                   u"[]com.sun.star.sheet.XIconSetEntry"_ustr })
+                                   u"[]com.sun.star.sheet.XIconSetEntry"_ustr,
+                                   u"[]com.sun.star.style.TabStop"_ustr })
         {
             recordGenericTypes(mgr, extra, sequences, instantiations);
         }

@@ -113,6 +113,9 @@ class DocxExport : public MSWordExportBase
     /// Footer and Header counter in Section properties
     sal_Int32 m_nHeadersFootersInSection;
 
+    /// Header/footer content last written per (header?, type), to let Word inherit identical ones.
+    std::map<std::pair<bool, OString>, const SwFrameFormat*> m_aLastHeaderFooterContent;
+
     /// Exporter of the VML shapes.
     std::unique_ptr<oox::vml::VMLExport> m_pVMLExport;
 
@@ -189,7 +192,7 @@ public:
 
     /// Output the actual headers and footers.
     virtual void WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
-            const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat,
+            const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat, const SwFrameFormat& rFirstPageFooterFormat,
             sal_uInt8 nBreakCode, bool bEvenAndOddHeaders ) override;
 
     /// Write the field
