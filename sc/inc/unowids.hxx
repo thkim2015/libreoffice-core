@@ -80,7 +80,8 @@
 #define SC_WID_UNO_ZETAOUTLINE      ( SC_WID_UNO_START + 51 )
 #define SC_WID_UNO_ZETASPARKLINES   ( SC_WID_UNO_START + 52 )
 #define SC_WID_UNO_ZETAIGNOREDERRORS ( SC_WID_UNO_START + 53 )
-#define SC_WID_UNO_END              ( SC_WID_UNO_START + 53 )
+#define SC_WID_UNO_ZETACHARTSHEET   ( SC_WID_UNO_START + 54 )
+#define SC_WID_UNO_END              ( SC_WID_UNO_START + 54 )
 
 inline bool IsScUnoWid( sal_uInt16 nWid )
 {

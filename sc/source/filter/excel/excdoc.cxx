@@ -616,11 +616,58 @@ void ExcTable::FillAsTableBinary( SCTAB nCodeNameIdx )
     Add( new ExcEof );
 }
 
+namespace {
+
+/** ZetaOffice: head of an Excel chart sheet part (CT_Chartsheet): sheetPr, sheetViews
+    (the chart fills the window) and pageMargins; the drawing follows. */
+class XclExpZetaChartSheetHead : public XclExpRecordBase
+{
+    bool mbSelected;
+    Color maTabColor;
+
+public:
+    XclExpZetaChartSheetHead(bool bSelected, Color aTabColor)
+        : mbSelected(bSelected)
+        , maTabColor(aTabColor)
+    {
+    }
+
+    virtual void SaveXml(XclExpXmlStream& rStrm) override
+    {
+        sax_fastparser::FSHelperPtr& rSheet = rStrm.GetCurrentStream();
+        if (maTabColor == COL_AUTO)
+            rSheet->singleElement(XML_sheetPr);
+        else
+        {
+            rSheet->startElement(XML_sheetPr);
+            rSheet->singleElement(XML_tabColor, XML_rgb, XclXmlUtils::ToOString(maTabColor));
+            rSheet->endElement(XML_sheetPr);
+        }
+        rSheet->startElement(XML_sheetViews);
+        rSheet->singleElement(XML_sheetView, XML_tabSelected, sax_fastparser::UseIf("1", mbSelected),
+                              XML_workbookViewId, "0", XML_zoomToFit, "1");
+        rSheet->endElement(XML_sheetViews);
+        rSheet->singleElement(XML_pageMargins, XML_left, "0.7", XML_right, "0.7", XML_top, "0.75",
+                              XML_bottom, "0.75", XML_header, "0.3", XML_footer, "0.3");
+    }
+};
+
+}
+
 void ExcTable::FillAsTableXml()
 {
     InitializeTable( mnScTab );
 
     ScDocument& rDoc = GetDoc();
+
+    if (rDoc.IsZetaChartSheet(mnScTab))
+    {
+        // ZetaOffice: a chart sheet has no cells, only the view and the drawing
+        GetObjectManager().StartSheet();
+        aRecList.AppendNewRecord(new XclExpZetaChartSheetHead(GetTabInfo().IsSelectedTab(mnScTab), rDoc.GetTabBgColor(mnScTab)));
+        aRecList.AppendRecord(GetObjectManager().ProcessDrawing(GetSdrPage(mnScTab)));
+        return;
+    }
 
     OSL_ENSURE( (mnScTab >= 0) && (mnScTab <= MAXTAB), "-ExcTable::Table(): mnScTab - no ordinary table!" );
     OSL_ENSURE( nExcTab <= o3tl::make_unsigned(MAXTAB), "-ExcTable::Table(): nExcTab - no ordinary table!" );
@@ -755,6 +802,22 @@ void ExcTable::WriteXml( XclExpXmlStream& rStrm )
             mxCellTable->Finalize(false);
         aRecList.SaveXml(rStrm);
 
+        return;
+    }
+
+    // ZetaOffice: chart sheet part (see ExcBundlesheet8::SaveXml)
+    if (GetDoc().IsZetaChartSheet(mnScTab))
+    {
+        sax_fastparser::FSHelperPtr pChartsheet = rStrm.GetStreamForPath(
+            XclXmlUtils::GetStreamName("xl/", "chartsheets/sheet", mnScTab + 1));
+        rStrm.PushStream(pChartsheet);
+        pChartsheet->startElement(XML_chartsheet,
+            XML_xmlns, rStrm.getNamespaceURL(OOX_NS(xls)),
+            FSNS(XML_xmlns, XML_r), rStrm.getNamespaceURL(OOX_NS(officeRel)));
+        SetCurrScTab(mnScTab);
+        aRecList.SaveXml(rStrm);
+        rStrm.GetCurrentStream()->endElement(XML_chartsheet);
+        rStrm.PopStream();
         return;
     }
 

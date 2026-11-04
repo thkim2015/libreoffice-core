@@ -253,6 +253,7 @@ private:
     bool            mbPageBreaksValid:1;
     bool            mbForceBreaks:1;
     bool            mbTotalsRowBelow:1;
+    bool            mbZetaChartSheet:1; // ZetaOffice: Excel chart sheet (xl/chartsheets)
 
     sc::SheetViewID mnSheetViewID = sc::InvalidSheetViewID;
     ScTable* mpSheetViewFor = nullptr;
@@ -407,6 +408,8 @@ public:
 
     bool        GetTotalsRowBelow() const { return mbTotalsRowBelow; }
     void        SetTotalsRowBelow( bool bNewVal ) { mbTotalsRowBelow = bNewVal; }
+    bool        IsZetaChartSheet() const { return mbZetaChartSheet; }
+    void        SetZetaChartSheet( bool bNewVal ) { mbZetaChartSheet = bNewVal; }
 
     const OUString& GetUpperName() const;
 

@@ -241,6 +241,19 @@ bool ScDocument::SetTotalsRowBelow( SCTAB nTab, bool bVal )
     return false;
 }
 
+bool ScDocument::IsZetaChartSheet( SCTAB nTab ) const
+{
+    if (const ScTable* pTable = FetchTable(nTab))
+        return pTable->IsZetaChartSheet();
+    return false;
+}
+
+void ScDocument::SetZetaChartSheet( SCTAB nTab, bool bVal )
+{
+    if (ScTable* pTable = FetchTable(nTab))
+        pTable->SetZetaChartSheet(bVal);
+}
+
 bool ScDocument::GetTotalsRowBelow( SCTAB nTab ) const
 {
     if (const ScTable* pTable = FetchTable(nTab))

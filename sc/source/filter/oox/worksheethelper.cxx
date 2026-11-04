@@ -973,6 +973,10 @@ void WorksheetGlobals::finalizeWorksheetImport()
     if (pTable)
         pTable->SetOptimalMinRowHeight(maDefRowModel.mfHeight * 20); // in TWIPS
 
+    // ZetaOffice: remember chart sheets, so that they are saved as chart sheets again
+    if (getSheetType() == WorksheetType::Chart)
+        rDoc.SetZetaChartSheet(nTab, true);
+
     // weboffice: like Excel, when a filter of the sheet (its auto filter or a table's) has a
     // condition, every hidden row of the sheet counts as filtered (SUBTOTAL 9 leaves it out);
     // without a condition hidden rows are hidden by hand, also inside a filter range

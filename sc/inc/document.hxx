@@ -1065,6 +1065,9 @@ public:
     SC_DLLPUBLIC bool SetCodeName( SCTAB nTab, const OUString& rName );
     SC_DLLPUBLIC bool GetTotalsRowBelow( SCTAB nTab ) const;
     SC_DLLPUBLIC bool SetTotalsRowBelow( SCTAB nTab, bool bVal );
+    /// ZetaOffice: the sheet is saved as an Excel chart sheet (xlsx chartsheet part)
+    SC_DLLPUBLIC bool IsZetaChartSheet( SCTAB nTab ) const;
+    SC_DLLPUBLIC void SetZetaChartSheet( SCTAB nTab, bool bVal );
     SC_DLLPUBLIC bool GetTable( const OUString& rName, SCTAB& rTab ) const;
     SC_DLLPUBLIC SCCOL MaxCol() const { return mxSheetLimits->mnMaxCol; }
     SC_DLLPUBLIC SCROW MaxRow() const { return mxSheetLimits->mnMaxRow; }

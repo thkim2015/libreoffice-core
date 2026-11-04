@@ -1482,12 +1482,17 @@ std::size_t ExcBundlesheet8::GetLen() const
 void ExcBundlesheet8::SaveXml( XclExpXmlStream& rStrm )
 {
     OUString sId;
+    // ZetaOffice: chart sheets go to xl/chartsheets (ExcTable::WriteXml writes them)
+    const bool bChartSheet = rStrm.GetRoot().GetDoc().IsZetaChartSheet(nTab);
+    const char* pPart = bChartSheet ? "chartsheets/sheet" : "worksheets/sheet";
     rStrm.CreateOutputStream(
-            XclXmlUtils::GetStreamName( "xl/", "worksheets/sheet", nTab+1),
-            XclXmlUtils::GetStreamName( nullptr, "worksheets/sheet", nTab+1),
+            XclXmlUtils::GetStreamName( "xl/", pPart, nTab+1),
+            XclXmlUtils::GetStreamName( nullptr, pPart, nTab+1),
             rStrm.GetCurrentStream()->getOutputStream(),
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
-            oox::getRelationship(Relationship::WORKSHEET),
+            bChartSheet ? "application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml"
+                        : "application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml",
+            bChartSheet ? u"http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet"_ustr
+                        : oox::getRelationship(Relationship::WORKSHEET),
             &sId );
 
     rStrm.GetCurrentStream()->singleElement( XML_sheet,

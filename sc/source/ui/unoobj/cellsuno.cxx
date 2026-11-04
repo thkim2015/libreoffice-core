@@ -808,6 +808,7 @@ static const SfxItemPropertySet* lcl_GetSheetPropertySet()
         { u"ZetaSparklines"_ustr, SC_WID_UNO_ZETASPARKLINES, cppu::UnoType<OUString>::get(), beans::PropertyAttribute::READONLY, 0 },
         // zeta: OOXML <ignoredErrors> as "flags<TAB>sqref" items (flags: bit mask, see ScIgnoredErrors)
         { u"ZetaIgnoredErrors"_ustr, SC_WID_UNO_ZETAIGNOREDERRORS, cppu::UnoType<uno::Sequence<OUString>>::get(), 0, 0 },
+        { u"ZetaChartSheet"_ustr, SC_WID_UNO_ZETACHARTSHEET, cppu::UnoType<bool>::get(), 0, 0 },
     };
     static SfxItemPropertySet aSheetPropertySet( aSheetPropertyMap_Impl );
     return &aSheetPropertySet;
@@ -8124,6 +8125,12 @@ void ScTableSheetObj::SetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
         bool bTotalsRowBelow = ScUnoHelpFunctions::GetBoolFromAny(aValue);
         rDoc.SetTotalsRowBelow(nTab, bTotalsRowBelow);
     }
+    else if (pEntry->nWID == SC_WID_UNO_ZETACHARTSHEET)
+    {
+        // ZetaOffice: save this sheet as an Excel chart sheet
+        rDoc.SetZetaChartSheet(nTab, ScUnoHelpFunctions::GetBoolFromAny(aValue));
+        pDocSh->SetDocumentModified();
+    }
     else
         ScCellRangeObj::SetOnePropertyValue(pEntry, aValue);        // base class, no Item WID
 }
@@ -8433,6 +8440,10 @@ void ScTableSheetObj::GetOnePropertyValue( const SfxItemPropertyMapEntry* pEntry
     else if (pEntry->nWID == SC_WID_UNO_TOTALBELOW)
     {
         rAny <<= pDocSh->GetDocument().GetTotalsRowBelow(nTab);
+    }
+    else if (pEntry->nWID == SC_WID_UNO_ZETACHARTSHEET)
+    {
+        rAny <<= pDocSh->GetDocument().IsZetaChartSheet(nTab);
     }
     else
         ScCellRangeObj::GetOnePropertyValue(pEntry, rAny);
