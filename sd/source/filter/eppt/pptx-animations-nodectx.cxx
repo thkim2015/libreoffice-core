@@ -149,6 +149,10 @@ void NodeContext::initUserData()
         {
             rProp.Value >>= msEffectPresetSubType;
         }
+        else if (rProp.Name == "master-element")
+        {
+            rProp.Value >>= mxAfterEffectMaster;
+        }
     }
 }
 
@@ -244,7 +248,9 @@ bool NodeContext::initChildNodes()
                     auto pChildContext = std::make_unique<NodeContext>(xChildNode, mrSlideShapeIDs,
                                                                        mrPowerPointExport,
                                                                        bIsMainSeq, bIsIterateChild);
-                    if (pChildContext->isValid())
+                    // An after effect is written into the p:subTnLst of its master effect,
+                    // so it alone does not make its container worth exporting.
+                    if (pChildContext->isValid() && !pChildContext->isAfterEffect())
                         bValid = true;
                     maChildNodes.push_back(std::move(pChildContext));
                 }

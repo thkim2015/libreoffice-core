@@ -32,6 +32,8 @@
 #include <com/sun/star/animations/XTimeContainer.hpp>
 #include <com/sun/star/animations/XTransitionFilter.hpp>
 #include <com/sun/star/animations/AnimationNodeType.hpp>
+#include <com/sun/star/animations/AnimationFill.hpp>
+#include <com/sun/star/animations/ParallelTimeContainer.hpp>
 #include <com/sun/star/animations/Event.hpp>
 #include <com/sun/star/animations/EventTrigger.hpp>
 #include <com/sun/star/frame/XModel.hpp>
@@ -45,6 +47,10 @@
 #include <xmloff/SoundReference.hxx>
 #include <sal/log.hxx>
 #include <comphelper/diagnose_ex.hxx>
+#include <comphelper/processfactory.hxx>
+
+#include <algorithm>
+#include <vector>
 
 using namespace ::oox::core;
 using namespace ::com::sun::star::beans;
@@ -138,6 +144,139 @@ namespace oox::ppt {
 
     TimeNode::~TimeNode()
     {
+    }
+
+    namespace {
+    std::vector< Reference< XAnimationNode > > childNodes( const Reference< XAnimationNode >& xNode )
+    {
+        std::vector< Reference< XAnimationNode > > aRet;
+        Reference< XEnumerationAccess > xEA( xNode, UNO_QUERY );
+        if( !xEA.is() )
+            return aRet;
+        Reference< XEnumeration > xE( xEA->createEnumeration() );
+        while( xE.is() && xE->hasMoreElements() )
+        {
+            Reference< XAnimationNode > xChild( xE->nextElement(), UNO_QUERY );
+            if( xChild.is() )
+                aRet.push_back( xChild );
+        }
+        return aRet;
+    }
+    }
+
+    /** PowerPoint writes 'After animation' (dim, hide after animation, hide on next click)
+        as a node with afterEffect="1" in the p:subTnLst of its effect. LibreOffice
+        (sd::EffectSequenceHelper) keeps such a node next to its effect with a
+        "master-element" user data: after the effect ends (same click) or at the start of
+        the next effect (next click). Move the imported nodes there. */
+    void fixAfterEffects( const Reference< XAnimationNode >& xSequence )
+    {
+        struct AfterEffect
+        {
+            Reference< XAnimationNode > mxNode, mxEffect, mxWith, mxClick;
+            sal_Int16 mnMasterRel;
+        };
+        std::vector< AfterEffect > aAfterEffects;
+        try
+        {
+            for( const auto& xClick : childNodes( xSequence ) )
+                for( const auto& xWith : childNodes( xClick ) )
+                    for( const auto& xEffect : childNodes( xWith ) )
+                        for( const auto& xChild : childNodes( xEffect ) )
+                        {
+                            bool bAfterEffect = false;
+                            sal_Int16 nMasterRel = -1;
+                            for( const NamedValue& rProp : xChild->getUserData() )
+                            {
+                                if( rProp.Name == "after-effect" )
+                                    rProp.Value >>= bAfterEffect;
+                                else if( rProp.Name == "master-rel" )
+                                    rProp.Value >>= nMasterRel;
+                            }
+                            if( !bAfterEffect )
+                                continue;
+                            if( nMasterRel < 0 )
+                            {
+                                // no masterRel: an END event waits for the effect (same click)
+                                Event aEvent;
+                                nMasterRel = ( ( xChild->getBegin() >>= aEvent )
+                                               && aEvent.Trigger == EventTrigger::END_EVENT ) ? 0 : 2;
+                            }
+                            aAfterEffects.push_back( { xChild, xEffect, xWith, xClick, nMasterRel } );
+                        }
+
+            for( const AfterEffect& rAfter : aAfterEffects )
+            {
+                Reference< XTimeContainer > xEffectContainer( rAfter.mxEffect, UNO_QUERY_THROW );
+                xEffectContainer->removeChild( rAfter.mxNode );
+
+                Sequence< NamedValue > aUserData( rAfter.mxNode->getUserData() );
+                std::vector< NamedValue > aNewData;
+                for( const NamedValue& rProp : aUserData )
+                    if( rProp.Name != "after-effect" && rProp.Name != "master-rel" )
+                        aNewData.push_back( rProp );
+                aNewData.push_back( NamedValue( u"master-element"_ustr, Any( rAfter.mxEffect ) ) );
+                rAfter.mxNode->setUserData( Sequence< NamedValue >( aNewData.data(), static_cast< sal_Int32 >( aNewData.size() ) ) );
+
+                Reference< XTimeContainer > xWith( rAfter.mxWith, UNO_QUERY_THROW );
+                if( rAfter.mnMasterRel != 2 )
+                {
+                    Event aEvent;
+                    aEvent.Source <<= rAfter.mxEffect;
+                    aEvent.Trigger = EventTrigger::END_EVENT;
+                    aEvent.Repeat = 0;
+                    rAfter.mxNode->setBegin( Any( aEvent ) );
+                    xWith->insertAfter( rAfter.mxNode, rAfter.mxEffect );
+                    continue;
+                }
+
+                // next click: the next 'with' container of this click, the first one of the
+                // next click, or a new click
+                rAfter.mxNode->setBegin( Any( 0.0 ) );
+                Reference< XTimeContainer > xNext;
+                const auto aWiths = childNodes( rAfter.mxClick );
+                auto aIt = std::find( aWiths.begin(), aWiths.end(), rAfter.mxWith );
+                if( aIt != aWiths.end() && ++aIt != aWiths.end() )
+                    xNext.set( *aIt, UNO_QUERY );
+                if( !xNext.is() )
+                {
+                    const auto aClicks = childNodes( xSequence );
+                    auto aClickIt = std::find( aClicks.begin(), aClicks.end(), rAfter.mxClick );
+                    Reference< XComponentContext > xContext( comphelper::getProcessComponentContext() );
+                    if( aClickIt != aClicks.end() && ++aClickIt != aClicks.end() )
+                    {
+                        const auto aNextWiths = childNodes( *aClickIt );
+                        if( !aNextWiths.empty() )
+                            xNext.set( aNextWiths.front(), UNO_QUERY );
+                        else
+                        {
+                            xNext.set( ParallelTimeContainer::create( xContext ), UNO_QUERY_THROW );
+                            xNext->setBegin( Any( 0.0 ) );
+                            Reference< XTimeContainer >( *aClickIt, UNO_QUERY_THROW )->appendChild( xNext );
+                        }
+                    }
+                    else
+                    {
+                        Reference< XTimeContainer > xNewClick( ParallelTimeContainer::create( xContext ), UNO_QUERY_THROW );
+                        Event aEvent;
+                        aEvent.Trigger = EventTrigger::ON_NEXT;
+                        aEvent.Repeat = 0;
+                        xNewClick->setBegin( Any( aEvent ) );
+                        xNewClick->setFill( AnimationFill::HOLD );
+                        Reference< XTimeContainer >( xSequence, UNO_QUERY_THROW )->insertAfter( xNewClick, rAfter.mxClick );
+                        xNext.set( ParallelTimeContainer::create( xContext ), UNO_QUERY_THROW );
+                        xNext->setBegin( Any( 0.0 ) );
+                        xNext->setFill( AnimationFill::HOLD );
+                        xNewClick->appendChild( xNext );
+                    }
+                }
+                xNext->appendChild( rAfter.mxNode );
+            }
+        }
+        catch( const Exception& )
+        {
+            TOOLS_INFO_EXCEPTION("oox.ppt", "fixAfterEffects()");
+        }
     }
 
     void fixMainSequenceTiming( const css::uno::Reference< css::animations::XAnimationNode >& xNode )
@@ -656,10 +795,12 @@ namespace oox::ppt {
                 {
                     if( nEnum == EffectNodeType::MAIN_SEQUENCE )
                     {
+                        fixAfterEffects( xNode );
                         fixMainSequenceTiming( xNode );
                     }
                     else if( nEnum ==  EffectNodeType::INTERACTIVE_SEQUENCE )
                     {
+                        fixAfterEffects( xNode );
                         fixInteractiveSequenceTiming( xNode );
                     }
                 }
