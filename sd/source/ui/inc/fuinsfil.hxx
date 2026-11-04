@@ -48,6 +48,9 @@ private:
     OUString        aLayoutName;    ///< layout name of the currently inserted page
     OUString        aFilterName;    ///< chosen file filter
     OUString        aFile;          ///< chosen file name
+    /// Called with a FileName argument (macro/API): insert all pages after the
+    /// current slide without asking (no "Insert Slides/Objects" dialog).
+    bool            mbNonInteractive = false;
 
     void            InsTextOrRTFinOlMode(SfxMedium* pMedium);
     bool            InsSDDinOlMode(SfxMedium* pMedium);
