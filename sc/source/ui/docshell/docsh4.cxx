@@ -67,6 +67,7 @@
 #include <docuno.hxx>
 
 #include <docsh.hxx>
+#include <zetacalc.hxx>
 #include "docshimp.hxx"
 #include <docfunc.hxx>
 #include <scres.hrc>
@@ -1849,6 +1850,8 @@ void ScDocShell::DoRecalc( bool bApi )
         if (pFC)
             pFC->SetDirty();
     }
+    if (sc::zeta::IsNoTableAutoCalc(m_pDocument.get()))
+        sc::zeta::CalcTables(*m_pDocument);
     m_pDocument->CalcFormulaTree();
     if ( pSh )
         pSh->UpdateCharts(true);
@@ -1881,7 +1884,10 @@ void ScDocShell::DoHardRecalc()
         ScTabView::UpdateInputLine();     // InputEnterHandler
         pSh->UpdateInputHandler();
     }
-    m_pDocument->CalcAll();
+    {
+        sc::zeta::CalcTablesGuard aZetaGuard;
+        m_pDocument->CalcAll();
+    }
     GetDocFunc().DetectiveRefresh();    // creates own Undo
     if ( pSh )
         pSh->UpdateCharts(true);

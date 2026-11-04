@@ -48,6 +48,7 @@
 #include <scresid.hxx>
 #include <strings.hrc>
 #include <document.hxx>
+#include <zetacalc.hxx>
 #include <table.hxx>
 #include <patattr.hxx>
 #include <rangenam.hxx>
@@ -381,6 +382,8 @@ void ScDocument::ClosingClipboardSource()
 ScDocument::~ScDocument()
 {
     OSL_PRECOND( !bInLinkUpdate, "bInLinkUpdate in dtor" );
+
+    sc::zeta::SetNoTableAutoCalc(this, false);
 
     // Join any pending(recalc) threads in global threadpool
     comphelper::ThreadPool::getSharedOptimalPool().joinThreadsIfIdle();

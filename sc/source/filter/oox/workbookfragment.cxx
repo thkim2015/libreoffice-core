@@ -86,6 +86,7 @@
 
 #include <xestream.hxx>
 #include <ucbhelper/content.hxx>
+#include <zetacalc.hxx>
 
 namespace oox::xls {
 
@@ -612,6 +613,11 @@ void WorkbookFragment::finalizeImport()
     getDocImport().finalize();
 
     recalcFormulaCells();
+
+    // ZetaOffice: calcMode autoNoTable - data table formulas are created after the
+    // calculation settings, so calculate them once before they are kept as they are.
+    if (sc::zeta::IsNoTableAutoCalc(&getScDocument()))
+        sc::zeta::CalcTables(getScDocument());
 
     OUString aRevHeadersPath = getFragmentPathFromFirstType(CREATE_OFFICEDOC_RELATION_TYPE("revisionHeaders"));
     if (!aRevHeadersPath.isEmpty())

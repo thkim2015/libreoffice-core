@@ -119,6 +119,7 @@
 #include <docoptio.hxx>
 #include <docsh.hxx>
 #include <docuno.hxx>
+#include <zetacalc.hxx>
 #include <drwlayer.hxx>
 #include <forbiuno.hxx>
 #include <formulagroup.hxx>
@@ -200,6 +201,8 @@ static std::span<const SfxItemPropertyMapEntry> lcl_GetDocOptPropertyMap()
         { SC_UNO_NAMEDRANGES,             0, cppu::UnoType<sheet::XNamedRanges>::get(),             0, 0},
         { SC_UNO_THEME,                   0, cppu::UnoType<util::XTheme>::get(), 0,  0},
         { u"ZetaThemeColors"_ustr,        0, cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get(), 0,  0},
+        { u"ZetaNoTableAutoCalc"_ustr,    0, cppu::UnoType<bool>::get(),                            0, 0},
+        { u"ZetaCalculateSheet"_ustr,     0, cppu::UnoType<sal_Int32>::get(),                       0, 0},
         { SC_UNO_DATABASERNG,             0, cppu::UnoType<sheet::XDatabaseRanges>::get(),          0, 0},
         { SC_UNO_NULLDATE,                static_cast<sal_uInt16>(ScPropUnoId::NullDate), cppu::UnoType<util::Date>::get(),                      0, 0},
         { SC_UNO_ROWLABELRNG,             0, cppu::UnoType<sheet::XLabelRanges>::get(),             0, 0},
@@ -3491,6 +3494,29 @@ void SAL_CALL ScModelObj::setPropertyValue(
             rDoc.SetLanguage( eLatin, eCjk, eCtl );
         }
     }
+    else if ( aPropertyName == "ZetaNoTableAutoCalc" )
+    {
+        // ZetaOffice: Excel "Automatic except for data tables" (calcMode autoNoTable)
+        bool bSet = false;
+        if (!(aValue >>= bSet))
+            throw lang::IllegalArgumentException();
+        sc::zeta::SetNoTableAutoCalc(&rDoc, bSet);
+        if (!bSet && rDoc.GetAutoCalc())
+        {
+            sc::zeta::CalcTables(rDoc);
+            pDocShell->PostDataChanged();
+        }
+    }
+    else if ( aPropertyName == "ZetaCalculateSheet" )
+    {
+        // ZetaOffice: Excel "Calculate Sheet" (Shift+F9) for the given sheet index
+        sal_Int32 nTab = -1;
+        if (!(aValue >>= nTab) || nTab < 0 || nTab >= rDoc.GetTableCount())
+            throw lang::IllegalArgumentException();
+        sc::zeta::CalcSheet(rDoc, static_cast<SCTAB>(nTab));
+        pDocShell->PostPaintGridAll();
+        rDoc.BroadcastUno(SfxHint(SfxHintId::DataChanged));
+    }
     else if ( aPropertyName == SC_UNO_ZETATABLESTYLES )
     {
         uno::Sequence<uno::Sequence<beans::PropertyValue>> aStyles;
@@ -3860,6 +3886,14 @@ uno::Any SAL_CALL ScModelObj::getPropertyValue( const OUString& aPropertyName )
             if (pTheme)
                 xTheme = model::theme::createXTheme(pTheme);
             aRet <<= xTheme;
+        }
+        else if (aPropertyName == "ZetaNoTableAutoCalc")
+        {
+            aRet <<= sc::zeta::IsNoTableAutoCalc(&rDoc);
+        }
+        else if (aPropertyName == "ZetaCalculateSheet")
+        {
+            aRet <<= sal_Int32(-1);
         }
         else if (aPropertyName == "ZetaThemeColors")
         {
