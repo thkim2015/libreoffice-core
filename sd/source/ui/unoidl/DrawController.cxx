@@ -665,6 +665,13 @@ void DrawController::FillPropertyTable (
             PROPERTY_TEXTEDITCURSOR,
             cppu::UnoType<css::text::XTextCursor>::get(),
             beans::PropertyAttribute::READONLY | beans::PropertyAttribute::MAYBEVOID );
+    // Selected cells of the table being edited: { firstColumn, firstRow, lastColumn, lastRow,
+    // cellMode } where cellMode is 1 when cells are selected or a cell is in text edit, 0 when
+    // the whole table object is selected. Void when no table is selected.
+    rProperties.emplace_back( "TableCellSelection",
+            PROPERTY_TABLECELLSELECTION,
+            cppu::UnoType<css::uno::Sequence<sal_Int32>>::get(),
+            beans::PropertyAttribute::READONLY | beans::PropertyAttribute::MAYBEVOID );
 }
 
 IPropertyArrayHelper & DrawController::getInfoHelper()
