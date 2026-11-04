@@ -297,7 +297,8 @@ void WriteAnimationAttributeName(const FSHelperPtr& pFS, const OUString& rAttrib
 
         while (attrConv->mpAPIName != nullptr)
         {
-            if (rAttributeName.equalsAscii(attrConv->mpAPIName))
+            // API names are case insensitive for the slide show ("visibility" == "Visibility")
+            if (rAttributeName.equalsIgnoreAsciiCaseAscii(attrConv->mpAPIName))
             {
                 pAttribute = attrConv->mpMSName;
                 break;
