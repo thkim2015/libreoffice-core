@@ -1461,7 +1461,12 @@ void PowerPointExport::WriteTransition(const FSHelperPtr& pFS)
             if (nTransitionSubtype == animations::TransitionSubType::FADEOVERCOLOR)
             {
                 nTransition = XML_cut;
-                pThruBlk = "true";
+                // reverse direction is the plain cut (no black screen in between)
+                bool bDirectionNormal = true;
+                if (ImplGetPropertyValue(mXPagePropSet, u"TransitionDirection"_ustr))
+                    mAny >>= bDirectionNormal;
+                if (bDirectionNormal)
+                    pThruBlk = "true";
                 bOOXmlSpecificTransition = true;
             }
             break;
