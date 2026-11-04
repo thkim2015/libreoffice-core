@@ -38,6 +38,8 @@
 
 #include <svl/whiter.hxx>
 #include <svl/stritem.hxx>
+#include <svl/intitem.hxx>
+#include <svl/eitem.hxx>
 
 #include <sfx2/request.hxx>
 
@@ -1320,13 +1322,10 @@ void SvxTableController::SplitMarkedCells(const SfxRequest& rReq)
     if(!checkTableObject() || !mxTable.is())
         return;
 
-    SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
-    VclPtr<SvxAbstractSplitTableDialog> xDlg(pFact->CreateSvxSplitTableDialog(rReq.GetFrameWeld(), false, 99));
-
-    xDlg->StartExecuteAsync([xDlg, this](int) {
-        const sal_Int32 nCount = xDlg->GetCount() - 1;
-
-        if( nCount < 1 )
+    // Zeta(weboffice): SplitCell(Amount, Horizontal) splits without the dialog, like Writer's
+    // FN_TABLE_SPLIT_CELLS - the web UI shows its own PowerPoint-style 'Split Cells' dialog.
+    auto doSplit = [this](sal_Int32 nCount, bool bHorizontal) {
+        if( nCount < 1 || !checkTableObject() || !mxTable.is() )
             return;
 
         CellPos aStart, aEnd;
@@ -1349,7 +1348,7 @@ void SvxTableController::SplitMarkedCells(const SfxRequest& rReq)
             rModel.AddUndo(rModel.GetSdrUndoFactory().CreateUndoGeoObject(rTableObj));
         }
 
-        if( xDlg->IsHorizontal() )
+        if( bHorizontal )
         {
             xRange->split( 0, nCount );
         }
@@ -1365,7 +1364,20 @@ void SvxTableController::SplitMarkedCells(const SfxRequest& rReq)
         aEnd.mnCol += mxTable->getColumnCount() - nColCount;
 
         setSelectedCells( aStart, aEnd );
+    };
 
+    if (const SfxInt32Item* pAmount = rReq.GetArg<SfxInt32Item>(SID_TABLE_SPLIT_CELLS))
+    {
+        const SfxBoolItem* pHorizontal = rReq.GetArg<SfxBoolItem>(FN_PARAM_1);
+        doSplit(pAmount->GetValue() - 1, pHorizontal && pHorizontal->GetValue());
+        return;
+    }
+
+    SvxAbstractDialogFactory* pFact = SvxAbstractDialogFactory::Create();
+    VclPtr<SvxAbstractSplitTableDialog> xDlg(pFact->CreateSvxSplitTableDialog(rReq.GetFrameWeld(), false, 99));
+
+    xDlg->StartExecuteAsync([xDlg, doSplit](int) {
+        doSplit(xDlg->GetCount() - 1, xDlg->IsHorizontal());
         xDlg->disposeOnce();
     });
 }

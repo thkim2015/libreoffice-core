@@ -192,9 +192,15 @@ void BulletList::setType( sal_Int32 nType )
         mnNumberingType <<= NumberingType::NUMBER_UPPER_ZH_TW;
         setSuffixNone();
         break;
-    case XML_ea1JpnChsDbPeriod:
     case XML_ea1JpnKorPeriod:
+        mnNumberingType <<= NumberingType::NUMBER_LOWER_ZH;
+        setSuffixPeriod();
+        break;
     case XML_ea1JpnKorPlain:
+        mnNumberingType <<= NumberingType::NUMBER_LOWER_ZH;
+        setSuffixNone();
+        break;
+    case XML_ea1JpnChsDbPeriod:
         break;
     case XML_hebrew2Minus:
         mnNumberingType <<= NumberingType::CHARS_HEBREW;

@@ -40,6 +40,8 @@
 #include <editeng/outliner.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <com/sun/star/text/XTextCursor.hpp>
+#include <svx/sdr/table/tablecontroller.hxx>
+#include <svx/svdotable.hxx>
 #include <svx/unopage.hxx>
 #include <sfx2/zoomitem.hxx>
 #include <com/sun/star/drawing/DrawViewMode.hpp>
@@ -373,6 +375,21 @@ Any lcl_getTextEditCursor(::sd::View& rView)
     aRet <<= xViewText->createTextCursorBySelection(pOLV->GetSelection());
     return aRet;
 }
+
+Any lcl_getTableCellSelection(::sd::View& rView)
+{
+    Any aRet;
+    const rtl::Reference<sdr::SelectionController>& xController = rView.getSelectionController();
+    auto* pTableController = dynamic_cast<sdr::table::SvxTableController*>(xController.get());
+    if (!pTableController || !dynamic_cast<sdr::table::SdrTableObj*>(rView.GetMarkedObjectList().GetMarkCount() == 1
+            ? rView.GetMarkedObjectList().GetMark(0)->GetMarkedSdrObj() : nullptr))
+        return aRet;
+    sdr::table::CellPos aFirst, aLast;
+    pTableController->getSelectedCells(aFirst, aLast);
+    const sal_Int32 nCellMode = pTableController->hasSelectedCells() ? 1 : 0;
+    aRet <<= css::uno::Sequence<sal_Int32>{ aFirst.mnCol, aFirst.mnRow, aLast.mnCol, aLast.mnRow, nCellMode };
+    return aRet;
+}
 }
 
 Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
@@ -413,6 +430,10 @@ Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
 
         case DrawController::PROPERTY_TEXTEDITCURSOR:
             aValue = lcl_getTextEditCursor(mrView);
+            break;
+
+        case DrawController::PROPERTY_TABLECELLSELECTION:
+            aValue = lcl_getTableCellSelection(mrView);
             break;
 
         default:

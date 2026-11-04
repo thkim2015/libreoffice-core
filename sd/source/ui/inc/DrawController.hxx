@@ -89,6 +89,7 @@ public:
         ,PROPERTY_UPDATEACC = 10
         ,PROPERTY_PAGE_CHANGE = 11
         ,PROPERTY_TEXTEDITCURSOR = 12
+        ,PROPERTY_TABLECELLSELECTION = 13
     };
 
     /** Create a new DrawController object for the given ViewShellBase.
