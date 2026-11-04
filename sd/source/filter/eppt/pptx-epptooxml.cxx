@@ -1302,8 +1302,8 @@ void PowerPointExport::ImplWriteBackground(const FSHelperPtr& pFS, const Referen
     if (ImplGetPropertyValue(rXPropSet, u"FillStyle"_ustr))
         mAny >>= aFillStyle;
 
-    if (aFillStyle == FillStyle_NONE ||
-            aFillStyle == FillStyle_HATCH)
+    // zeta: 무늬(빗금) 배경도 a:pattFill로 쓴다
+    if (aFillStyle == FillStyle_NONE)
         return;
 
     // For BITMAP fill style, check if graphic is valid before writing bgPr

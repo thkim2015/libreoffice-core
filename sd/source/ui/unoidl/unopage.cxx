@@ -76,6 +76,9 @@
 #include <bitmaps.hlst>
 #include <unokywds.hxx>
 #include "unopback.hxx"
+#include <undoback.hxx>
+#include <DrawDocShell.hxx>
+#include <svl/undo.hxx>
 #include <vcl/dibtools.hxx>
 #include <tools/debug.hxx>
 #include <tools/stream.hxx>
@@ -2492,6 +2495,14 @@ void SdDrawPage::setBackground( const Any& rValue )
 
     if( !(rValue >>= xSet) && !rValue.hasValue() )
         throw lang::IllegalArgumentException();
+
+    // zeta: UNO로 바꾼 슬라이드 배경도 실행 취소할 수 있게 한다(PowerPoint 배경 서식 창)
+    if (SdDrawDocument* pUndoDoc = GetModel()->GetDoc(); pUndoDoc && pUndoDoc->IsUndoEnabled()
+        && !GetPage()->IsMasterPage() && pUndoDoc->GetDocSh() && pUndoDoc->GetDocSh()->GetUndoManager())
+    {
+        pUndoDoc->GetDocSh()->GetUndoManager()->AddUndoAction(std::make_unique<SdBackgroundObjUndoAction>(
+            *pUndoDoc, *static_cast<SdPage*>(GetPage()), GetPage()->getSdrPageProperties().GetItemSet()));
+    }
 
     if( !xSet.is() )
     {
