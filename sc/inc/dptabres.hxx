@@ -894,6 +894,8 @@ public:
     void ZetaInitFilter(const ScDPLevel* pLevel);
     bool ZetaHasFilter() const { return !maZetaType.isEmpty(); }
     bool ZetaKeep(const OUString& rCaption, const ScDPDataMember* pData) const;
+    // hides the members of rList (visible ones, with their data) that the filter drops
+    void ZetaApply(const std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>>& rList) const;
     bool IsSortAscending() const { return bSortAscending; }
     tools::Long                GetSortMeasure() const  { return nSortMeasure; }
 

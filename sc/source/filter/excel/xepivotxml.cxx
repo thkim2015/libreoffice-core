@@ -1753,7 +1753,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             aZ.ma2 = nTok >= 0 ? rZeta.getToken(0, '\t', nTok) : OUString();
             const OUString aField = nTok >= 0 ? rZeta.getToken(0, '\t', nTok) : OUString();
             bool bOk = aZ.maType.startsWith("caption");
-            if (aZ.maType.startsWith("value"))
+            if (aZ.maType.startsWith("value") || aZ.maType == "percent" || aZ.maType == "sum")
             {
                 const OUString aSrc = ScDPUtil::getSourceDimensionName(aField);
                 for (size_t n = 0; n < aDataFields.size(); ++n)
@@ -1984,6 +1984,27 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         // with the wildcard pattern / comparison operator; between = and="1" gte+lte, not between = lt+gt
         for (const ZetaFilter& rZ : aZetaFilters)
         {
+            if (rZ.maType == "percent" || rZ.maType == "sum")
+            {
+                pPivotStrm->startElement(XML_filter, XML_fld, OString::number(static_cast<sal_Int32>(rZ.mnField)),
+                                         XML_type, rZ.maType.toUtf8(), XML_evalOrder, "-1",
+                                         XML_id, OString::number(nFilterId++),
+                                         XML_iMeasureFld, OString::number(rZ.mnMeasure));
+                pPivotStrm->startElement(XML_autoFilter, XML_ref, "A1");
+                pPivotStrm->startElement(XML_filterColumn, XML_colId, "0");
+                auto pTop = sax_fastparser::FastSerializerHelper::createAttrList();
+                if (rZ.ma2 == "0")
+                    pTop->add(XML_top, "0");
+                if (rZ.maType == "percent")
+                    pTop->add(XML_percent, "1");
+                pTop->add(XML_val, rZ.ma1.toUtf8());
+                pTop->add(XML_filterVal, rZ.ma1.toUtf8());
+                pPivotStrm->singleElement(XML_top10, pTop);
+                pPivotStrm->endElement(XML_filterColumn);
+                pPivotStrm->endElement(XML_autoFilter);
+                pPivotStrm->endElement(XML_filter);
+                continue;
+            }
             const bool bCaption = rZ.maType.startsWith("caption");
             const std::u16string_view aKind = bCaption ? rZ.maType.subView(7) : rZ.maType.subView(5);
             rtl::Reference<sax_fastparser::FastAttributeList> pFilterAttr = sax_fastparser::FastSerializerHelper::createAttrList();

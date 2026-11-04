@@ -1016,6 +1016,23 @@ void PivotTableFilter::finalizeImport()
 {
     // ZetaOffice: label (caption*) and value (value*) filters -> DataPilotField "ZetaFilter"
     const OUString& rType = maModel.maTypeName;
+    if( rType == "percent" || rType == "sum" )
+    {
+        css::uno::Reference< css::beans::XPropertySet > xProp( mrPivotTable.getDataPilotField( maModel.mnField ) );
+        const PivotCacheField* pCacheField = mrPivotTable.getCacheFieldOfDataField( maModel.mnMeasureField );
+        if( !xProp.is() || !pCacheField )
+            return;
+        try
+        {
+            xProp->setPropertyValue( u"ZetaFilter"_ustr, css::uno::Any( rType + "\t"
+                + OUString::number( maModel.mfValue ) + "\t" + ( maModel.mbTopFilter ? u"1" : u"0" )
+                + "\t" + pCacheField->getName() ) );
+        }
+        catch( const css::uno::Exception& )
+        {
+        }
+        return;
+    }
     if( rType.startsWith( "caption" ) || rType.startsWith( "value" ) )
     {
         css::uno::Reference< css::beans::XPropertySet > xProp( mrPivotTable.getDataPilotField( maModel.mnField ) );

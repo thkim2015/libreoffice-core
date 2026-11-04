@@ -3588,16 +3588,72 @@ void ScDPResultDimension::ZetaInitFilter(const ScDPLevel* pLevel)
     maZeta2 = rCC.lowercase(maZeta2);
 }
 
+namespace {
+
+// total of a member for the measure; false when it is an error
+bool lcl_ZetaValue(const ScDPDataMember* pData, tools::Long nMeasure, double& rVal)
+{
+    ScDPSubTotalState aEmptyState;
+    const ScDPAggData* pAgg = pData ? pData->GetConstAggData(nMeasure, aEmptyState) : nullptr;
+    if (pAgg && pAgg->HasError())
+        return false;
+    rVal = (pAgg && pAgg->HasData()) ? pAgg->GetResult() : 0.0;
+    return true;
+}
+
+}
+
+void ScDPResultDimension::ZetaApply(const std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>>& rList) const
+{
+    // Excel "Top 10" by percent / sum: walk the members from the top (or bottom) and keep them
+    // until the running total reaches N % of the total (percent) or N (sum); v2 "0" = bottom
+    if (maZetaType == "percent" || maZetaType == "sum")
+    {
+        const bool bTop = maZeta2 != "0";
+        std::vector<std::pair<double, ScDPResultMember*>> aVals;
+        double fTotal = 0.0;
+        for (const auto& [pMember, pData] : rList)
+        {
+            double f = 0.0;
+            if (!lcl_ZetaValue(pData, mnZetaMeasure, f))
+            {
+                pMember->SetAutoHidden();
+                continue;
+            }
+            aVals.emplace_back(f, pMember);
+            fTotal += f;
+        }
+        std::stable_sort(aVals.begin(), aVals.end(), [bTop](const auto& a, const auto& b)
+                         { return bTop ? a.first > b.first : a.first < b.first; });
+        const double fLimit = maZetaType == "percent" ? fTotal * mfZeta1 / 100.0 : mfZeta1;
+        double fRun = 0.0;
+        bool bReached = false;
+        for (const auto& [f, pMember] : aVals)
+        {
+            if (bReached)
+            {
+                pMember->SetAutoHidden();
+                continue;
+            }
+            fRun += f;
+            if (fRun > fLimit || rtl::math::approxEqual(fRun, fLimit))
+                bReached = true;
+        }
+        return;
+    }
+    for (const auto& [pMember, pData] : rList)
+        if (!ZetaKeep(pMember->GetDisplayName(false), pData))
+            pMember->SetAutoHidden();
+}
+
 bool ScDPResultDimension::ZetaKeep(const OUString& rCaption, const ScDPDataMember* pData) const
 {
     const OUString& t = maZetaType;
     if (t.startsWith("value"))
     {
-        ScDPSubTotalState aEmptyState;
-        const ScDPAggData* pAgg = pData ? pData->GetConstAggData(mnZetaMeasure, aEmptyState) : nullptr;
-        if (pAgg && pAgg->HasError())
+        double f = 0.0;
+        if (!lcl_ZetaValue(pData, mnZetaMeasure, f))
             return false;
-        const double f = (pAgg && pAgg->HasData()) ? pAgg->GetResult() : 0.0;
         const bool bEq = rtl::math::approxEqual(f, mfZeta1);
         if (t == "valueEqual") return bEq;
         if (t == "valueNotEqual") return !bEq;
@@ -3679,12 +3735,14 @@ void ScDPResultDimension::DoAutoShow(ScDPResultMember* pRefMember)
     // ZetaOffice: Excel label/value filter - hide the members that don't match
     if ( ZetaHasFilter() && !bIsDataLayout )
     {
+        std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>> aList;
         for (tools::Long i=0; i<nCount; i++)
         {
             ScDPResultMember* pMember = GetMember(i);
-            if ( pMember->IsVisible() && !ZetaKeep( pMember->GetDisplayName(false), pMember->GetDataRoot() ) )
-                pMember->SetAutoHidden();
+            if ( pMember->IsVisible() )
+                aList.emplace_back( pMember, pMember->GetDataRoot() );
         }
+        ZetaApply( aList );
     }
 
     if ( !(bAutoShow && nAutoCount > 0 && nAutoCount < nCount) )
@@ -4306,12 +4364,14 @@ void ScDPDataDimension::DoAutoShow( ScDPResultDimension* pRefDim )
     // ZetaOffice: Excel label/value filter of a column field
     if ( pRefDim->ZetaHasFilter() && !bIsDataLayout )
     {
+        std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>> aList;
         for (tools::Long i=0; i<nCount; i++)
         {
             ScDPResultMember* pRefMember = pRefDim->GetMember(i);
-            if ( pRefMember->IsVisible() && !pRefDim->ZetaKeep( pRefMember->GetDisplayName(false), maMembers[i].get() ) )
-                pRefMember->SetAutoHidden();
+            if ( pRefMember->IsVisible() )
+                aList.emplace_back( pRefMember, maMembers[i].get() );
         }
+        pRefDim->ZetaApply( aList );
     }
 
     if ( !(pRefDim->IsAutoShow() && pRefDim->GetAutoCount() > 0 && pRefDim->GetAutoCount() < nCount) )
