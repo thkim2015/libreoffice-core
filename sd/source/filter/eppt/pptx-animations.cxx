@@ -606,14 +606,14 @@ std::vector<sal_Int16> lcl_paragraphDepths(const Reference<XShape>& xShape)
         Reference<XEnumeration> xEnum(xAccess->createEnumeration());
         while (xEnum.is() && xEnum->hasMoreElements())
         {
-            Reference<XPropertySet> xPara(xEnum->nextElement(), UNO_QUERY);
+            Reference<css::beans::XPropertySet> xPara(xEnum->nextElement(), UNO_QUERY);
             sal_Int16 nDepth = 0;
             if (xPara.is())
                 xPara->getPropertyValue(u"NumberingLevel"_ustr) >>= nDepth;
             aDepths.push_back(std::max<sal_Int16>(0, nDepth));
         }
     }
-    catch (const Exception&)
+    catch (const css::uno::Exception&)
     {
     }
     return aDepths;
@@ -1440,7 +1440,7 @@ void PPTXAnimationExport::WriteBuildList(const std::vector<BuildEffect>& rEffect
     bool bStarted = false;
     for (const BuildGroup& rGroup : rGroups)
     {
-        Reference<XServiceInfo> xInfo(rGroup.xShape, UNO_QUERY);
+        Reference<css::lang::XServiceInfo> xInfo(rGroup.xShape, UNO_QUERY);
         Reference<XSimpleText> xText(rGroup.xShape, UNO_QUERY);
         if (!xInfo.is() || !xText.is()
             || xInfo->supportsService(u"com.sun.star.drawing.GraphicObjectShape"_ustr)
