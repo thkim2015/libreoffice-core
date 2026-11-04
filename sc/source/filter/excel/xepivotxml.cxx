@@ -41,6 +41,8 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/sheet/DataPilotFieldGroupBy.hpp>
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
+#include <com/sun/star/sheet/DataPilotFieldSortMode.hpp>
+#include <com/sun/star/sheet/DataPilotFieldSortInfo.hpp>
 #include <com/sun/star/sheet/DataPilotFieldLayoutMode.hpp>
 #include <com/sun/star/sheet/DataPilotOutputRangeType.hpp>
 #include <com/sun/star/sheet/XDimensionsSupplier.hpp>
@@ -1686,6 +1688,11 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             pAttList->add(XML_subtotalTop, ToPsz10(false));
 
         pAttList->add(XML_showAll, ToPsz10(false));
+
+        // ZetaOffice: item sort by label (Excel sortType ascending/descending)
+        if (const sheet::DataPilotFieldSortInfo* pSortInfo = pDim->GetSortInfo();
+            pSortInfo && pSortInfo->Mode == sheet::DataPilotFieldSortMode::NAME)
+            pAttList->add(XML_sortType, pSortInfo->IsAscending ? "ascending" : "descending");
 
         tools::Long nSubTotalCount = pDim->GetSubTotalsCount();
         std::vector<OString> aSubtotalSequence;
