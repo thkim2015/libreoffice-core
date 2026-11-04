@@ -2495,11 +2495,17 @@ void AttributeOutputBase::StartTOX( const SwSection& rSect )
                     if( !nTOXLvl )
                         ++nTOXLvl;
 
+#ifdef EMSCRIPTEN
+                    // Word는 \z·\u를 \h 뒤에 쓴다(아래에서 붙인다)
+                    if(SwTOXElement::TableLeader & pTOX->GetCreateType())
+                        GetExport( ).m_bHideTabLeaderAndPageNumbers = true ;
+#else
                     if(SwTOXElement::TableLeader & pTOX->GetCreateType())
                     {
                         sStr +="\\z " ;
                         GetExport( ).m_bHideTabLeaderAndPageNumbers = true ;
                     }
+#endif
                     if(SwTOXElement::TableInToc & pTOX->GetCreateType())
                     {
                         sStr +="\\w " ;
@@ -2599,10 +2605,12 @@ void AttributeOutputBase::StartTOX( const SwSection& rSect )
                         }
                     }
 
+#ifndef EMSCRIPTEN
                     if( SwTOXElement::ParagraphOutlineLevel & pTOX->GetCreateType() )
                     {
                         sStr +="\\u " ;
                     }
+#endif
 
                     if( SwTOXElement::Template & pTOX->GetCreateType() )
                     {
@@ -2691,8 +2699,17 @@ void AttributeOutputBase::StartTOX( const SwSection& rSect )
                         sStr += "\\t \"" + sTOption + sEntryEnd;
                     }
 
+#ifdef EMSCRIPTEN
+                    if (lcl_IsHyperlinked(pTOX->GetTOXForm(), nTOXLvl))
+                        sStr += "\\h ";
+                    if (SwTOXElement::TableLeader & pTOX->GetCreateType())
+                        sStr += "\\z ";
+                    if (SwTOXElement::ParagraphOutlineLevel & pTOX->GetCreateType())
+                        sStr += "\\u ";
+#else
                     if (lcl_IsHyperlinked(pTOX->GetTOXForm(), nTOXLvl))
                         sStr += "\\h";
+#endif
                     break;
                 }
             }
