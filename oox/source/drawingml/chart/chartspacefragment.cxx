@@ -57,19 +57,22 @@ css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ChartSpaceFra
     bool bC16 = rNamespace == "http://schemas.microsoft.com/office/drawing/2014/chart";
     if( !bC14 && !bC16 )
         return nullptr;
-    if( rName == "pivotOptions" || rName == "pivotOptions16" )
+    // the parser passes the qualified name, e.g. "c14:pivotOptions"
+    const sal_Int32 nColon = rName.indexOf( u':' );
+    const OUString aName = nColon < 0 ? rName : rName.copy( nColon + 1 );
+    if( aName == "pivotOptions" || aName == "pivotOptions16" )
     {
         if( mrModel.mnPivotButtons < 0 )
             mrModel.mnPivotButtons = 0;
         return static_cast< ::oox::core::ContextHandler* >( this );
     }
     sal_Int32 nBit = 0;
-    if( bC14 && rName == "dropZoneFilter" ) nBit = 1;
-    else if( bC14 && rName == "dropZoneSeries" ) nBit = 2;
-    else if( bC14 && rName == "dropZoneCategories" ) nBit = 4;
-    else if( bC14 && rName == "dropZoneData" ) nBit = 8;
-    else if( bC16 && rName == "showExpandCollapseFieldButtons" ) nBit = 16;
-    else if( bC14 && rName == "dropZonesVisible" ) nBit = 32;
+    if( bC14 && aName == "dropZoneFilter" ) nBit = 1;
+    else if( bC14 && aName == "dropZoneSeries" ) nBit = 2;
+    else if( bC14 && aName == "dropZoneCategories" ) nBit = 4;
+    else if( bC14 && aName == "dropZoneData" ) nBit = 8;
+    else if( bC16 && aName == "showExpandCollapseFieldButtons" ) nBit = 16;
+    else if( bC14 && aName == "dropZonesVisible" ) nBit = 32;
     if( nBit )
     {
         if( mrModel.mnPivotButtons < 0 )
