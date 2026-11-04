@@ -7295,8 +7295,14 @@ static uno::Sequence< beans::PropertyValues > lcl_createTOXLevelHyperlinks( bool
             it != item.end())
             it->Value >>= tokenType;
 
+#ifdef EMSCRIPTEN
+        // Word: \h가 없으면 목차 항목은 하이퍼링크가 아니다 — 기본 모양에 든 링크 토큰도 뺀다
+        if (tokenType == tokHStart || tokenType == tokHEnd)
+            continue;
+#else
         if (bHyperlinks && (tokenType == tokHStart || tokenType == tokHEnd))
             continue; // We add hyperlink ourselves, so just skip existing hyperlink start / end
+#endif
 
         if (!sChapterNoSeparator.isEmpty() && tokenType == tokPNum)
         {
