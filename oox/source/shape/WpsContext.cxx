@@ -580,6 +580,12 @@ oox::core::ContextHandlerRef WpsContext::onCreateContext(sal_Int32 nElementToken
     {
         case XML_wsp:
             break;
+        case XML_cNvSpPr:
+            // <wps:cNvSpPr txBox="1"/>: Word text box. Remember it, so that DOCX export writes it
+            // back and Word keeps the shape as a text box instead of an autoshape.
+            if (mpShapePtr && rAttribs.getBool(XML_txBox, false))
+                mpShapePtr->setTxBox(true);
+            return ShapeContext::onCreateContext(nElementToken, rAttribs);
         case XML_cNvCnPr:
         {
             // It might be a connector shape in a wordprocessing canvas

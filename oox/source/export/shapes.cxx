@@ -1108,7 +1108,20 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
             AddExtLst(pFS, rXPropSet);
             pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
         }
-        pFS->singleElementNS(mnXmlNamespace, XML_cNvSpPr);
+        // A Word text box imported from <wps:cNvSpPr txBox="1"/> stays a text box (msoTextBox).
+        bool bTxBox = false;
+        if (GetProperty(rXPropSet, u"InteropGrabBag"_ustr))
+        {
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            mAny >>= aGrabBag;
+            for (const auto& rProp : aGrabBag)
+                if (rProp.Name == u"mso-sp-txBox"_ustr)
+                    rProp.Value >>= bTxBox;
+        }
+        if (bTxBox)
+            pFS->singleElementNS(mnXmlNamespace, XML_cNvSpPr, XML_txBox, "1");
+        else
+            pFS->singleElementNS(mnXmlNamespace, XML_cNvSpPr);
     }
 
     // visual shape properties

@@ -187,6 +187,7 @@ public:
     void                            setTextLinkAttr(const OUString& rTextLink) { msTextLink = rTextLink; }
     void                            setFLocksText(bool bFLocksText) { mbFLocksText = bFLocksText; }
     void                            setFPublished(bool bFPublished) { mbFPublished = bFPublished; }
+    void                            setTxBox(bool bTxBox) { mbTxBox = bTxBox; }
     void                            setTitle(const OUString& rTitle) { msTitle = rTitle; }
     bool getHidden() const { return mbHidden; }
     void                            setHidden( bool bHidden ) { mbHidden = bHidden; }
@@ -412,6 +413,8 @@ protected:
     /* indicates whether the shape shall be published with the worksheet when sent to the server.
        "fPublished" attribute for <sp> element */
     bool                        mbFPublished = false;
+    /* "txBox" attribute of <cNvSpPr>: the shape is a text box (Word msoTextBox), not an autoshape */
+    bool                        mbTxBox = false;
 
     sal_Int32                   mnSubType;      // if this type is not zero, then the shape is a placeholder
     std::optional< sal_Int32 >  moSubTypeIndex;
