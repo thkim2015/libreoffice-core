@@ -238,11 +238,17 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
     }
     else
     {
-        const SfxStringItem* pFileName = rReq.GetArg<SfxStringItem>(ID_VAL_DUMMY0);
-        assert(pFileName && "must be present");
+        // sdraw.sdi declares FileName as ID_VAL_DUMMY1 and FilterName as
+        // ID_VAL_DUMMY2; accept the old ID_VAL_DUMMY0 too.
+        const SfxStringItem* pFileName = rReq.GetArg<SfxStringItem>(ID_VAL_DUMMY1);
+        if (!pFileName)
+            pFileName = rReq.GetArg<SfxStringItem>(ID_VAL_DUMMY0);
+        if (!pFileName)
+            return;
         aFile = pFileName->GetValue();
-        if (const SfxStringItem* pFilterName = rReq.GetArg<SfxStringItem>(ID_VAL_DUMMY1))
+        if (const SfxStringItem* pFilterName = rReq.GetArg<SfxStringItem>(ID_VAL_DUMMY2))
             aFilterName = pFilterName->GetValue();
+        mbNonInteractive = true;
     }
 
     mpDocSh->SetWaitCursor( true );
@@ -314,6 +320,30 @@ void FuInsertFile::DoExecute( SfxRequest& rReq )
 bool FuInsertFile::InsSDDinDrMode(SfxMedium* pMedium)
 {
     bool bOK = false;
+
+    if (mbNonInteractive)
+    {
+        // Insert every page of the file after the current slide, like
+        // pasting slides; the page insertion records its own undo actions.
+        SdPage* pPage = nullptr;
+        if (::sd::View* pView = mrViewShell.GetView())
+            if (SdrPageView* pPV = pView->GetSdrPageView())
+                pPage = static_cast<SdPage*>(pPV->GetPage());
+        sal_uInt16 nPos = 0xFFFF;
+        if (pPage && !pPage->IsMasterPage() && pPage->GetPageKind() == PageKind::Standard)
+            nPos = pPage->GetPageNum() + 2;
+        mrDoc.CloseBookmarkDoc(); // never reuse a cached file of the same name
+        if (mrDoc.OpenBookmarkDoc(pMedium))
+        {
+            std::vector<OUString> aBookmarkList;
+            std::vector<OUString> aExchangeList;
+            if (mpView->GetExchangeList(aExchangeList, aBookmarkList, 0))
+                bOK = mrDoc.InsertFileAsPage(aBookmarkList, &aExchangeList, false, nPos, nullptr);
+        }
+        mrDoc.CloseBookmarkDoc();
+        mpDocSh->SetWaitCursor(false);
+        return bOK;
+    }
 
     mpDocSh->SetWaitCursor( false );
     SdAbstractDialogFactory* pFact = SdAbstractDialogFactory::Create();
