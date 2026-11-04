@@ -3300,6 +3300,11 @@ static OUString GetAutoNumType(SvxNumType nNumberingType, bool bSDot, bool bPBeh
             else
                 return "arabic" + sPrefixSuffix;
         }
+        // PowerPoint 'circled numbers' and Korean/Japanese kanji numbering (Bullets and Numbering dialog)
+        case SVX_NUM_CIRCLE_NUMBER :
+            return u"circleNumDbPlain"_ustr;
+        case SVX_NUM_NUMBER_LOWER_ZH :
+            return bSDot ? u"ea1JpnKorPeriod"_ustr : u"ea1JpnKorPlain"_ustr;
         default:
             break;
     }
