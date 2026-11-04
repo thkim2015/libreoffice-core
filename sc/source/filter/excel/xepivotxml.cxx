@@ -43,6 +43,8 @@
 #include <com/sun/star/sheet/DataPilotFieldOrientation.hpp>
 #include <com/sun/star/sheet/DataPilotFieldSortMode.hpp>
 #include <com/sun/star/sheet/DataPilotFieldSortInfo.hpp>
+#include <com/sun/star/sheet/DataPilotFieldAutoShowInfo.hpp>
+#include <com/sun/star/sheet/DataPilotFieldShowItemsMode.hpp>
 #include <com/sun/star/sheet/DataPilotFieldLayoutMode.hpp>
 #include <com/sun/star/sheet/DataPilotOutputRangeType.hpp>
 #include <com/sun/star/sheet/XDimensionsSupplier.hpp>
@@ -1451,6 +1453,10 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
     // only some of them are used in the pivot table.  The order must be as
     // they appear in the cache.
 
+    // ZetaOffice: top/bottom N item filters (LO AutoShow) collected per field for <filters>
+    struct Top10Filter { size_t mnField; tools::Long mnMeasure; bool mbTop; sal_Int32 mnCount; };
+    std::vector<Top10Filter> aTop10Filters;
+
     pPivotStrm->startElement(XML_pivotFields,
         XML_count, OString::number(static_cast<tools::Long>(aCachedDims.size())));
 
@@ -1712,6 +1718,27 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                 pAttList->add(XML_sortType, pSortInfo->IsAscending ? "ascending" : "descending");
         }
 
+        // ZetaOffice: AutoShow (top/bottom N items by a data field) is Excel's value filter
+        // "Top 10" of type count: measureFilter on the field + <filters> after the style info
+        if (const sheet::DataPilotFieldAutoShowInfo* pAuto = pDim->GetAutoShowInfo();
+            pAuto && pAuto->IsEnabled
+            && (eOrient == sheet::DataPilotFieldOrientation_ROW
+                || eOrient == sheet::DataPilotFieldOrientation_COLUMN))
+        {
+            const OUString aAutoSrc = ScDPUtil::getSourceDimensionName(pAuto->DataField);
+            for (size_t n = 0; n < aDataFields.size(); ++n)
+            {
+                if (ScDPUtil::getSourceDimensionName(aDataFields[n].mpDim->GetName()) == aAutoSrc)
+                {
+                    pAttList->add(XML_measureFilter, ToPsz10(true));
+                    aTop10Filters.push_back({ i, static_cast<tools::Long>(n),
+                        pAuto->ShowItemsMode != sheet::DataPilotFieldShowItemsMode::FROM_BOTTOM,
+                        pAuto->ItemCount });
+                    break;
+                }
+            }
+        }
+
         tools::Long nSubTotalCount = pDim->GetSubTotalsCount();
         std::vector<OString> aSubtotalSequence;
         bool bHasDefaultSubtotal = false;
@@ -1916,6 +1943,30 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                                   XML_showRowHeaders, "1", XML_showColHeaders, "1",
                                   XML_showRowStripes, "0", XML_showColStripes, "0",
                                   XML_showLastColumn, "1");
+    }
+
+    if (!aTop10Filters.empty())
+    {
+        pPivotStrm->startElement(XML_filters, XML_count, OString::number(static_cast<sal_Int32>(aTop10Filters.size())));
+        sal_Int32 nFilterId = 1;
+        for (const Top10Filter& rF : aTop10Filters)
+        {
+            pPivotStrm->startElement(XML_filter, XML_fld, OString::number(static_cast<sal_Int32>(rF.mnField)),
+                                     XML_type, "count", XML_evalOrder, "-1",
+                                     XML_id, OString::number(nFilterId++),
+                                     XML_iMeasureFld, OString::number(rF.mnMeasure));
+            pPivotStrm->startElement(XML_autoFilter, XML_ref, "A1");
+            pPivotStrm->startElement(XML_filterColumn, XML_colId, "0");
+            const OString aCount = OString::number(rF.mnCount);
+            if (rF.mbTop)
+                pPivotStrm->singleElement(XML_top10, XML_val, aCount, XML_filterVal, aCount);
+            else
+                pPivotStrm->singleElement(XML_top10, XML_top, "0", XML_val, aCount, XML_filterVal, aCount);
+            pPivotStrm->endElement(XML_filterColumn);
+            pPivotStrm->endElement(XML_autoFilter);
+            pPivotStrm->endElement(XML_filter);
+        }
+        pPivotStrm->endElement(XML_filters);
     }
 
     OUString aBuf = "../pivotCache/pivotCacheDefinition" +
