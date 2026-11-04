@@ -343,6 +343,16 @@ OUString const* SwAutoCorrDoc::GetPrevPara(bool const bAtNormalPos)
 {
     OUString const* pStr(nullptr);
 
+#ifdef EMSCRIPTEN
+    // weboffice: like MS Word, every paragraph start is a sentence start, so
+    // "Capitalize first letter of every sentence" does not look at whether the
+    // previous paragraph ended with a full stop.
+    (void)bAtNormalPos;
+    if( !m_bUndoIdInitialized )
+        m_bUndoIdInitialized = true;
+    return pStr;
+#else
+
     if( bAtNormalPos || !m_oIndex )
     {
         m_oIndex.emplace(m_rCursor.GetPoint()->GetNode());
@@ -371,6 +381,7 @@ OUString const* SwAutoCorrDoc::GetPrevPara(bool const bAtNormalPos)
         m_bUndoIdInitialized = true;
 
     return pStr;
+#endif
 }
 
 bool SwAutoCorrDoc::ChgAutoCorrWord( sal_Int32& rSttPos, sal_Int32 nEndPos,
