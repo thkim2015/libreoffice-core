@@ -41,6 +41,7 @@
 #include <document.hxx>
 #include <docuno.hxx>
 #include <scextopt.hxx>
+#include <zetacalc.hxx>
 
 namespace oox::xls {
 
@@ -267,6 +268,8 @@ void WorkbookSettings::finalizeImport()
     rtl::Reference< ScModelObj > xCalculatable( getDocument() );
     if( xCalculatable.is() )
         xCalculatable->enableAutomaticCalculation( (maCalcSettings.mnCalcMode == XML_auto) || (maCalcSettings.mnCalcMode == XML_autoNoTable) );
+    // ZetaOffice: keep data tables out of automatic recalculation, as Excel does
+    sc::zeta::SetNoTableAutoCalc(&getScDocument(), maCalcSettings.mnCalcMode == XML_autoNoTable);
 
     // VBA code name
     aPropSet.setProperty( PROP_CodeName, maBookSettings.maCodeName );

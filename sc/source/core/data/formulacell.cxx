@@ -28,6 +28,9 @@
 #include <cstdlib>
 
 #include <formulacell.hxx>
+#include <zetacalc.hxx>
+#include <dociter.hxx>
+#include <set>
 #include <grouptokenconverter.hxx>
 
 #include <compiler.hxx>
@@ -1786,6 +1789,16 @@ bool ScFormulaCell::Interpret(SCROW nStartOffset, SCROW nEndOffset)
 {
     ScRecursionHelper& rRecursionHelper = rDocument.GetRecursionHelper();
     bool bGroupInterpreted = false;
+
+    // ZetaOffice: calcMode autoNoTable - automatic recalculation leaves a data
+    // table cell with its last result (a new cell without a result calculates).
+    if (bDirty && !sc::zeta::IsCalcTables() && sc::zeta::IsNoTableAutoCalc(&rDocument)
+        && !rDocument.IsInInterpreterTableOp() && aResult.GetType() != formula::svUnknown && aResult.GetType() != formula::svEmptyCell
+        && pCode->HasOpCode(ocTableOp))
+    {
+        ResetDirty();
+        return bGroupInterpreted;
+    }
 
     // The result would possibly depend on a cell without a valid value, bail out
     // the entire dependency computation.
@@ -6225,5 +6238,76 @@ void ScFormulaCell::Dump() const
 }
 
 #endif
+
+namespace sc::zeta
+{
+namespace
+{
+std::set<const ScDocument*>& NoTableDocs()
+{
+    static std::set<const ScDocument*> aDocs;
+    return aDocs;
+}
+int nCalcTables = 0;
+}
+
+void SetNoTableAutoCalc(const ScDocument* pDoc, bool bSet)
+{
+    if (bSet)
+        NoTableDocs().insert(pDoc);
+    else
+        NoTableDocs().erase(pDoc);
+}
+
+bool IsNoTableAutoCalc(const ScDocument* pDoc)
+{
+    return !NoTableDocs().empty() && NoTableDocs().count(pDoc) > 0;
+}
+
+bool IsCalcTables() { return nCalcTables > 0; }
+
+CalcTablesGuard::CalcTablesGuard() { ++nCalcTables; }
+
+CalcTablesGuard::~CalcTablesGuard() { --nCalcTables; }
+
+void CalcTables(ScDocument& rDoc)
+{
+    CalcTablesGuard aGuard;
+    std::vector<ScFormulaCell*> aCells;
+    for (SCTAB nTab = 0; nTab < rDoc.GetTableCount(); ++nTab)
+    {
+        ScCellIterator aIter(rDoc, ScRange(0, 0, nTab, rDoc.MaxCol(), rDoc.MaxRow(), nTab));
+        for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+        {
+            if (aIter.getType() != CELLTYPE_FORMULA)
+                continue;
+            ScFormulaCell* pCell = aIter.getFormulaCell();
+            if (pCell->GetCode()->HasOpCode(ocTableOp))
+                aCells.push_back(pCell);
+        }
+    }
+    // SetDirty also marks the dependents, which then recalculate as usual.
+    for (ScFormulaCell* pCell : aCells)
+        pCell->SetDirty();
+    for (ScFormulaCell* pCell : aCells)
+        if (pCell->GetDirty())
+            pCell->Interpret();
+}
+
+void CalcSheet(ScDocument& rDoc, SCTAB nTab)
+{
+    if (nTab < 0 || nTab >= rDoc.GetTableCount())
+        return;
+    CalcTablesGuard aGuard;
+    // InterpretDirtyCells works only with automatic calculation; in manual mode
+    // the cells of other sheets marked dirty here keep their old results.
+    bool bOldAuto = rDoc.GetAutoCalc();
+    rDoc.SetAutoCalc(true);
+    ScRange aRange(0, 0, nTab, rDoc.MaxCol(), rDoc.MaxRow(), nTab);
+    rDoc.SetDirty(aRange, false);
+    rDoc.InterpretDirtyCells(ScRangeList(aRange));
+    rDoc.SetAutoCalc(bOldAuto);
+}
+}
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
