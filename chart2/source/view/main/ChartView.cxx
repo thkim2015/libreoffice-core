@@ -30,6 +30,7 @@
 #include <VDiagram.hxx>
 #include "VTitle.hxx"
 #include "VButton.hxx"
+#include <comphelper/sequence.hxx>
 #include <ShapeFactory.hxx>
 #include <BaseCoordinateSystem.hxx>
 #include <VCoordinateSystem.hxx>
@@ -1748,8 +1749,42 @@ void SAL_CALL ChartView::setPropertyValue( const OUString& rPropertyName
         throw beans::UnknownPropertyException( "unknown property was tried to set to chart wizard " + rPropertyName, nullptr );
 }
 
+namespace
+{
+// Pivot chart field buttons drawn by lcl_createButtons / VLegend: "CID<TAB>X<TAB>Y<TAB>W<TAB>H"
+// in 1/100 mm relative to the chart page (web office overlays clickable filter buttons there)
+void lcl_collectFieldButtons(const SdrObjList* pList, std::vector<OUString>& rOut)
+{
+    if (!pList)
+        return;
+    for (const rtl::Reference<SdrObject>& pObj : *pList)
+    {
+        if (!pObj)
+            continue;
+        if (pObj->GetName().startsWith("FieldButton"))
+        {
+            const tools::Rectangle aRect = pObj->GetLogicRect();
+            rOut.push_back(pObj->GetName() + "\t" + OUString::number(aRect.Left()) + "\t"
+                           + OUString::number(aRect.Top()) + "\t"
+                           + OUString::number(aRect.GetWidth()) + "\t"
+                           + OUString::number(aRect.GetHeight()));
+            continue;
+        }
+        lcl_collectFieldButtons(pObj->GetSubList(), rOut);
+    }
+}
+}
+
 Any SAL_CALL ChartView::getPropertyValue( const OUString& rPropertyName )
 {
+    if( rPropertyName == "ZetaFieldButtons" )
+    {
+        impl_updateView();
+        std::vector<OUString> aOut;
+        if (mxRootShape.is() && mxRootShape->GetSdrObject())
+            lcl_collectFieldButtons(mxRootShape->GetSdrObject()->GetSubList(), aOut);
+        return Any(comphelper::containerToSequence(aOut));
+    }
     if( rPropertyName != "Resolution" )
         throw beans::UnknownPropertyException( "unknown property was tried to get from chart wizard " + rPropertyName, nullptr );
 
