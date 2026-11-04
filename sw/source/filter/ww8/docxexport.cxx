@@ -110,6 +110,17 @@
 #include <unotxdoc.hxx>
 #include <formatflysplit.hxx>
 #include <fmtanchr.hxx>
+#include <fmtcntnt.hxx>
+#include <fmtornt.hxx>
+#include <com/sun/star/text/HoriOrientation.hpp>
+#include <com/sun/star/text/VertOrientation.hpp>
+#include <fmthdft.hxx>
+#include <fmtfld.hxx>
+#include <fldbas.hxx>
+#include <ndhints.hxx>
+#include <txatbase.hxx>
+#include <frameformats.hxx>
+#include <tuple>
 
 using namespace sax_fastparser;
 using namespace ::comphelper;
@@ -318,7 +329,7 @@ bool DocxExport::DisallowInheritingOutlineNumbering( const SwFormat& rFormat )
 }
 
 void DocxExport::WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
-        const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat,
+        const SwFrameFormat& rFormat, const SwFrameFormat& rLeftHeaderFormat, const SwFrameFormat& rLeftFooterFormat, const SwFrameFormat& rFirstPageFormat, const SwFrameFormat& rFirstPageFooterFormat,
         sal_uInt8 nBreakCode, bool bEvenAndOddHeaders )
 {
     m_nHeadersFootersInSection = 1;
@@ -372,7 +383,7 @@ void DocxExport::WriteHeadersFooters( sal_uInt8 nHeadFootFlags,
         WriteHeaderFooter(nullptr, false, "default");
 
     if ( nHeadFootFlags & nsHdFtFlags::WW8_FOOTER_FIRST )
-        WriteHeaderFooter( &rFirstPageFormat, false, "first" );
+        WriteHeaderFooter( &rFirstPageFooterFormat, false, "first" );
     else if (bPrevSectionHadFooter && nBreakCode == 2)
         WriteHeaderFooter(nullptr, false, "first");
 
@@ -1019,8 +1030,209 @@ void DocxExport::WriteNumbering()
     pNumberingFS->endDocument();
 }
 
+namespace
+{
+bool lcl_SameHeaderFooterContent(const SwDoc& rDoc, const SwFrameFormat& rA,
+                                 const SwFrameFormat& rB, int nDepth);
+
+/// Frames anchored inside the two node ranges are pairwise the same (conservative).
+bool lcl_SameAnchoredFrames(const SwDoc& rDoc, SwNodeOffset nStartA, SwNodeOffset nEndA,
+                            SwNodeOffset nStartB, SwNodeOffset nEndB, int nDepth)
+{
+    using Entry = std::tuple<SwNodeOffset, sal_Int32, const SwFrameFormat*>;
+    auto collect = [&rDoc](SwNodeOffset nStart, SwNodeOffset nEnd) {
+        std::vector<Entry> aRet;
+        for (const sw::SpzFrameFormat* pFrame : *rDoc.GetSpzFrameFormats())
+        {
+            const SwFormatAnchor& rAnchor = pFrame->GetAnchor();
+            const SwNode* pNode = rAnchor.GetAnchorNode();
+            if (!pNode || pNode->GetIndex() <= nStart || pNode->GetIndex() >= nEnd)
+                continue;
+            aRet.emplace_back(pNode->GetIndex() - nStart, rAnchor.GetAnchorContentOffset(), pFrame);
+        }
+        std::sort(aRet.begin(), aRet.end(), [](const Entry& a, const Entry& b) {
+            return std::make_pair(std::get<0>(a), std::get<1>(a))
+                   < std::make_pair(std::get<0>(b), std::get<1>(b));
+        });
+        return aRet;
+    };
+    const std::vector<Entry> aA = collect(nStartA, nEndA);
+    const std::vector<Entry> aB = collect(nStartB, nEndB);
+    if (aA.size() != aB.size())
+        return false;
+    for (size_t i = 0; i < aA.size(); ++i)
+    {
+        const SwFrameFormat& rFA = *std::get<2>(aA[i]);
+        const SwFrameFormat& rFB = *std::get<2>(aB[i]);
+        if (std::get<0>(aA[i]) != std::get<0>(aB[i]) || std::get<1>(aA[i]) != std::get<1>(aB[i]))
+            return false;
+        // drawing objects are not compared: keep the reference
+        if (rFA.Which() != RES_FLYFRMFMT || rFB.Which() != RES_FLYFRMFMT)
+            return false;
+        if (rFA.GetAnchor().GetAnchorId() != rFB.GetAnchor().GetAnchorId())
+            return false;
+        SfxItemSet aSetA(rFA.GetAttrSet());
+        SfxItemSet aSetB(rFB.GetAttrSet());
+        for (sal_uInt16 nWhich : { sal_uInt16(RES_ANCHOR), sal_uInt16(RES_CNTNT), sal_uInt16(RES_CHAIN) })
+        {
+            aSetA.ClearItem(nWhich);
+            aSetB.ClearItem(nWhich);
+        }
+        // An aligned (e.g. centered) frame keeps the position computed by the layout, which
+        // differs between pages of different width: only the alignment matters then.
+        const SwFormatHoriOrient& rHA = rFA.GetHoriOrient();
+        const SwFormatHoriOrient& rHB = rFB.GetHoriOrient();
+        if (rHA.GetHoriOrient() != text::HoriOrientation::NONE
+            && rHA.GetHoriOrient() == rHB.GetHoriOrient()
+            && rHA.GetRelationOrient() == rHB.GetRelationOrient()
+            && rHA.IsPosToggle() == rHB.IsPosToggle())
+        {
+            aSetA.ClearItem(RES_HORI_ORIENT);
+            aSetB.ClearItem(RES_HORI_ORIENT);
+        }
+        const SwFormatVertOrient& rVA = rFA.GetVertOrient();
+        const SwFormatVertOrient& rVB = rFB.GetVertOrient();
+        if (rVA.GetVertOrient() != text::VertOrientation::NONE
+            && rVA.GetVertOrient() == rVB.GetVertOrient()
+            && rVA.GetRelationOrient() == rVB.GetRelationOrient())
+        {
+            aSetA.ClearItem(RES_VERT_ORIENT);
+            aSetB.ClearItem(RES_VERT_ORIENT);
+        }
+        if (!(aSetA == aSetB))
+            return false;
+        if (!lcl_SameHeaderFooterContent(rDoc, rFA, rFB, nDepth + 1))
+            return false;
+    }
+    return true;
+}
+
+/// Two header/footer (or fly) formats have the same text, attributes and frames.
+bool lcl_SameHeaderFooterContent(const SwDoc& rDoc, const SwFrameFormat& rA,
+                                 const SwFrameFormat& rB, int nDepth)
+{
+    if (&rA == &rB)
+        return true;
+    if (nDepth > 3)
+        return false;
+    const SwNodeIndex* pIdxA = rA.GetContent().GetContentIdx();
+    const SwNodeIndex* pIdxB = rB.GetContent().GetContentIdx();
+    if (!pIdxA || !pIdxB)
+        return false;
+    const SwNodeOffset nStartA = pIdxA->GetIndex();
+    const SwNodeOffset nStartB = pIdxB->GetIndex();
+    const SwNodeOffset nEndA = pIdxA->GetNode().EndOfSectionIndex();
+    const SwNodeOffset nEndB = pIdxB->GetNode().EndOfSectionIndex();
+    if (nEndA - nStartA != nEndB - nStartB)
+        return false;
+    const SwNodes& rNodes = rDoc.GetNodes();
+    for (SwNodeOffset i(1); i < nEndA - nStartA; ++i)
+    {
+        const SwTextNode* pA = rNodes[nStartA + i]->GetTextNode();
+        const SwTextNode* pB = rNodes[nStartB + i]->GetTextNode();
+        // tables, sections and other nodes are not compared: keep the reference
+        if (!pA || !pB)
+            return false;
+        if (pA->GetText() != pB->GetText() || pA->GetTextColl() != pB->GetTextColl())
+            return false;
+        const SwAttrSet* pSetA = pA->GetpSwAttrSet();
+        const SwAttrSet* pSetB = pB->GetpSwAttrSet();
+        if (bool(pSetA) != bool(pSetB) || (pSetA && !(*pSetA == *pSetB)))
+            return false;
+        const SwpHints* pHintsA = pA->GetpSwpHints();
+        const SwpHints* pHintsB = pB->GetpSwpHints();
+        const size_t nHints = pHintsA ? pHintsA->Count() : 0;
+        if (nHints != (pHintsB ? pHintsB->Count() : 0))
+            return false;
+        for (size_t j = 0; j < nHints; ++j)
+        {
+            const SwTextAttr* pHA = pHintsA->Get(j);
+            const SwTextAttr* pHB = pHintsB->Get(j);
+            if (pHA->Which() != pHB->Which() || pHA->GetStart() != pHB->GetStart()
+                || bool(pHA->End()) != bool(pHB->End()) || (pHA->End() && *pHA->End() != *pHB->End()))
+                return false;
+            if (pHA->Which() == RES_TXTATR_FIELD || pHA->Which() == RES_TXTATR_INPUTFIELD)
+            {
+                // SwFormatField::operator== only compares the field type
+                const SwField* pFA = pHA->GetFormatField().GetField();
+                const SwField* pFB = pHB->GetFormatField().GetField();
+                if (!pFA || !pFB || pFA->GetTyp() != pFB->GetTyp()
+                    || pFA->GetUntypedFormat() != pFB->GetUntypedFormat()
+                    || pFA->GetUntypedSubType() != pFB->GetUntypedSubType()
+                    || pFA->GetPar1() != pFB->GetPar1() || pFA->GetPar2() != pFB->GetPar2())
+                    return false;
+                // the result of page dependent fields differs between the copies
+                const SwFieldIds nId = pFA->GetTyp()->Which();
+                const bool bPageDependent = nId == SwFieldIds::PageNumber
+                    || nId == SwFieldIds::DocStat || nId == SwFieldIds::Chapter
+                    || nId == SwFieldIds::RefPageGet || nId == SwFieldIds::GetRef;
+                if (!bPageDependent
+                    && pFA->ExpandField(true, nullptr) != pFB->ExpandField(true, nullptr))
+                    return false;
+            }
+            else if (!(pHA->GetAttr() == pHB->GetAttr()))
+                return false;
+        }
+    }
+    return lcl_SameAnchoredFrames(rDoc, nStartA, nEndA, nStartB, nEndB, nDepth);
+}
+}
+
+namespace
+{
+bool lcl_IsEmptyHeaderFooter(const SwDoc& rDoc, const SwFrameFormat& rFormat)
+{
+    const SwNodeIndex* pIdx = rFormat.GetContent().GetContentIdx();
+    if (!pIdx)
+        return true;
+    const SwNodeOffset nStart = pIdx->GetIndex();
+    const SwNodeOffset nEnd = pIdx->GetNode().EndOfSectionIndex();
+    if (nEnd - nStart != SwNodeOffset(2))
+        return false;
+    const SwTextNode* pText = rDoc.GetNodes()[nStart + 1]->GetTextNode();
+    if (!pText || !pText->GetText().isEmpty())
+        return false;
+    for (const sw::SpzFrameFormat* pFrame : *rDoc.GetSpzFrameFormats())
+    {
+        const SwNode* pNode = pFrame->GetAnchor().GetAnchorNode();
+        if (pNode && pNode->GetIndex() == nStart + 1)
+            return false;
+    }
+    return true;
+}
+}
+
 void DocxExport::WriteHeaderFooter( const SwFormat* pFormat, bool bHeader, const char* pType )
 {
+    // Word lets a section without a header/footer reference of some type inherit the one of the
+    // previous section. The import copies such linked headers/footers into every page style, so
+    // write a part only when it differs from the one the previous section left for that type.
+    const std::pair<bool, OString> aLastKey(bHeader, OString(pType));
+    const SwFrameFormat* pContentFormat = nullptr;
+    if (pFormat)
+        pContentFormat = bHeader ? pFormat->GetHeader().GetHeaderFormat()
+                                 : pFormat->GetFooter().GetFooterFormat();
+    // An empty part written only to stop inheriting the previous section's one is not
+    // needed when that one is empty as well (or there is none).
+    if (!pFormat)
+    {
+        auto it = m_aLastHeaderFooterContent.find(aLastKey);
+        if (it == m_aLastHeaderFooterContent.end() || !it->second
+            || lcl_IsEmptyHeaderFooter(m_rDoc, *it->second))
+            return;
+    }
+    if (auto it = m_aLastHeaderFooterContent.find(aLastKey);
+        pContentFormat && it != m_aLastHeaderFooterContent.end() && it->second
+        && lcl_SameHeaderFooterContent(m_rDoc, *it->second, *pContentFormat, 0))
+    {
+        if (bHeader)
+            m_bHasHdr = true;
+        else
+            m_bHasFtr = true;
+        return;
+    }
+    m_aLastHeaderFooterContent[aLastKey] = pContentFormat;
+
     // setup the xml stream
     OUString aRelId;
     ::sax_fastparser::FSHelperPtr pFS;

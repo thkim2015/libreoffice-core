@@ -97,7 +97,8 @@ public:
     void WriteHeadersFooters(sal_uInt8 nHeadFootFlags, const SwFrameFormat& rFormat,
                              const SwFrameFormat& rLeftHeaderFormat,
                              const SwFrameFormat& rLeftFooterFormat,
-                             const SwFrameFormat& rFirstPageFormat, sal_uInt8 nBreakCode,
+                             const SwFrameFormat& rFirstPageFormat,
+                             const SwFrameFormat& rFirstPageFooterFormat, sal_uInt8 nBreakCode,
                              bool bEvenAndOddHeaders) override;
 
     /// Write the field
