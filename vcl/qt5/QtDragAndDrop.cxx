@@ -190,7 +190,9 @@ public:
                 finish(bSuccess ? toVclDropAction(aEvent.dropAction())
                                 : css::datatransfer::dnd::DNDConstants::ACTION_NONE,
                        bSuccess);
-                return true;
+                // let vcl see the release too: otherwise its mouse-down state stays
+                // and the next press on a selection selects instead of dragging
+                return false;
             }
             case QEvent::MouseButtonPress:
             case QEvent::MouseButtonDblClick:
