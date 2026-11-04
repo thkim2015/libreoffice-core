@@ -362,6 +362,18 @@ class PivotCache : public WorkbookHelper
 public:
     explicit            PivotCache( const WorkbookHelper& rHelper );
 
+    /** ZetaOffice: calculated items (calculatedItems): Excel formula, field and its item index. */
+    struct ZetaCalcItem
+    {
+        OUString maFormula;
+        sal_Int32 mnField = -1;
+        sal_Int32 mnItem = -1;
+    };
+    void zetaStartCalcItem( const OUString& rFormula ) { maZetaCalcItems.push_back( ZetaCalcItem{ rFormula, -1, -1 } ); }
+    void zetaCalcItemField( sal_Int32 nField ) { if( !maZetaCalcItems.empty() ) maZetaCalcItems.back().mnField = nField; }
+    void zetaCalcItemIndex( sal_Int32 nItem ) { if( !maZetaCalcItems.empty() && maZetaCalcItems.back().mnItem < 0 ) maZetaCalcItems.back().mnItem = nItem; }
+    const std::vector< ZetaCalcItem >& zetaGetCalcItems() const { return maZetaCalcItems; }
+
     /** Reads pivot cache global settings from the pivotCacheDefinition element. */
     void                importPivotCacheDefinition( const AttributeList& rAttribs );
     /** Reads cache source settings from the cacheSource element. */
@@ -437,6 +449,7 @@ private:
     mutable sal_Int32   mnCurrRow;          /// Current row index in dummy sheet.
     bool                mbValidSource;      /// True = pivot cache is based on supported data source.
     bool                mbDummySheet;       /// True = pivot cache is based on a dummy sheet.
+    std::vector< ZetaCalcItem > maZetaCalcItems;
 };
 
 class PivotCacheBuffer : public WorkbookHelper

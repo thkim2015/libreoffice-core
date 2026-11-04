@@ -654,6 +654,28 @@ void ScDPDimensionSaveData::WriteToData( ScDPGroupTableData& rData ) const
 
     for( const auto& rEntry : maNumGroupDims )
         rEntry.second.AddToData( rData );
+
+    // ZetaOffice: calculated items
+    for (const auto& [rDimName, rItems] : maZetaCalcItems)
+    {
+        sal_Int32 nDim = rData.GetDimensionIndex(rDimName);
+        if (nDim >= 0)
+            rData.ZetaSetCalcItems(nDim, rItems);
+    }
+}
+
+void ScDPDimensionSaveData::ZetaSetCalcItems(const OUString& rBaseDimName, const ZetaCalcItemList& rItems)
+{
+    if (rItems.empty())
+        maZetaCalcItems.erase(rBaseDimName);
+    else
+        maZetaCalcItems[rBaseDimName] = rItems;
+}
+
+const ScDPDimensionSaveData::ZetaCalcItemList* ScDPDimensionSaveData::ZetaGetCalcItems(const OUString& rBaseDimName) const
+{
+    auto it = maZetaCalcItems.find(rBaseDimName);
+    return it == maZetaCalcItems.end() ? nullptr : &it->second;
 }
 
 void ScDPDimensionSaveData::WriteToCache(ScDPCache& rCache) const
@@ -662,6 +684,15 @@ void ScDPDimensionSaveData::WriteToCache(ScDPCache& rCache) const
         rEntry.AddToCache(rCache);
     for (const auto& rEntry : maNumGroupDims)
         rEntry.second.AddToCache(rCache);
+    // ZetaOffice: calculated items after the group items of the field
+    for (const auto& [rDimName, rItems] : maZetaCalcItems)
+    {
+        tools::Long nDim = rCache.GetDimensionIndex(rDimName);
+        if (nDim < 0)
+            continue;
+        for (const auto& rItem : rItems)
+            rCache.ZetaAddCalcItem(nDim, rItem.first);
+    }
 }
 
 const ScDPSaveGroupDimension* ScDPDimensionSaveData::GetGroupDimForBase( const OUString& rBaseDimName ) const

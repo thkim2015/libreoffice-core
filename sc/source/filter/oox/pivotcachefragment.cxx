@@ -20,6 +20,7 @@
 #include <pivotcachefragment.hxx>
 
 #include <osl/diagnose.h>
+#include <oox/helper/attributelist.hxx>
 #include <oox/token/namespaces.hxx>
 #include <biffhelper.hxx>
 #include <formulabuffer.hxx>
@@ -126,7 +127,25 @@ ContextHandlerRef PivotCacheDefinitionFragment::onCreateContext( sal_Int32 nElem
             {
                 case XLS_TOKEN( cacheSource ):  mrPivotCache.importCacheSource( rAttribs ); return this;
                 case XLS_TOKEN( cacheFields ):  return this;
+                // ZetaOffice: calculated items
+                case XLS_TOKEN( calculatedItems ): return this;
             }
+        break;
+
+        case XLS_TOKEN( calculatedItems ):
+            if( nElement == XLS_TOKEN( calculatedItem ) ) { mrPivotCache.zetaStartCalcItem( rAttribs.getXString( XML_formula, OUString() ) ); return this; }
+        break;
+        case XLS_TOKEN( calculatedItem ):
+            if( nElement == XLS_TOKEN( pivotArea ) ) return this;
+        break;
+        case XLS_TOKEN( pivotArea ):
+            if( nElement == XLS_TOKEN( references ) ) return this;
+        break;
+        case XLS_TOKEN( references ):
+            if( nElement == XLS_TOKEN( reference ) ) { mrPivotCache.zetaCalcItemField( rAttribs.getInteger( XML_field, -1 ) ); return this; }
+        break;
+        case XLS_TOKEN( reference ):
+            if( nElement == XLS_TOKEN( x ) ) mrPivotCache.zetaCalcItemIndex( rAttribs.getInteger( XML_v, 0 ) );
         break;
 
         case XLS_TOKEN( cacheSource ):

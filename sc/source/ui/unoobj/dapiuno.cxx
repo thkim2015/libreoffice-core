@@ -41,6 +41,7 @@
 #include <dbfunc.hxx>
 #include <unonames.hxx>
 #include <dpdimsave.hxx>
+#include <dpgroup.hxx>
 #include <dpcache.hxx>
 #include <dptabdat.hxx>
 #include <dpfilteredcache.hxx>
@@ -1962,6 +1963,29 @@ void SAL_CALL ScDataPilotFieldObj::setPropertyValue( const OUString& aPropertyNa
         return;
     }
     // zeta: set the hidden items (all other items visible) with a single table update
+    // ZetaOffice: calculated items of the field { name, formula, ... } (Excel CalculatedItems)
+    if ( aPropertyName == "ZetaCalculatedItems" )
+    {
+        Sequence< OUString > aList;
+        ScDPObject* pDPObj = nullptr;
+        ScDPSaveDimension* pDim = ( (aValue >>= aList) && aList.getLength() % 2 == 0 ) ? GetDPDimension( &pDPObj ) : nullptr;
+        if ( !pDim || pDim->IsDataLayout() )
+            throw IllegalArgumentException();
+        ScDPDimensionSaveData::ZetaCalcItemList aItems;
+        for ( sal_Int32 i = 0; i + 1 < aList.getLength(); i += 2 )
+        {
+            std::vector<std::pair<OUString, double>> aTerms;
+            if ( aList[i].isEmpty() || !ScDPGroupTableData::ZetaParseCalcFormula( aList[i + 1], pDim->GetName(), aTerms ) )
+                throw IllegalArgumentException( u"formula:"_ustr + aList[i], getXWeak(), 0 );
+            aItems.emplace_back( aList[i], aList[i + 1] );
+        }
+        ScDPSaveData* pSaveData = pDPObj->GetSaveData();
+        pSaveData->GetDimensionData()->ZetaSetCalcItems( pDim->GetName(), aItems );
+        // like the groups: the items go into the cache, then the tables using it are made again
+        pDPObj->SetSaveData( *pSaveData );
+        ScDBDocFunc(*GetDocShell()).RefreshPivotTableGroups( pDPObj );
+        return;
+    }
     if ( aPropertyName == "ZetaHiddenItems" )
     {
         Sequence< OUString > aNames;
@@ -2227,6 +2251,20 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
         aRet <<= getName();
     else if ( aPropertyName == "ZetaHideDetails" || aPropertyName == "ZetaShowDetails" )
         aRet <<= Sequence< OUString >(); // lets clients detect the batch setter
+    else if ( aPropertyName == "ZetaCalculatedItems" )
+    {
+        std::vector< OUString > aOut;
+        ScDPObject* pDPObj = nullptr;
+        if ( ScDPSaveDimension* pDim = GetDPDimension( &pDPObj ) )
+            if ( const ScDPDimensionSaveData* pDimData = pDPObj->GetSaveData()->GetExistingDimensionData() )
+                if ( const auto* pItems = pDimData->ZetaGetCalcItems( pDim->GetName() ) )
+                    for ( const auto& rItem : *pItems )
+                    {
+                        aOut.push_back( rItem.first );
+                        aOut.push_back( rItem.second );
+                    }
+        aRet <<= comphelper::containerToSequence( aOut );
+    }
     else if ( aPropertyName == "ZetaHiddenItems" )
     {
         std::vector< OUString > aOut;

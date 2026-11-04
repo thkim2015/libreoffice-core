@@ -19,6 +19,7 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <unordered_set>
 #include <vector>
@@ -122,6 +123,20 @@ class ScDPGroupTableData final : public ScDPTableData
                             pNumGroups;     // array[nSourceCount]
     ScDocument*             pDoc;
 
+    // ZetaOffice: calculated items of source dimensions
+    struct ZetaCalcItem
+    {
+        OUString aName;
+        OUString aFormula;
+        SCROW nId = -1;
+        std::vector<std::pair<SCROW, double>> aTerms;   // resolved linear terms
+    };
+    std::map<sal_Int32, std::vector<ZetaCalcItem>> maZetaCalcItems;
+    std::map<sal_Int32, std::vector<SCROW>> maZetaEntries;
+    bool mbZetaCalcResolved = false;
+    void ZetaResolveCalcItems();
+    void ZetaProcessCalcRows(CalcInfo& rInfo, CalcRowData& rData, bool bAutoShow, size_t nLevel);
+
     void FillGroupValues(std::vector<SCROW>& rItems, const std::vector<sal_Int32>& rDims);
     virtual sal_Int32                GetSourceDim( sal_Int32 nDim ) override;
 
@@ -143,6 +158,15 @@ public:
 
     void        AddGroupDimension( const ScDPGroupDimension& rGroup );
     void        SetNumGroupDimension( sal_Int32 nIndex, const ScDPNumGroupDimension& rGroup );
+    /// ZetaOffice: calculated items { name, formula } of a source dimension
+    void        ZetaSetCalcItems( sal_Int32 nDim, const std::vector<std::pair<OUString, OUString>>& rItems );
+    bool        ZetaIsCalcItem( sal_Int32 nDim, SCROW nId ) const;
+    /** ZetaOffice: parse a calculated item formula (=East+West, =South*2, ='a b'*0.5, =Region[East])
+        into item name terms. Only linear formulas without a constant part are taken. */
+    SC_DLLPUBLIC static bool ZetaParseCalcFormula( const OUString& rFormula, const OUString& rFieldName,
+                                      std::vector<std::pair<OUString, double>>& rTerms );
+    /// ZetaOffice: the formula as Excel stores it - no '=', items as Field[Item]
+    SC_DLLPUBLIC static OUString ZetaCalcFormulaToExcel( const OUString& rFormula, const OUString& rFieldName );
     sal_Int32        GetDimensionIndex( std::u16string_view rName );
 
     virtual sal_Int32                    GetColumnCount() override;

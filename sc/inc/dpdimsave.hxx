@@ -206,6 +206,13 @@ public:
 
     SC_DLLPUBLIC bool HasGroupDimensions() const;
 
+    /// ZetaOffice: calculated items of a source field, { name, formula } (Excel CalculatedItems)
+    typedef std::vector<std::pair<OUString, OUString>> ZetaCalcItemList;
+    SC_DLLPUBLIC void ZetaSetCalcItems(const OUString& rBaseDimName, const ZetaCalcItemList& rItems);
+    SC_DLLPUBLIC const ZetaCalcItemList* ZetaGetCalcItems(const OUString& rBaseDimName) const;
+    SC_DLLPUBLIC bool ZetaHasCalcItems() const { return !maZetaCalcItems.empty(); }
+    const std::map<OUString, ZetaCalcItemList>& ZetaGetAllCalcItems() const { return maZetaCalcItems; }
+
     sal_Int32 CollectDateParts( const OUString& rBaseDimName ) const;
 
     const ::std::vector< ScDPSaveGroupDimension >& GetGroupDimensions() const { return maGroupDims; }
@@ -218,6 +225,7 @@ private:
 
     ScDPSaveGroupDimVec maGroupDims;
     ScDPSaveNumGroupDimMap maNumGroupDims;
+    std::map<OUString, ZetaCalcItemList> maZetaCalcItems;
 };
 
 /**

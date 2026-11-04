@@ -15,6 +15,8 @@
 #include <dpitemdata.hxx>
 #include <dpobject.hxx>
 #include <dpsave.hxx>
+#include <dpgroup.hxx>
+#include <tuple>
 #include <dptabdat.hxx>
 #include <dpfilteredcache.hxx>
 #include <dputil.hxx>
@@ -434,6 +436,21 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
         pDefStrm->endElement(XML_fieldGroup);
     };
 
+    // ZetaOffice: calculated items (Excel: per cache) from the first table that has them
+    auto zetaCalcItemsOf = [&rCache](const OUString& rFieldName) -> const ScDPDimensionSaveData::ZetaCalcItemList*
+    {
+        for (ScDPObject* pRef : rCache.GetAllReferences())
+        {
+            const ScDPSaveData* pSave = pRef ? pRef->GetSaveData() : nullptr;
+            const ScDPDimensionSaveData* pDimData = pSave ? pSave->GetExistingDimensionData() : nullptr;
+            if (const auto* pList = pDimData ? pDimData->ZetaGetCalcItems(rFieldName) : nullptr)
+                return pList;
+        }
+        return nullptr;
+    };
+    // (field, index in its shared items, Excel formula)
+    std::vector<std::tuple<size_t, size_t, OUString>> aZetaCalcItems;
+
     for (size_t i = 0; i < nCount; ++i)
     {
         OUString aName = rCache.GetDimensionName(i);
@@ -443,6 +460,7 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
             XML_numFmtId, OString::number(0));
 
         const ScDPCache::ScDPItemDataVec& rFieldItems = rCache.GetDimMemberValues(i);
+        const ScDPDimensionSaveData::ZetaCalcItemList* pZetaCalc = zetaCalcItemsOf(aName);
 
         std::set<ScDPItemData::Type> aDPTypes;
         double fMin = std::numeric_limits<double>::infinity(), fMax = -std::numeric_limits<double>::infinity();
@@ -550,7 +568,7 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
 
         //if (bListItems) // see TODO above
         {
-            pAttList->add(XML_count, OString::number(static_cast<tools::Long>(rFieldItems.size())));
+            pAttList->add(XML_count, OString::number(static_cast<tools::Long>(rFieldItems.size() + (pZetaCalc ? pZetaCalc->size() : 0))));
         }
 
         if (isLongText)
@@ -598,6 +616,16 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
                     break;
                     default:
                         ;
+                }
+            }
+            // ZetaOffice: calculated items come last, marked f="1" (Excel)
+            if (pZetaCalc)
+            {
+                for (size_t k = 0; k < pZetaCalc->size(); ++k)
+                {
+                    pDefStrm->singleElement(XML_s, XML_v, (*pZetaCalc)[k].first.toUtf8(), XML_f, ToPsz10(true));
+                    aZetaCalcItems.emplace_back(i, rFieldItems.size() + k,
+                        ScDPGroupTableData::ZetaCalcFormulaToExcel((*pZetaCalc)[k].second, aName));
                 }
             }
         }
@@ -748,6 +776,26 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
     }
 
     pDefStrm->endElement(XML_cacheFields);
+
+    // ZetaOffice: <calculatedItems> - formula and the item it makes (Excel)
+    if (!aZetaCalcItems.empty())
+    {
+        pDefStrm->startElement(XML_calculatedItems, XML_count, OString::number(aZetaCalcItems.size()));
+        for (const auto& [nField, nItem, aFormula] : aZetaCalcItems)
+        {
+            pDefStrm->startElement(XML_calculatedItem, XML_formula, aFormula.toUtf8());
+            pDefStrm->startElement(XML_pivotArea, XML_cacheIndex, ToPsz10(true), XML_outline, ToPsz10(false),
+                                   XML_fieldPosition, "0");
+            pDefStrm->startElement(XML_references, XML_count, "1");
+            pDefStrm->startElement(XML_reference, XML_field, OString::number(nField), XML_count, "1");
+            pDefStrm->singleElement(XML_x, XML_v, OString::number(nItem));
+            pDefStrm->endElement(XML_reference);
+            pDefStrm->endElement(XML_references);
+            pDefStrm->endElement(XML_pivotArea);
+            pDefStrm->endElement(XML_calculatedItem);
+        }
+        pDefStrm->endElement(XML_calculatedItems);
+    }
 
     pDefStrm->endElement(XML_pivotCacheDefinition);
 }
@@ -1551,6 +1599,23 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         {
             aCacheFieldItems = SortGroupItems(rCache, i);
         }
+        // ZetaOffice: calculated items (the cache writes them after the source items)
+        const size_t nZetaCalcStart = aCacheFieldItems.size();
+        if (i < rCache.GetFieldCount() && !rCache.GetGroupType(i))
+        {
+            const OUString aCacheName = rCache.GetDimensionName(i);
+            for (ScDPObject* pRef : rCache.GetAllReferences())
+            {
+                const ScDPSaveData* pSave = pRef ? pRef->GetSaveData() : nullptr;
+                const ScDPDimensionSaveData* pDimData = pSave ? pSave->GetExistingDimensionData() : nullptr;
+                if (const auto* pList = pDimData ? pDimData->ZetaGetCalcItems(aCacheName) : nullptr)
+                {
+                    for (const auto& rItem : *pList)
+                        aCacheFieldItems.push_back(rItem.first);
+                    break;
+                }
+            }
+        }
 
         if (eOrient == sheet::DataPilotFieldOrientation_ROW)
             aRowMemberResultData.initLookupFor(pDim->GetName());
@@ -1660,6 +1725,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                     pItemAttList->add(XML_n, itCaption->second.toUtf8());
                 if (nMember.second)
                     pItemAttList->add(XML_h, ToPsz10(true));
+                if (nMember.first >= nZetaCalcStart)
+                    pItemAttList->add(XML_f, ToPsz10(true));
                 pItemAttList->add(XML_x, OString::number(static_cast<tools::Long>(nMember.first)));
                 pPivotStrm->singleElement(XML_item, pItemAttList);
             }

@@ -1026,15 +1026,19 @@ const ScDPItemData* ScDPCache::GetItemDataById(tools::Long nDim, SCROW nId) cons
         if (nItemId < rField.maItems.size())
             return &rField.maItems[nItemId];
 
-        if (!rField.mpGroup)
-            return nullptr;
-
         nItemId -= rField.maItems.size();
-        const ScDPItemDataVec& rGI = rField.mpGroup->maItems;
-        if (nItemId >= rGI.size())
-            return nullptr;
+        if (rField.mpGroup)
+        {
+            const ScDPItemDataVec& rGI = rField.mpGroup->maItems;
+            if (nItemId < rGI.size())
+                return &rGI[nItemId];
+            nItemId -= rGI.size();
+        }
 
-        return &rGI[nItemId];
+        // ZetaOffice: calculated items
+        if (nItemId < rField.maZetaCalcItems.size())
+            return &rField.maZetaCalcItems[nItemId];
+        return nullptr;
     }
 
     // Try group fields.
@@ -1184,15 +1188,25 @@ SCROW ScDPCache::GetIdByItemData(tools::Long nDim, const ScDPItemData& rItem) co
                 return i;
         }
 
-        if (!maFields[nDim]->mpGroup)
-            return -1;
-
-        // grouped source field.
-        const ScDPItemDataVec& rGI = maFields[nDim]->mpGroup->maItems;
-        for (size_t i = 0, n = rGI.size(); i < n; ++i)
+        size_t nGroupCount = 0;
+        if (maFields[nDim]->mpGroup)
         {
-            if (rGI[i] == rItem)
-                return rItems.size() + i;
+            // grouped source field.
+            const ScDPItemDataVec& rGI = maFields[nDim]->mpGroup->maItems;
+            for (size_t i = 0, n = rGI.size(); i < n; ++i)
+            {
+                if (rGI[i] == rItem)
+                    return rItems.size() + i;
+            }
+            nGroupCount = rGI.size();
+        }
+
+        // ZetaOffice: calculated items
+        const ScDPItemDataVec& rCI = maFields[nDim]->maZetaCalcItems;
+        for (size_t i = 0, n = rCI.size(); i < n; ++i)
+        {
+            if (rCI[i] == rItem)
+                return rItems.size() + nGroupCount + i;
         }
         return -1;
     }
@@ -1492,6 +1506,32 @@ struct ClearGroupItems
 void ScDPCache::ClearGroupFields()
 {
     maGroupFields.clear();
+    // ZetaOffice: calculated items are written again with the groups
+    for (auto& rField : maFields)
+        rField->maZetaCalcItems.clear();
+}
+
+SCROW ScDPCache::ZetaAddCalcItem(tools::Long nDim, const OUString& rName)
+{
+    if (nDim < 0 || nDim >= static_cast<tools::Long>(maFields.size()))
+        return -1;
+    Field& rField = *maFields[nDim];
+    const SCROW nBase = rField.maItems.size() + (rField.mpGroup ? rField.mpGroup->maItems.size() : 0);
+    ScDPItemData aItem(rName);
+    for (size_t i = 0; i < rField.maZetaCalcItems.size(); ++i)
+        if (rField.maZetaCalcItems[i] == aItem)
+            return nBase + i;
+    rField.maZetaCalcItems.push_back(aItem);
+    return nBase + rField.maZetaCalcItems.size() - 1;
+}
+
+bool ScDPCache::ZetaIsCalcItem(tools::Long nDim, SCROW nId) const
+{
+    if (nDim < 0 || nDim >= static_cast<tools::Long>(maFields.size()) || nId < 0)
+        return false;
+    const Field& rField = *maFields[nDim];
+    const size_t nBase = rField.maItems.size() + (rField.mpGroup ? rField.mpGroup->maItems.size() : 0);
+    return static_cast<size_t>(nId) >= nBase && static_cast<size_t>(nId) < nBase + rField.maZetaCalcItems.size();
 }
 
 void ScDPCache::ClearAllFields()

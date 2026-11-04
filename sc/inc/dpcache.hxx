@@ -87,6 +87,11 @@ public:
         std::unique_ptr<GroupItems> mpGroup;
 
         /**
+         * ZetaOffice: calculated items (Excel), after the group items.
+         */
+        ScDPItemDataVec maZetaCalcItems;
+
+        /**
          * Unique values in the field, stored in ascending order.
          */
         ScDPItemDataVec maItems;
@@ -171,6 +176,9 @@ public:
     SCROW SetGroupItem(tools::Long nDim, const ScDPItemData& rData);
     SC_DLLPUBLIC void GetGroupDimMemberIds(tools::Long nDim, std::vector<SCROW>& rIds) const;
     void ClearGroupFields();
+    /// ZetaOffice: add a calculated item to a source field, return its id
+    SCROW ZetaAddCalcItem(tools::Long nDim, const OUString& rName);
+    SC_DLLPUBLIC bool ZetaIsCalcItem(tools::Long nDim, SCROW nId) const;
     void ClearAllFields();
     SC_DLLPUBLIC const ScDPNumGroupInfo* GetNumGroupInfo(tools::Long nDim) const;
 

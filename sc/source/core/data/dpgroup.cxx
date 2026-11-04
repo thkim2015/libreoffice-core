@@ -27,6 +27,7 @@
 
 #include <osl/diagnose.h>
 #include <rtl/math.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <svl/numformat.hxx>
 
 #include <com/sun/star/sheet/DataPilotFieldGroupBy.hpp>
@@ -534,8 +535,473 @@ sal_Int32  ScDPGroupTableData::GetMembersCount( sal_Int32 nDim )
     const std::vector< SCROW >&  members = GetColumnEntries( nDim );
     return members.size();
 }
+void ScDPGroupTableData::ZetaSetCalcItems( sal_Int32 nDim, const std::vector<std::pair<OUString, OUString>>& rItems )
+{
+    if ( nDim < 0 || nDim >= nSourceCount )
+        return;
+    std::vector<ZetaCalcItem>& rList = maZetaCalcItems[nDim];
+    rList.clear();
+    for ( const auto& rItem : rItems )
+    {
+        ZetaCalcItem aItem;
+        aItem.aName = rItem.first;
+        aItem.aFormula = rItem.second;
+        rList.push_back( aItem );
+    }
+    mbZetaCalcResolved = false;
+}
+
+namespace {
+
+// ZetaOffice: linear form of a calculated item formula
+struct ZetaLinear
+{
+    std::vector<std::pair<OUString, double>> aTerms;
+    double fConst = 0.0;
+    bool isConst() const { return aTerms.empty(); }
+    void scale( double f )
+    {
+        for ( auto& r : aTerms )
+            r.second *= f;
+        fConst *= f;
+    }
+    void add( const ZetaLinear& r, double fSign )
+    {
+        for ( const auto& t : r.aTerms )
+        {
+            auto it = std::find_if( aTerms.begin(), aTerms.end(), [&t]( const auto& x ) { return x.first == t.first; } );
+            if ( it == aTerms.end() )
+                aTerms.emplace_back( t.first, t.second * fSign );
+            else
+                it->second += t.second * fSign;
+        }
+        fConst += r.fConst * fSign;
+    }
+};
+
+class ZetaCalcParser
+{
+    const OUString& mrText;
+    const OUString& mrField;
+    sal_Int32 mnPos = 0;
+    bool mbError = false;
+
+    void skip()
+    {
+        while ( mnPos < mrText.getLength() && ( mrText[mnPos] == ' ' || mrText[mnPos] == '\t' ) )
+            ++mnPos;
+    }
+    bool peek( sal_Unicode c )
+    {
+        skip();
+        return mnPos < mrText.getLength() && mrText[mnPos] == c;
+    }
+    static bool isNameChar( sal_Unicode c )
+    {
+        return !( c == '+' || c == '-' || c == '*' || c == '/' || c == '(' || c == ')' || c == '['
+                  || c == ']' || c == '\'' || c == ' ' || c == '\t' || c == '=' || c == '^' || c == '&' || c == ',' );
+    }
+    // a name: 'quoted' ('' = ') or a run of name characters
+    bool name( OUString& rOut, bool& rQuoted )
+    {
+        skip();
+        rQuoted = false;
+        if ( mnPos >= mrText.getLength() )
+            return false;
+        if ( mrText[mnPos] == '\'' )
+        {
+            rQuoted = true;
+            OUStringBuffer aBuf;
+            ++mnPos;
+            while ( mnPos < mrText.getLength() )
+            {
+                if ( mrText[mnPos] == '\'' )
+                {
+                    if ( mnPos + 1 < mrText.getLength() && mrText[mnPos + 1] == '\'' )
+                    {
+                        aBuf.append( u'\'' );
+                        mnPos += 2;
+                        continue;
+                    }
+                    ++mnPos;
+                    rOut = aBuf.makeStringAndClear();
+                    return true;
+                }
+                aBuf.append( mrText[mnPos++] );
+            }
+            return false;
+        }
+        sal_Int32 nStart = mnPos;
+        while ( mnPos < mrText.getLength() && isNameChar( mrText[mnPos] ) )
+            ++mnPos;
+        rOut = mrText.copy( nStart, mnPos - nStart );
+        return !rOut.isEmpty();
+    }
+    ZetaLinear factor()
+    {
+        ZetaLinear aRes;
+        skip();
+        if ( mnPos >= mrText.getLength() )
+        {
+            mbError = true;
+            return aRes;
+        }
+        sal_Unicode c = mrText[mnPos];
+        if ( c == '+' || c == '-' )
+        {
+            ++mnPos;
+            aRes = factor();
+            if ( c == '-' )
+                aRes.scale( -1.0 );
+            return aRes;
+        }
+        if ( c == '(' )
+        {
+            ++mnPos;
+            aRes = expr();
+            if ( !peek( ')' ) )
+                mbError = true;
+            else
+                ++mnPos;
+            return aRes;
+        }
+        OUString aName;
+        bool bQuoted = false;
+        if ( !name( aName, bQuoted ) )
+        {
+            mbError = true;
+            return aRes;
+        }
+        if ( !bQuoted )
+        {
+            // a number: digits and one decimal point
+            bool bNumber = true;
+            bool bDot = false;
+            bool bDigit = false;
+            for ( sal_Int32 i = 0; i < aName.getLength() && bNumber; ++i )
+            {
+                if ( aName[i] >= '0' && aName[i] <= '9' )
+                    bDigit = true;
+                else if ( aName[i] == '.' && !bDot )
+                    bDot = true;
+                else
+                    bNumber = false;
+            }
+            if ( bNumber && bDigit )
+            {
+                aRes.fConst = aName.toDouble();
+                return aRes;
+            }
+        }
+        if ( peek( '[' ) )
+        {
+            // Field[Item]: only this field's items
+            ++mnPos;
+            OUString aItem;
+            bool bItemQuoted = false;
+            if ( aName != mrField || !name( aItem, bItemQuoted ) || !peek( ']' ) )
+            {
+                mbError = true;
+                return aRes;
+            }
+            ++mnPos;
+            aName = aItem;
+        }
+        aRes.aTerms.emplace_back( aName, 1.0 );
+        return aRes;
+    }
+    ZetaLinear term()
+    {
+        ZetaLinear aRes = factor();
+        while ( !mbError )
+        {
+            skip();
+            if ( mnPos >= mrText.getLength() )
+                break;
+            sal_Unicode c = mrText[mnPos];
+            if ( c != '*' && c != '/' )
+                break;
+            ++mnPos;
+            ZetaLinear aRight = factor();
+            if ( c == '*' )
+            {
+                if ( aRight.isConst() )
+                    aRes.scale( aRight.fConst );
+                else if ( aRes.isConst() )
+                {
+                    aRight.scale( aRes.fConst );
+                    aRes = aRight;
+                }
+                else
+                    mbError = true;     // item * item: not linear
+            }
+            else
+            {
+                if ( !aRight.isConst() || aRight.fConst == 0.0 )
+                    mbError = true;
+                else
+                    aRes.scale( 1.0 / aRight.fConst );
+            }
+        }
+        return aRes;
+    }
+    ZetaLinear expr()
+    {
+        ZetaLinear aRes = term();
+        while ( !mbError )
+        {
+            skip();
+            if ( mnPos >= mrText.getLength() )
+                break;
+            sal_Unicode c = mrText[mnPos];
+            if ( c != '+' && c != '-' )
+                break;
+            ++mnPos;
+            ZetaLinear aRight = term();
+            aRes.add( aRight, c == '-' ? -1.0 : 1.0 );
+        }
+        return aRes;
+    }
+
+public:
+    ZetaCalcParser( const OUString& rText, const OUString& rField ) : mrText( rText ), mrField( rField ) {}
+    bool parse( std::vector<std::pair<OUString, double>>& rTerms )
+    {
+        skip();
+        if ( mnPos < mrText.getLength() && mrText[mnPos] == '=' )
+            ++mnPos;
+        ZetaLinear aRes = expr();
+        skip();
+        if ( mbError || mnPos != mrText.getLength() || aRes.fConst != 0.0 || aRes.aTerms.empty() )
+            return false;
+        rTerms = aRes.aTerms;
+        return true;
+    }
+};
+
+}
+
+bool ScDPGroupTableData::ZetaParseCalcFormula( const OUString& rFormula, const OUString& rFieldName,
+                                               std::vector<std::pair<OUString, double>>& rTerms )
+{
+    ZetaCalcParser aParser( rFormula, rFieldName );
+    return aParser.parse( rTerms );
+}
+
+OUString ScDPGroupTableData::ZetaCalcFormulaToExcel( const OUString& rFormula, const OUString& rFieldName )
+{
+    auto isOp = []( sal_Unicode c ) {
+        return c == '+' || c == '-' || c == '*' || c == '/' || c == '(' || c == ')' || c == '[' || c == ']'
+               || c == '\'' || c == ' ' || c == '\t' || c == '=' || c == '^' || c == '&' || c == ',';
+    };
+    // a bare name: starts with a letter or '_' (any non-ASCII counts as a letter), then no operators
+    auto quote = [&isOp]( const OUString& rName ) -> OUString {
+        bool bBare = !rName.isEmpty() && !( rName[0] >= '0' && rName[0] <= '9' ) && rName[0] != '.';
+        for ( sal_Int32 i = 0; bBare && i < rName.getLength(); ++i )
+            bBare = !isOp( rName[i] );
+        return bBare ? rName : u"'"_ustr + rName.replaceAll( u"'", u"''" ) + u"'";
+    };
+    const OUString aField = quote( rFieldName );
+    OUStringBuffer aOut;
+    sal_Int32 i = 0;
+    const sal_Int32 n = rFormula.getLength();
+    while ( i < n && ( rFormula[i] == ' ' || rFormula[i] == '\t' ) )
+        ++i;
+    if ( i < n && rFormula[i] == '=' )
+        ++i;
+    while ( i < n )
+    {
+        const sal_Unicode c = rFormula[i];
+        if ( c == ' ' || c == '\t' )
+        {
+            ++i;
+            continue;
+        }
+        if ( isOp( c ) && c != '\'' )
+        {
+            aOut.append( c );
+            ++i;
+            continue;
+        }
+        // a name or a number
+        OUString aName;
+        bool bQuoted = false;
+        if ( c == '\'' )
+        {
+            bQuoted = true;
+            OUStringBuffer aBuf;
+            ++i;
+            while ( i < n )
+            {
+                if ( rFormula[i] == '\'' )
+                {
+                    if ( i + 1 < n && rFormula[i + 1] == '\'' )
+                    {
+                        aBuf.append( u'\'' );
+                        i += 2;
+                        continue;
+                    }
+                    ++i;
+                    break;
+                }
+                aBuf.append( rFormula[i++] );
+            }
+            aName = aBuf.makeStringAndClear();
+        }
+        else
+        {
+            sal_Int32 nStart = i;
+            while ( i < n && !isOp( rFormula[i] ) )
+                ++i;
+            aName = rFormula.copy( nStart, i - nStart );
+        }
+        sal_Int32 k = i;
+        while ( k < n && ( rFormula[k] == ' ' || rFormula[k] == '\t' ) )
+            ++k;
+        if ( k < n && rFormula[k] == '[' )
+        {
+            // already Field[Item]: copy the item part as it is
+            sal_Int32 nClose = rFormula.indexOf( ']', k );
+            if ( nClose < 0 )
+                nClose = n - 1;
+            aOut.append( quote( aName ) + rFormula.subView( k, nClose - k + 1 ) );
+            i = nClose + 1;
+            continue;
+        }
+        bool bNumber = !bQuoted && !aName.isEmpty();
+        for ( sal_Int32 j = 0; bNumber && j < aName.getLength(); ++j )
+            bNumber = ( aName[j] >= '0' && aName[j] <= '9' ) || aName[j] == '.';
+        if ( bNumber )
+            aOut.append( aName );
+        else
+            aOut.append( aField + "[" + quote( aName ) + "]" );
+    }
+    return aOut.makeStringAndClear();
+}
+
+void ScDPGroupTableData::ZetaResolveCalcItems()
+{
+    if ( mbZetaCalcResolved )
+        return;
+    mbZetaCalcResolved = true;
+    maZetaEntries.clear();
+    const ScDPCache& rCache = GetCacheTable().getCache();
+    for ( auto& [nDim, rList] : maZetaCalcItems )
+    {
+        const OUString aField = rCache.GetDimensionName( nDim );
+        // item name -> id of the source items (as they are shown)
+        std::unordered_map<OUString, SCROW> aIds;
+        const tools::Long nCount = rCache.GetDimMemberCount( nDim );
+        for ( SCROW nId = 0; nId < nCount; ++nId )
+            if ( const ScDPItemData* pItem = rCache.GetItemDataById( nDim, nId ) )
+                aIds.emplace( rCache.GetFormattedString( nDim, *pItem, false ), nId );
+        for ( auto& rItem : rList )
+        {
+            rItem.nId = rCache.GetIdByItemData( nDim, ScDPItemData( rItem.aName ) );
+            rItem.aTerms.clear();
+        }
+        // a calculated item can use the items before it (Excel: no circular references)
+        for ( size_t i = 0; i < rList.size(); ++i )
+        {
+            ZetaCalcItem& rItem = rList[i];
+            std::vector<std::pair<OUString, double>> aNamed;
+            if ( rItem.nId < 0 || !ZetaParseCalcFormula( rItem.aFormula, aField, aNamed ) )
+            {
+                rItem.nId = -1;
+                continue;
+            }
+            std::vector<std::pair<SCROW, double>> aTerms;
+            bool bOk = true;
+            auto addTerm = [&aTerms]( SCROW nId, double f )
+            {
+                auto it = std::find_if( aTerms.begin(), aTerms.end(), [nId]( const auto& x ) { return x.first == nId; } );
+                if ( it == aTerms.end() )
+                    aTerms.emplace_back( nId, f );
+                else
+                    it->second += f;
+            };
+            for ( const auto& [rName, fCoef] : aNamed )
+            {
+                auto it = aIds.find( rName );
+                if ( it != aIds.end() )
+                {
+                    addTerm( it->second, fCoef );
+                    continue;
+                }
+                auto itCalc = std::find_if( rList.begin(), rList.begin() + i, [&rName]( const ZetaCalcItem& r ) { return r.aName == rName; } );
+                if ( itCalc == rList.begin() + i || itCalc->nId < 0 )
+                {
+                    bOk = false;
+                    break;
+                }
+                for ( const auto& [nId, f] : itCalc->aTerms )
+                    addTerm( nId, f * fCoef );
+            }
+            if ( bOk )
+                rItem.aTerms = std::move( aTerms );
+            else
+                rItem.nId = -1;
+        }
+    }
+}
+
+bool ScDPGroupTableData::ZetaIsCalcItem( sal_Int32 nDim, SCROW nId ) const
+{
+    auto it = maZetaCalcItems.find( nDim );
+    if ( it == maZetaCalcItems.end() )
+        return false;
+    return std::any_of( it->second.begin(), it->second.end(), [nId]( const ZetaCalcItem& r ) { return r.nId >= 0 && r.nId == nId; } );
+}
+
+void ScDPGroupTableData::ZetaProcessCalcRows( CalcInfo& rInfo, CalcRowData& rData, bool bAutoShow, size_t nLevel )
+{
+    // nLevel walks the column levels, then the row levels; each level whose dimension has
+    // calculated items branches into the virtual rows of the items that use this row's item
+    const size_t nColCount = rInfo.aColLevelDims.size();
+    const size_t nRowCount = rInfo.aRowLevelDims.size();
+    for ( ; nLevel < nColCount + nRowCount; ++nLevel )
+    {
+        const bool bCol = nLevel < nColCount;
+        const sal_Int32 nDim = bCol ? rInfo.aColLevelDims[nLevel] : rInfo.aRowLevelDims[nLevel - nColCount];
+        auto it = maZetaCalcItems.find( nDim );
+        if ( it == maZetaCalcItems.end() )
+            continue;
+        std::vector<SCROW>& rIds = bCol ? rData.aColData : rData.aRowData;
+        const size_t nIndex = bCol ? nLevel : nLevel - nColCount;
+        const SCROW nOrig = rIds[nIndex];
+        for ( const ZetaCalcItem& rItem : it->second )
+        {
+            if ( rItem.nId < 0 )
+                continue;
+            auto itTerm = std::find_if( rItem.aTerms.begin(), rItem.aTerms.end(), [nOrig]( const auto& x ) { return x.first == nOrig; } );
+            if ( itTerm == rItem.aTerms.end() )
+                continue;
+            CalcRowData aCopy( rData );
+            ( bCol ? aCopy.aColData : aCopy.aRowData )[nIndex] = rItem.nId;
+            for ( ScDPValue& rValue : aCopy.aValues )
+                if ( rValue.meType == ScDPValue::Value )
+                    rValue.mfValue *= itTerm->second;
+            ProcessRowData( rInfo, aCopy, bAutoShow );
+            ZetaProcessCalcRows( rInfo, aCopy, bAutoShow, nLevel + 1 );
+        }
+    }
+}
+
 const std::vector< SCROW >& ScDPGroupTableData::GetColumnEntries( sal_Int32  nColumn )
 {
+    // ZetaOffice: the calculated items come after the source items
+    auto itCalc = maZetaCalcItems.find( nColumn );
+    if ( itCalc != maZetaCalcItems.end() )
+    {
+        ZetaResolveCalcItems();
+        std::vector<SCROW>& rEntries = maZetaEntries[nColumn];
+        rEntries = pSourceData->GetColumnEntries( nColumn );
+        for ( const ZetaCalcItem& rItem : itCalc->second )
+            if ( rItem.nId >= 0 && std::find( rEntries.begin(), rEntries.end(), rItem.nId ) == rEntries.end() )
+                rEntries.push_back( rItem.nId );
+        return rEntries;
+    }
+
     sal_Int32 nGroupCount = aGroups.size();
     if ( nColumn >= nSourceCount && nColumn < nSourceCount + nGroupCount )
     {
@@ -685,6 +1151,7 @@ bool ScDPGroupTableData::IsRepeatIfEmpty()
 
 void ScDPGroupTableData::CreateCacheTable()
 {
+    mbZetaCalcResolved = false;
     pSourceData->CreateCacheTable();
 }
 
@@ -854,6 +1321,12 @@ void ScDPGroupTableData::CalcResults(CalcInfo& rInfo, bool bAutoShow)
             FillGroupValues(aData.aPageData, rInfo.aPageDims);
 
         ProcessRowData(rInfo, aData, bAutoShow);
+        // ZetaOffice: the same row again under each calculated item that uses its item
+        if ( !maZetaCalcItems.empty() )
+        {
+            ZetaResolveCalcItems();
+            ZetaProcessCalcRows( rInfo, aData, bAutoShow, 0 );
+        }
     }
 }
 
@@ -1092,6 +1565,17 @@ sal_Int32 ScDPGroupTableData::Compare(sal_Int32 nDim, sal_Int32 nDataId1, sal_In
 {
     if ( getIsDataLayoutDimension(nDim) )
         return 0;
+    // ZetaOffice: calculated items sort after the source items, in the order they were added
+    {
+        const bool bCalc1 = ZetaIsCalcItem( nDim, nDataId1 );
+        const bool bCalc2 = ZetaIsCalcItem( nDim, nDataId2 );
+        if ( bCalc1 || bCalc2 )
+        {
+            if ( bCalc1 && bCalc2 )
+                return nDataId1 < nDataId2 ? -1 : ( nDataId1 > nDataId2 ? 1 : 0 );
+            return bCalc1 ? 1 : -1;
+        }
+    }
     const ScDPItemData* rItem1 = GetMemberById(nDim, nDataId1);
     const ScDPItemData* rItem2 = GetMemberById(nDim, nDataId2);
     if (rItem1 == nullptr || rItem2 == nullptr)

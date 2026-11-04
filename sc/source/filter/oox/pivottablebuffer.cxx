@@ -1427,6 +1427,21 @@ void PivotTable::finalizeImport()
         for (auto& pFormat : maFormats)
             pFormat->finalizeImport();
 
+        // ZetaOffice: calculated items of the cache, as { name, "=" + Excel formula } per field
+        if( ScDPSaveData* pZetaSave = mpDPObject->GetSaveData() )
+        {
+            std::map< OUString, ScDPDimensionSaveData::ZetaCalcItemList > aZetaCalc;
+            for( const auto& rItem : mpPivotCache->zetaGetCalcItems() )
+            {
+                const PivotCacheField* pField = mpPivotCache->getCacheField( rItem.mnField );
+                const PivotCacheItem* pItem = pField ? pField->getCacheItem( rItem.mnItem ) : nullptr;
+                if( pItem && !rItem.maFormula.isEmpty() )
+                    aZetaCalc[ pField->getName() ].emplace_back( pItem->getName(), u"="_ustr + rItem.maFormula );
+            }
+            for( const auto& [rName, rList] : aZetaCalc )
+                pZetaSave->GetDimensionData()->ZetaSetCalcItems( rName, rList );
+        }
+
         // calculate base position of table
         CellAddress aPos( maLocationModel.maRange.aStart.Tab(), maLocationModel.maRange.aStart.Col(), maLocationModel.maRange.aStart.Row() );
         /*  If page fields exist, include them into the destination

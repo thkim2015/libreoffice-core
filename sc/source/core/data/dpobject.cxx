@@ -984,7 +984,8 @@ void ScDPObject::ReloadGroupTableData()
         return;
 
     const ScDPDimensionSaveData* pDimData = mpSaveData->GetExistingDimensionData();
-    if (!pDimData || !pDimData->HasGroupDimensions())
+    // ZetaOffice: calculated items also need the group table data
+    if (!pDimData || (!pDimData->HasGroupDimensions() && !pDimData->ZetaHasCalcItems()))
     {
         // No group dimensions exist.  Check if it currently has group
         // dimensions, and if so, remove all of them.
