@@ -1743,10 +1743,12 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             }
         }
 
-        if (const OUString& rZeta = pDim->GetZetaFilter(); !rZeta.isEmpty()
-            && (eOrient == sheet::DataPilotFieldOrientation_ROW
-                || eOrient == sheet::DataPilotFieldOrientation_COLUMN))
+        const OUString& rZetaAll = pDim->GetZetaFilter();
+        for (sal_Int32 nZetaLine = rZetaAll.isEmpty() ? -1 : 0; nZetaLine >= 0
+             && (eOrient == sheet::DataPilotFieldOrientation_ROW
+                 || eOrient == sheet::DataPilotFieldOrientation_COLUMN); )
         {
+            const OUString rZeta = rZetaAll.getToken(0, '\n', nZetaLine);
             sal_Int32 nTok = 0;
             ZetaFilter aZ{ i, -1, rZeta.getToken(0, '\t', nTok), OUString(), OUString() };
             aZ.ma1 = nTok >= 0 ? rZeta.getToken(0, '\t', nTok) : OUString();

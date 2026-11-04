@@ -1007,6 +1007,18 @@ void PivotTableFilter::importTop10Filter( SequenceInputStream& rStrm )
     maModel.mbTopFilter = getFlag( nFlags, BIFF12_TOP10FILTER_TOP );
 }
 
+namespace {
+
+// ZetaOffice: a field can hold a label filter and a value filter (lines joined by \n)
+void lcl_ZetaAddFilter( const css::uno::Reference< css::beans::XPropertySet >& xProp, const OUString& rLine )
+{
+    OUString aOld;
+    xProp->getPropertyValue( u"ZetaFilter"_ustr ) >>= aOld;
+    xProp->setPropertyValue( u"ZetaFilter"_ustr, css::uno::Any( aOld.isEmpty() ? rLine : aOld + "\n" + rLine ) );
+}
+
+}
+
 void PivotTableFilter::importCustomFilter( const AttributeList& rAttribs )
 {
     maModel.maCustomVals.push_back( rAttribs.getXString( XML_val, OUString() ) );
@@ -1024,9 +1036,9 @@ void PivotTableFilter::finalizeImport()
             return;
         try
         {
-            xProp->setPropertyValue( u"ZetaFilter"_ustr, css::uno::Any( rType + "\t"
+            lcl_ZetaAddFilter( xProp, rType + "\t"
                 + OUString::number( maModel.mfValue ) + "\t" + ( maModel.mbTopFilter ? u"1" : u"0" )
-                + "\t" + pCacheField->getName() ) );
+                + "\t" + pCacheField->getName() );
         }
         catch( const css::uno::Exception& )
         {
@@ -1050,7 +1062,7 @@ void PivotTableFilter::finalizeImport()
         }
         try
         {
-            xProp->setPropertyValue( u"ZetaFilter"_ustr, css::uno::Any( rType + "\t" + a1 + "\t" + a2 + "\t" + aField ) );
+            lcl_ZetaAddFilter( xProp, rType + "\t" + a1 + "\t" + a2 + "\t" + aField );
         }
         catch( const css::uno::Exception& )
         {

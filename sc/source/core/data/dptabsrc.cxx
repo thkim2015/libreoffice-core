@@ -2055,7 +2055,6 @@ ScDPLevel::ScDPLevel( ScDPSource* pSrc, sal_Int32 nD, sal_Int32 nH, sal_Int32 nL
     aSortInfo( OUString(), true, sheet::DataPilotFieldSortMode::NAME ),   // default: sort by name
     nSortMeasure( 0 ),
     nAutoMeasure( 0 ),
-    nZetaMeasure( 0 ),
     bShowEmpty( false ),
     bEnableLayout( false ),
     bRepeatItemLabels( false )
@@ -2108,20 +2107,23 @@ void ScDPLevel::EvaluateSortOrder()
             break;
     }
 
-    // ZetaOffice: measure of a value filter (4th token = data field name)
-    if ( !maZetaFilter.isEmpty() )
+    // ZetaOffice: measure of each filter line ("type\tv1\tv2\tdatafield", lines joined by \n)
+    maZetaMeasures.clear();
+    for (sal_Int32 nLine = 0; nLine >= 0; )
     {
-        const OUString aField = maZetaFilter.getToken(3, '\t');
+        const OUString aLine = maZetaFilter.getToken(0, '\n', nLine);
+        const OUString aField = ScDPUtil::getSourceDimensionName(aLine.getToken(3, '\t'));
+        sal_Int32 nMeasure = 0;
         tools::Long nCount = pSource->GetDataDimensionCount();
-        nZetaMeasure = 0;
-        for (tools::Long n = 0; n < nCount; ++n)
+        for (tools::Long n = 0; n < nCount && !aField.isEmpty(); ++n)
         {
-            if (ScDPUtil::getSourceDimensionName(pSource->GetDataDimName(n)) == ScDPUtil::getSourceDimensionName(aField))
+            if (ScDPUtil::getSourceDimensionName(pSource->GetDataDimName(n)) == aField)
             {
-                nZetaMeasure = n;
+                nMeasure = n;
                 break;
             }
         }
+        maZetaMeasures.push_back(nMeasure);
     }
 
     if ( !aAutoShowInfo.IsEnabled )

@@ -3572,20 +3572,32 @@ bool lcl_ZetaGlob(std::u16string_view aText, std::u16string_view aPat)
 
 void ScDPResultDimension::ZetaInitFilter(const ScDPLevel* pLevel)
 {
-    maZetaType.clear();
-    const OUString& rSpec = pLevel ? pLevel->GetZetaFilter() : OUString();
-    if (rSpec.isEmpty())
+    maZetaSpecs.clear();
+    const OUString& rAll = pLevel ? pLevel->GetZetaFilter() : OUString();
+    if (rAll.isEmpty())
         return;
-    sal_Int32 nIdx = 0;
-    maZetaType = rSpec.getToken(0, '\t', nIdx);
-    maZeta1 = nIdx >= 0 ? rSpec.getToken(0, '\t', nIdx) : OUString();
-    maZeta2 = nIdx >= 0 ? rSpec.getToken(0, '\t', nIdx) : OUString();
-    mfZeta1 = rtl::math::stringToDouble(maZeta1, '.', ',');
-    mfZeta2 = rtl::math::stringToDouble(maZeta2, '.', ',');
-    mnZetaMeasure = pLevel->GetZetaMeasure();
     const CharClass& rCC = ScGlobal::getCharClass();
-    maZeta1 = rCC.lowercase(maZeta1);
-    maZeta2 = rCC.lowercase(maZeta2);
+    sal_Int32 nLineNo = 0;
+    for (sal_Int32 nLine = 0; nLine >= 0; ++nLineNo)
+    {
+        const OUString aLine = rAll.getToken(0, '\n', nLine);
+        sal_Int32 nIdx = 0;
+        ZetaSpec aSpec;
+        aSpec.maType = aLine.getToken(0, '\t', nIdx);
+        if (aSpec.maType.isEmpty())
+            continue;
+        aSpec.ma1 = nIdx >= 0 ? aLine.getToken(0, '\t', nIdx) : OUString();
+        aSpec.ma2 = nIdx >= 0 ? aLine.getToken(0, '\t', nIdx) : OUString();
+        aSpec.mf1 = rtl::math::stringToDouble(aSpec.ma1, '.', ',');
+        aSpec.mf2 = rtl::math::stringToDouble(aSpec.ma2, '.', ',');
+        aSpec.mnMeasure = pLevel->GetZetaMeasure(nLineNo);
+        aSpec.ma1 = rCC.lowercase(aSpec.ma1);
+        aSpec.ma2 = rCC.lowercase(aSpec.ma2);
+        maZetaSpecs.push_back(aSpec);
+    }
+    // labels first, then values (Excel shows the members that pass both)
+    std::stable_partition(maZetaSpecs.begin(), maZetaSpecs.end(),
+                          [](const ZetaSpec& r) { return r.maType.startsWith("caption"); });
 }
 
 namespace {
@@ -3603,19 +3615,25 @@ bool lcl_ZetaValue(const ScDPDataMember* pData, tools::Long nMeasure, double& rV
 
 }
 
-void ScDPResultDimension::ZetaApply(const std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>>& rList) const
+void ScDPResultDimension::ZetaApply(const std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>>& rAll) const
 {
+  for (const ZetaSpec& rSpec : maZetaSpecs)
+  {
+    std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>> rList;
+    for (const auto& rPair : rAll)
+        if (rPair.first->IsVisible())
+            rList.push_back(rPair);
     // Excel "Top 10" by percent / sum: walk the members from the top (or bottom) and keep them
     // until the running total reaches N % of the total (percent) or N (sum); v2 "0" = bottom
-    if (maZetaType == "percent" || maZetaType == "sum")
+    if (rSpec.maType == "percent" || rSpec.maType == "sum")
     {
-        const bool bTop = maZeta2 != "0";
+        const bool bTop = rSpec.ma2 != "0";
         std::vector<std::pair<double, ScDPResultMember*>> aVals;
         double fTotal = 0.0;
         for (const auto& [pMember, pData] : rList)
         {
             double f = 0.0;
-            if (!lcl_ZetaValue(pData, mnZetaMeasure, f))
+            if (!lcl_ZetaValue(pData, rSpec.mnMeasure, f))
             {
                 pMember->SetAutoHidden();
                 continue;
@@ -3625,7 +3643,7 @@ void ScDPResultDimension::ZetaApply(const std::vector<std::pair<ScDPResultMember
         }
         std::stable_sort(aVals.begin(), aVals.end(), [bTop](const auto& a, const auto& b)
                          { return bTop ? a.first > b.first : a.first < b.first; });
-        const double fLimit = maZetaType == "percent" ? fTotal * mfZeta1 / 100.0 : mfZeta1;
+        const double fLimit = rSpec.maType == "percent" ? fTotal * rSpec.mf1 / 100.0 : rSpec.mf1;
         double fRun = 0.0;
         bool bReached = false;
         for (const auto& [f, pMember] : aVals)
@@ -3639,50 +3657,51 @@ void ScDPResultDimension::ZetaApply(const std::vector<std::pair<ScDPResultMember
             if (fRun > fLimit || rtl::math::approxEqual(fRun, fLimit))
                 bReached = true;
         }
-        return;
+        continue;
     }
     for (const auto& [pMember, pData] : rList)
-        if (!ZetaKeep(pMember->GetDisplayName(false), pData))
+        if (!ZetaKeep(rSpec, pMember->GetDisplayName(false), pData))
             pMember->SetAutoHidden();
+  }
 }
 
-bool ScDPResultDimension::ZetaKeep(const OUString& rCaption, const ScDPDataMember* pData) const
+bool ScDPResultDimension::ZetaKeep(const ZetaSpec& rSpec, const OUString& rCaption, const ScDPDataMember* pData)
 {
-    const OUString& t = maZetaType;
+    const OUString& t = rSpec.maType;
     if (t.startsWith("value"))
     {
         double f = 0.0;
-        if (!lcl_ZetaValue(pData, mnZetaMeasure, f))
+        if (!lcl_ZetaValue(pData, rSpec.mnMeasure, f))
             return false;
-        const bool bEq = rtl::math::approxEqual(f, mfZeta1);
+        const bool bEq = rtl::math::approxEqual(f, rSpec.mf1);
         if (t == "valueEqual") return bEq;
         if (t == "valueNotEqual") return !bEq;
-        if (t == "valueGreaterThan") return f > mfZeta1 && !bEq;
-        if (t == "valueGreaterThanOrEqual") return f > mfZeta1 || bEq;
-        if (t == "valueLessThan") return f < mfZeta1 && !bEq;
-        if (t == "valueLessThanOrEqual") return f < mfZeta1 || bEq;
-        const double fLo = std::min(mfZeta1, mfZeta2), fHi = std::max(mfZeta1, mfZeta2);
+        if (t == "valueGreaterThan") return f > rSpec.mf1 && !bEq;
+        if (t == "valueGreaterThanOrEqual") return f > rSpec.mf1 || bEq;
+        if (t == "valueLessThan") return f < rSpec.mf1 && !bEq;
+        if (t == "valueLessThanOrEqual") return f < rSpec.mf1 || bEq;
+        const double fLo = std::min(rSpec.mf1, rSpec.mf2), fHi = std::max(rSpec.mf1, rSpec.mf2);
         const bool bIn = (f > fLo || rtl::math::approxEqual(f, fLo)) && (f < fHi || rtl::math::approxEqual(f, fHi));
         if (t == "valueBetween") return bIn;
         if (t == "valueNotBetween") return !bIn;
         return true;
     }
     const OUString aText = ScGlobal::getCharClass().lowercase(rCaption);
-    if (t == "captionEqual") return lcl_ZetaGlob(aText, maZeta1);
-    if (t == "captionNotEqual") return !lcl_ZetaGlob(aText, maZeta1);
-    if (t == "captionBeginsWith") return lcl_ZetaGlob(aText, Concat2View(maZeta1 + "*"));
-    if (t == "captionNotBeginsWith") return !lcl_ZetaGlob(aText, Concat2View(maZeta1 + "*"));
-    if (t == "captionEndsWith") return lcl_ZetaGlob(aText, Concat2View("*" + maZeta1));
-    if (t == "captionNotEndsWith") return !lcl_ZetaGlob(aText, Concat2View("*" + maZeta1));
-    if (t == "captionContains") return lcl_ZetaGlob(aText, Concat2View("*" + maZeta1 + "*"));
-    if (t == "captionNotContains") return !lcl_ZetaGlob(aText, Concat2View("*" + maZeta1 + "*"));
+    if (t == "captionEqual") return lcl_ZetaGlob(aText, rSpec.ma1);
+    if (t == "captionNotEqual") return !lcl_ZetaGlob(aText, rSpec.ma1);
+    if (t == "captionBeginsWith") return lcl_ZetaGlob(aText, Concat2View(rSpec.ma1 + "*"));
+    if (t == "captionNotBeginsWith") return !lcl_ZetaGlob(aText, Concat2View(rSpec.ma1 + "*"));
+    if (t == "captionEndsWith") return lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1));
+    if (t == "captionNotEndsWith") return !lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1));
+    if (t == "captionContains") return lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1 + "*"));
+    if (t == "captionNotContains") return !lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1 + "*"));
     CollatorWrapper& rColl = ScGlobal::GetCollator();
-    const sal_Int32 c1 = rColl.compareString(aText, maZeta1);
+    const sal_Int32 c1 = rColl.compareString(aText, rSpec.ma1);
     if (t == "captionGreaterThan") return c1 > 0;
     if (t == "captionGreaterThanOrEqual") return c1 >= 0;
     if (t == "captionLessThan") return c1 < 0;
     if (t == "captionLessThanOrEqual") return c1 <= 0;
-    const bool bIn = c1 >= 0 && rColl.compareString(aText, maZeta2) <= 0;
+    const bool bIn = c1 >= 0 && rColl.compareString(aText, rSpec.ma2) <= 0;
     if (t == "captionBetween") return bIn;
     if (t == "captionNotBetween") return !bIn;
     return true;

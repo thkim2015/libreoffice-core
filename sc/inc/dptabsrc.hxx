@@ -47,6 +47,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <o3tl/safeint.hxx>
 #include <optional>
 
 namespace com::sun::star {
@@ -465,7 +466,7 @@ private:
     sal_Int32                   nSortMeasure;       // measure (index of data dimension) to sort by
     sal_Int32                   nAutoMeasure;       // measure (index of data dimension) for AutoShow
     OUString                    maZetaFilter;       // ZetaOffice: Excel label/value filter (see ScDPSaveDimension)
-    sal_Int32                   nZetaMeasure;       // measure for a value filter
+    std::vector<sal_Int32>      maZetaMeasures;     // measure for each filter line (value filters)
     bool                        bShowEmpty:1;
     bool                        bEnableLayout:1;      // enabled only for row fields, not for the innermost one
     bool                        bRepeatItemLabels:1;
@@ -524,7 +525,8 @@ public:
     sal_Int32                  GetSortMeasure() const              { return nSortMeasure; }
     sal_Int32                  GetAutoMeasure() const              { return nAutoMeasure; }
     const OUString&            GetZetaFilter() const               { return maZetaFilter; }
-    sal_Int32                  GetZetaMeasure() const              { return nZetaMeasure; }
+    sal_Int32                  GetZetaMeasure(sal_Int32 nLine) const
+        { return nLine >= 0 && o3tl::make_unsigned(nLine) < maZetaMeasures.size() ? maZetaMeasures[nLine] : 0; }
 
     bool IsOutlineLayout() const
     {
