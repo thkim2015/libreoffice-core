@@ -803,6 +803,15 @@ private:
     bool                    bInitialized:1;
     tools::Long                    nAutoMeasure;
     tools::Long                    nAutoCount;
+    // ZetaOffice: Excel label/value filters of this field (a label filter and a value filter
+    // can be set together, as in Excel); labels are applied first
+    struct ZetaSpec
+    {
+        OUString maType, ma1, ma2;
+        double mf1 = 0.0, mf2 = 0.0;
+        tools::Long mnMeasure = 0;
+    };
+    std::vector<ZetaSpec>   maZetaSpecs;
 
     ScDPResultMember*        FindMember(   SCROW  iData ) const;
     ScDPResultMember*        AddMember( const ScDPParentDimData& aData );
@@ -885,6 +894,13 @@ public:
     const OUString& GetName() const { return aDimensionName; }
 
     bool IsSortByData() const { return bSortByData; }
+
+    // ZetaOffice: Excel label/value filter of this field (set from the level)
+    void ZetaInitFilter(const ScDPLevel* pLevel);
+    bool ZetaHasFilter() const { return !maZetaSpecs.empty(); }
+    static bool ZetaKeep(const ZetaSpec& rSpec, const OUString& rCaption, const ScDPDataMember* pData);
+    // hides the members of rList (visible ones, with their data) that the filter drops
+    void ZetaApply(const std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>>& rList) const;
     bool IsSortAscending() const { return bSortAscending; }
     tools::Long                GetSortMeasure() const  { return nSortMeasure; }
 

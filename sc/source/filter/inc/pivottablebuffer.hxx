@@ -207,6 +207,8 @@ struct PTFilterModel
     sal_Int32           mnMeasureField;     /// Data field for filter calculation.
     sal_Int32           mnMeasureHier;      /// Hierarchy for filter calculation.
     bool                mbTopFilter;        /// True = filter shows top entries, false = bottom.
+    OUString            maTypeName;         /// ZetaOffice: filter type as written (captionEqual, valueBetween ...).
+    std::vector<OUString> maCustomVals;     /// ZetaOffice: customFilter values in order (value filters).
 
     explicit            PTFilterModel();
 };
@@ -220,6 +222,8 @@ public:
     void                importFilter( const AttributeList& rAttribs );
     /** Reads additional settings of a field filter from the top10 element. */
     void                importTop10( const AttributeList& rAttribs );
+    /** ZetaOffice: reads a customFilter value of a value filter. */
+    void                importCustomFilter( const AttributeList& rAttribs );
 
     /** Reads the settings of a field filter from the PTFILTER record. */
     void                importPTFilter( SequenceInputStream& rStrm );

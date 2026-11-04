@@ -223,7 +223,8 @@ ScDPSaveDimension::ScDPSaveDimension(const ScDPSaveDimension& r) :
     nShowEmptyMode( r.nShowEmptyMode ),
     bRepeatItemLabels( r.bRepeatItemLabels ),
     bSubTotalDefault( r.bSubTotalDefault ),
-    maSubTotalFuncs( r.maSubTotalFuncs )
+    maSubTotalFuncs( r.maSubTotalFuncs ),
+    maZetaFilter( r.maZetaFilter )
 {
     for (const ScDPSaveMember* pMem : r.maMemberList)
     {
@@ -262,7 +263,8 @@ bool ScDPSaveDimension::operator== ( const ScDPSaveDimension& r ) const
          nShowEmptyMode   != r.nShowEmptyMode   ||
          bRepeatItemLabels!= r.bRepeatItemLabels||
          bSubTotalDefault != r.bSubTotalDefault ||
-         maSubTotalFuncs  != r.maSubTotalFuncs   )
+         maSubTotalFuncs  != r.maSubTotalFuncs  ||
+         maZetaFilter     != r.maZetaFilter      )
         return false;
 
     if (maMemberHash.size() != r.maMemberHash.size() )
@@ -586,6 +588,9 @@ void ScDPSaveDimension::WriteToSource( const uno::Reference<uno::XInterface>& xD
 
                 if ( pAutoShowInfo )
                     ScUnoHelpFunctions::SetOptionalPropertyValue(xLevProp, SC_UNO_DP_AUTOSHOW, *pAutoShowInfo);
+
+                if ( !maZetaFilter.isEmpty() )
+                    ScUnoHelpFunctions::SetOptionalPropertyValue(xLevProp, u"ZetaFilter"_ustr, maZetaFilter);
 
                 if ( pLayoutInfo )
                     ScUnoHelpFunctions::SetOptionalPropertyValue(xLevProp, SC_UNO_DP_LAYOUT, *pLayoutInfo);

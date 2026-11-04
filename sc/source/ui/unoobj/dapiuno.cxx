@@ -1986,6 +1986,18 @@ void SAL_CALL ScDataPilotFieldObj::setPropertyValue( const OUString& aPropertyNa
         ScDBDocFunc(*GetDocShell()).RefreshPivotTableGroups( pDPObj );
         return;
     }
+    if ( aPropertyName == "ZetaFilter" )
+    {
+        OUString aFilter;
+        ScDPObject* pDPObj = nullptr;
+        ScDPSaveDimension* pDim = (aValue >>= aFilter) ? GetDPDimension( &pDPObj ) : nullptr;
+        if ( pDim )
+        {
+            pDim->SetZetaFilter( aFilter );
+            SetDPObject( pDPObj );
+        }
+        return;
+    }
     if ( aPropertyName == "ZetaHiddenItems" )
     {
         Sequence< OUString > aNames;
@@ -2264,6 +2276,11 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
                         aOut.push_back( rItem.second );
                     }
         aRet <<= comphelper::containerToSequence( aOut );
+    }
+    else if ( aPropertyName == "ZetaFilter" )
+    {
+        ScDPSaveDimension* pDim = GetDPDimension();
+        aRet <<= pDim ? pDim->GetZetaFilter() : OUString();
     }
     else if ( aPropertyName == "ZetaHiddenItems" )
     {

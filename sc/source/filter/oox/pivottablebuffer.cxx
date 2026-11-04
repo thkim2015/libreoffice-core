@@ -934,6 +934,7 @@ void PivotTableFilter::importFilter( const AttributeList& rAttribs )
     maModel.mnField        = rAttribs.getInteger( XML_fld, -1 );
     maModel.mnMemPropField = rAttribs.getInteger( XML_mpFld, -1 );
     maModel.mnType         = rAttribs.getToken( XML_type, XML_TOKEN_INVALID );
+    maModel.maTypeName     = rAttribs.getString( XML_type, OUString() );
     maModel.mnEvalOrder    = rAttribs.getInteger( XML_evalOrder, 0 );
     maModel.mnId           = rAttribs.getInteger( XML_id, -1 );
     maModel.mnMeasureField = rAttribs.getInteger( XML_iMeasureFld, -1 );
@@ -1006,8 +1007,69 @@ void PivotTableFilter::importTop10Filter( SequenceInputStream& rStrm )
     maModel.mbTopFilter = getFlag( nFlags, BIFF12_TOP10FILTER_TOP );
 }
 
+namespace {
+
+// ZetaOffice: a field can hold a label filter and a value filter (lines joined by \n)
+void lcl_ZetaAddFilter( const css::uno::Reference< css::beans::XPropertySet >& xProp, const OUString& rLine )
+{
+    OUString aOld;
+    xProp->getPropertyValue( u"ZetaFilter"_ustr ) >>= aOld;
+    xProp->setPropertyValue( u"ZetaFilter"_ustr, css::uno::Any( aOld.isEmpty() ? rLine : aOld + "\n" + rLine ) );
+}
+
+}
+
+void PivotTableFilter::importCustomFilter( const AttributeList& rAttribs )
+{
+    maModel.maCustomVals.push_back( rAttribs.getXString( XML_val, OUString() ) );
+}
+
 void PivotTableFilter::finalizeImport()
 {
+    // ZetaOffice: label (caption*) and value (value*) filters -> DataPilotField "ZetaFilter"
+    const OUString& rType = maModel.maTypeName;
+    if( rType == "percent" || rType == "sum" )
+    {
+        css::uno::Reference< css::beans::XPropertySet > xProp( mrPivotTable.getDataPilotField( maModel.mnField ) );
+        const PivotCacheField* pCacheField = mrPivotTable.getCacheFieldOfDataField( maModel.mnMeasureField );
+        if( !xProp.is() || !pCacheField )
+            return;
+        try
+        {
+            lcl_ZetaAddFilter( xProp, rType + "\t"
+                + OUString::number( maModel.mfValue ) + "\t" + ( maModel.mbTopFilter ? u"1" : u"0" )
+                + "\t" + pCacheField->getName() );
+        }
+        catch( const css::uno::Exception& )
+        {
+        }
+        return;
+    }
+    if( rType.startsWith( "caption" ) || rType.startsWith( "value" ) )
+    {
+        css::uno::Reference< css::beans::XPropertySet > xProp( mrPivotTable.getDataPilotField( maModel.mnField ) );
+        if( !xProp.is() )
+            return;
+        OUString a1 = maModel.maStrValue1, a2 = maModel.maStrValue2, aField;
+        if( rType.startsWith( "value" ) )
+        {
+            a1 = maModel.maCustomVals.size() > 0 ? maModel.maCustomVals[0] : OUString();
+            a2 = maModel.maCustomVals.size() > 1 ? maModel.maCustomVals[1] : OUString();
+            const PivotCacheField* pCacheField = mrPivotTable.getCacheFieldOfDataField( maModel.mnMeasureField );
+            if( !pCacheField )
+                return;
+            aField = pCacheField->getName();
+        }
+        try
+        {
+            lcl_ZetaAddFilter( xProp, rType + "\t" + a1 + "\t" + a2 + "\t" + aField );
+        }
+        catch( const css::uno::Exception& )
+        {
+        }
+        return;
+    }
+
     // only simple top10 filter supported
     if( maModel.mnType != XML_count )
         return;

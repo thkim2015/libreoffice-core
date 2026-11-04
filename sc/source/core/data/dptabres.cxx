@@ -34,6 +34,8 @@
 #include <dpresfilter.hxx>
 #include <dputil.hxx>
 #include <unotools/syslocale.hxx>
+#include <unotools/charclass.hxx>
+#include <unotools/collatorwrapper.hxx>
 #include <i18nlangtag/languagetag.hxx>
 
 #include <o3tl/safeint.hxx>
@@ -3211,6 +3213,7 @@ void ScDPResultDimension::InitFrom(
         bSortAscending = rSortInfo.IsAscending;
         nSortMeasure = pThisLevel->GetSortMeasure();
     }
+    ZetaInitFilter(pThisLevel);
 
     // global order is used to initialize aMembers, so it doesn't have to be looked at later
     const ScMemberSortOrder& rGlobalOrder = pThisLevel->GetGlobalOrder();
@@ -3312,6 +3315,7 @@ void ScDPResultDimension::LateInitFrom(
             bSortAscending = rSortInfo.IsAscending;
             nSortMeasure = pThisLevel->GetSortMeasure();
         }
+        ZetaInitFilter(pThisLevel);
     }
 
     bool bLateInitAllMembers=  bIsDataLayout || rParams.GetInitAllChild() || bShowEmpty;
@@ -3526,6 +3530,183 @@ void ScDPResultDimension::UpdateDataResults(const ScDPResultMember* pRefMember,
     }
 }
 
+// ZetaOffice: Excel pivot label/value filters ("type\tvalue1\tvalue2\tdatafield").
+// Caption filters compare case-insensitively, with ? and * wildcards (~ escapes) for the
+// equal/begins/ends/contains kinds and collator order for greater/less/between; value filters
+// compare the member's total of the data field.
+namespace {
+
+bool lcl_ZetaGlob(std::u16string_view aText, std::u16string_view aPat)
+{
+    size_t t = 0, p = 0, nStarP = std::u16string_view::npos, nStarT = 0;
+    while (t < aText.size())
+    {
+        if (p < aPat.size() && aPat[p] == '~' && p + 1 < aPat.size())
+        {
+            if (aPat[p + 1] == aText[t]) { p += 2; ++t; continue; }
+        }
+        else if (p < aPat.size() && (aPat[p] == '?' || aPat[p] == aText[t]) && aPat[p] != '*')
+        {
+            ++p; ++t; continue;
+        }
+        if (p < aPat.size() && aPat[p] == '*')
+        {
+            nStarP = p++;
+            nStarT = t;
+            continue;
+        }
+        if (nStarP != std::u16string_view::npos)
+        {
+            p = nStarP + 1;
+            t = ++nStarT;
+            continue;
+        }
+        return false;
+    }
+    while (p < aPat.size() && aPat[p] == '*')
+        ++p;
+    return p == aPat.size();
+}
+
+}
+
+void ScDPResultDimension::ZetaInitFilter(const ScDPLevel* pLevel)
+{
+    maZetaSpecs.clear();
+    const OUString& rAll = pLevel ? pLevel->GetZetaFilter() : OUString();
+    if (rAll.isEmpty())
+        return;
+    const CharClass& rCC = ScGlobal::getCharClass();
+    sal_Int32 nLineNo = 0;
+    for (sal_Int32 nLine = 0; nLine >= 0; ++nLineNo)
+    {
+        const OUString aLine = rAll.getToken(0, '\n', nLine);
+        sal_Int32 nIdx = 0;
+        ZetaSpec aSpec;
+        aSpec.maType = aLine.getToken(0, '\t', nIdx);
+        if (aSpec.maType.isEmpty())
+            continue;
+        aSpec.ma1 = nIdx >= 0 ? aLine.getToken(0, '\t', nIdx) : OUString();
+        aSpec.ma2 = nIdx >= 0 ? aLine.getToken(0, '\t', nIdx) : OUString();
+        aSpec.mf1 = rtl::math::stringToDouble(aSpec.ma1, '.', ',');
+        aSpec.mf2 = rtl::math::stringToDouble(aSpec.ma2, '.', ',');
+        aSpec.mnMeasure = pLevel->GetZetaMeasure(nLineNo);
+        aSpec.ma1 = rCC.lowercase(aSpec.ma1);
+        aSpec.ma2 = rCC.lowercase(aSpec.ma2);
+        maZetaSpecs.push_back(aSpec);
+    }
+    // labels first, then values (Excel shows the members that pass both)
+    std::stable_partition(maZetaSpecs.begin(), maZetaSpecs.end(),
+                          [](const ZetaSpec& r) { return r.maType.startsWith("caption"); });
+}
+
+namespace {
+
+// total of a member for the measure; false when it is an error
+bool lcl_ZetaValue(const ScDPDataMember* pData, tools::Long nMeasure, double& rVal)
+{
+    ScDPSubTotalState aEmptyState;
+    const ScDPAggData* pAgg = pData ? pData->GetConstAggData(nMeasure, aEmptyState) : nullptr;
+    if (pAgg && pAgg->HasError())
+        return false;
+    rVal = (pAgg && pAgg->HasData()) ? pAgg->GetResult() : 0.0;
+    return true;
+}
+
+}
+
+void ScDPResultDimension::ZetaApply(const std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>>& rAll) const
+{
+  for (const ZetaSpec& rSpec : maZetaSpecs)
+  {
+    std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>> rList;
+    for (const auto& rPair : rAll)
+        if (rPair.first->IsVisible())
+            rList.push_back(rPair);
+    // Excel "Top 10" by percent / sum: walk the members from the top (or bottom) and keep them
+    // until the running total reaches N % of the total (percent) or N (sum); v2 "0" = bottom
+    if (rSpec.maType == "percent" || rSpec.maType == "sum")
+    {
+        const bool bTop = rSpec.ma2 != "0";
+        std::vector<std::pair<double, ScDPResultMember*>> aVals;
+        double fTotal = 0.0;
+        for (const auto& [pMember, pData] : rList)
+        {
+            double f = 0.0;
+            if (!lcl_ZetaValue(pData, rSpec.mnMeasure, f))
+            {
+                pMember->SetAutoHidden();
+                continue;
+            }
+            aVals.emplace_back(f, pMember);
+            fTotal += f;
+        }
+        std::stable_sort(aVals.begin(), aVals.end(), [bTop](const auto& a, const auto& b)
+                         { return bTop ? a.first > b.first : a.first < b.first; });
+        const double fLimit = rSpec.maType == "percent" ? fTotal * rSpec.mf1 / 100.0 : rSpec.mf1;
+        double fRun = 0.0;
+        bool bReached = false;
+        for (const auto& [f, pMember] : aVals)
+        {
+            if (bReached)
+            {
+                pMember->SetAutoHidden();
+                continue;
+            }
+            fRun += f;
+            if (fRun > fLimit || rtl::math::approxEqual(fRun, fLimit))
+                bReached = true;
+        }
+        continue;
+    }
+    for (const auto& [pMember, pData] : rList)
+        if (!ZetaKeep(rSpec, pMember->GetDisplayName(false), pData))
+            pMember->SetAutoHidden();
+  }
+}
+
+bool ScDPResultDimension::ZetaKeep(const ZetaSpec& rSpec, const OUString& rCaption, const ScDPDataMember* pData)
+{
+    const OUString& t = rSpec.maType;
+    if (t.startsWith("value"))
+    {
+        double f = 0.0;
+        if (!lcl_ZetaValue(pData, rSpec.mnMeasure, f))
+            return false;
+        const bool bEq = rtl::math::approxEqual(f, rSpec.mf1);
+        if (t == "valueEqual") return bEq;
+        if (t == "valueNotEqual") return !bEq;
+        if (t == "valueGreaterThan") return f > rSpec.mf1 && !bEq;
+        if (t == "valueGreaterThanOrEqual") return f > rSpec.mf1 || bEq;
+        if (t == "valueLessThan") return f < rSpec.mf1 && !bEq;
+        if (t == "valueLessThanOrEqual") return f < rSpec.mf1 || bEq;
+        const double fLo = std::min(rSpec.mf1, rSpec.mf2), fHi = std::max(rSpec.mf1, rSpec.mf2);
+        const bool bIn = (f > fLo || rtl::math::approxEqual(f, fLo)) && (f < fHi || rtl::math::approxEqual(f, fHi));
+        if (t == "valueBetween") return bIn;
+        if (t == "valueNotBetween") return !bIn;
+        return true;
+    }
+    const OUString aText = ScGlobal::getCharClass().lowercase(rCaption);
+    if (t == "captionEqual") return lcl_ZetaGlob(aText, rSpec.ma1);
+    if (t == "captionNotEqual") return !lcl_ZetaGlob(aText, rSpec.ma1);
+    if (t == "captionBeginsWith") return lcl_ZetaGlob(aText, Concat2View(rSpec.ma1 + "*"));
+    if (t == "captionNotBeginsWith") return !lcl_ZetaGlob(aText, Concat2View(rSpec.ma1 + "*"));
+    if (t == "captionEndsWith") return lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1));
+    if (t == "captionNotEndsWith") return !lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1));
+    if (t == "captionContains") return lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1 + "*"));
+    if (t == "captionNotContains") return !lcl_ZetaGlob(aText, Concat2View("*" + rSpec.ma1 + "*"));
+    CollatorWrapper& rColl = ScGlobal::GetCollator();
+    const sal_Int32 c1 = rColl.compareString(aText, rSpec.ma1);
+    if (t == "captionGreaterThan") return c1 > 0;
+    if (t == "captionGreaterThanOrEqual") return c1 >= 0;
+    if (t == "captionLessThan") return c1 < 0;
+    if (t == "captionLessThanOrEqual") return c1 <= 0;
+    const bool bIn = c1 >= 0 && rColl.compareString(aText, rSpec.ma2) <= 0;
+    if (t == "captionBetween") return bIn;
+    if (t == "captionNotBetween") return !bIn;
+    return true;
+}
+
 void ScDPResultDimension::SortMembers(ScDPResultMember* pRefMember)
 {
     tools::Long nCount = GetMemberCount();
@@ -3568,6 +3749,19 @@ void ScDPResultDimension::DoAutoShow(ScDPResultMember* pRefMember)
         ScDPResultMember* pMember = GetMember(i);
         if ( pMember->IsVisible() )
             pMember->DoAutoShow( pRefMember );
+    }
+
+    // ZetaOffice: Excel label/value filter - hide the members that don't match
+    if ( ZetaHasFilter() && !bIsDataLayout )
+    {
+        std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>> aList;
+        for (tools::Long i=0; i<nCount; i++)
+        {
+            ScDPResultMember* pMember = GetMember(i);
+            if ( pMember->IsVisible() )
+                aList.emplace_back( pMember, pMember->GetDataRoot() );
+        }
+        ZetaApply( aList );
     }
 
     if ( !(bAutoShow && nAutoCount > 0 && nAutoCount < nCount) )
@@ -4184,6 +4378,19 @@ void ScDPDataDimension::DoAutoShow( ScDPResultDimension* pRefDim )
             ScDPDataMember* pDataMember = maMembers[i].get();
             pDataMember->DoAutoShow( pRefMember );
         }
+    }
+
+    // ZetaOffice: Excel label/value filter of a column field
+    if ( pRefDim->ZetaHasFilter() && !bIsDataLayout )
+    {
+        std::vector<std::pair<ScDPResultMember*, const ScDPDataMember*>> aList;
+        for (tools::Long i=0; i<nCount; i++)
+        {
+            ScDPResultMember* pRefMember = pRefDim->GetMember(i);
+            if ( pRefMember->IsVisible() )
+                aList.emplace_back( pRefMember, maMembers[i].get() );
+        }
+        pRefDim->ZetaApply( aList );
     }
 
     if ( !(pRefDim->IsAutoShow() && pRefDim->GetAutoCount() > 0 && pRefDim->GetAutoCount() < nCount) )
