@@ -2761,6 +2761,25 @@ void AttributeOutputBase::EndTOX( const SwSection& rSect,bool bCareEnd )
         OnTOXEnding();
 }
 
+bool MSWordExportBase::IsWordDefaultDateFormat(const SwField& rField)
+{
+    // The format the import gives a DATE field without \@ (see DomainMapper_Impl::SetNumberFormat):
+    // the short date of the field language with a 4 digit year.
+    SvNumberFormatter* pFormatter = m_rDoc.GetNumberFormatter();
+    const LanguageType nLng = rField.GetLanguage();
+    const SvNumberformat* pFormat = pFormatter->GetEntry(rField.GetUntypedFormat());
+    if (!pFormat || pFormat->GetLanguage() != nLng)
+        return false;
+    const SvNumberformat* pShort
+        = pFormatter->GetEntry(pFormatter->GetFormatIndex(NF_DATE_SYSTEM_SHORT, nLng));
+    if (!pShort)
+        return false;
+    OUString sCode = pShort->GetFormatstring();
+    if (sCode.indexOf("YYYY") == -1)
+        sCode = sCode.replaceFirst("YY", "YYYY");
+    return pFormat->GetFormatstring() == sCode;
+}
+
 bool MSWordExportBase::GetNumberFormat(const SwField& rField, OUString& rStr)
 {
     // Returns a date or time format string by using the US NfKeywordTable
@@ -3162,7 +3181,13 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
             auto pDateTimeField = static_cast<const SwDateTimeField*>(pField);
             const SwDateTimeSubType nSubType = pDateTimeField->GetSubType();
             OUString sStr;
-            if (!GetExport().GetNumberFormat(*pField, sStr))
+            if ((SwDateTimeSubType::Date & nSubType)
+                && GetExport().IsWordDefaultDateFormat(*pField))
+            {
+                // imported from a DATE field without \@: keep it without a format switch
+                GetExport().OutputField(pField, ww::eDATE, FieldString(ww::eDATE));
+            }
+            else if (!GetExport().GetNumberFormat(*pField, sStr))
                 bWriteExpand = true;
             else
             {

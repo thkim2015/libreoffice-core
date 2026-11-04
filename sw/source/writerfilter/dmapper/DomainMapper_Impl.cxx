@@ -6078,6 +6078,37 @@ void DomainMapper_Impl::SetNumberFormat( const OUString& rCommand,
                 DBG_UNHANDLED_EXCEPTION("writerfilter.dmapper");
             }
         }
+        else if (sCommand == "DATE" && !bDetectFormat)
+        {
+            // Word shows a DATE field without \@ in the default short date of the field
+            // language. Use the locale's short date with a 4 digit year, kept in LibreOffice
+            // syntax, so that the DOCX/DOC export recognizes it and writes no switch again.
+            try
+            {
+                css::uno::Reference<css::i18n::XNumberFormatCode> const xNumberFormatCode =
+                    i18n::NumberFormatMapper::create(m_xComponentContext);
+                OUString sCode = xNumberFormatCode->getFormatCode(
+                    css::i18n::NumberFormatIndex::DATE_SYSTEM_SHORT, aCurrentLocale).Code;
+                if (sCode.indexOf("YYYY") == -1)
+                    sCode = sCode.replaceFirst("YY", "YYYY");
+                uno::Reference<util::XNumberFormatsSupplier> xSupplier(
+                    static_cast<cppu::OWeakObject*>(m_xTextDocument.get()), uno::UNO_QUERY);
+                if (xSupplier)
+                {
+                    uno::Reference<util::XNumberFormats> xFormats = xSupplier->getNumberFormats();
+                    sal_Int32 nKey = xFormats->queryKey(sCode, aCurrentLocale, false);
+                    if (nKey == -1)
+                        nKey = xFormats->addNew(sCode, aCurrentLocale);
+                    xPropertySet->setPropertyValue(getPropertyName(PROP_NUMBER_FORMAT),
+                                                   uno::Any(nKey));
+                    return;
+                }
+            }
+            catch (const uno::Exception&)
+            {
+                DBG_UNHANDLED_EXCEPTION("writerfilter.dmapper");
+            }
+        }
     }
     OUString sFormat = ConversionHelper::ConvertMSFormatStringToSO( sFormatString, aCurrentLocale, bHijri);
     //get the number formatter and convert the string to a format value

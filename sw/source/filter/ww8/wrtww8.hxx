@@ -817,6 +817,8 @@ public:
 
     // Compute the number format for WW dates
     bool GetNumberFormat(const SwField& rField, OUString& rStr);
+    /// DATE field format that stands for no \\@ switch (Word's default short date).
+    bool IsWordDefaultDateFormat(const SwField& rField);
 
     virtual sal_uInt64 ReplaceCr( sal_uInt8 nChar ) = 0;
 
