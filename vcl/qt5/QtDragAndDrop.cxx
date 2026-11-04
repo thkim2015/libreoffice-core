@@ -21,6 +21,10 @@
 #include <com/sun/star/datatransfer/dnd/DNDConstants.hpp>
 
 #include <QtGui/QDrag>
+#ifdef EMSCRIPTEN
+#include <QtGui/QKeyEvent>
+#include <QtGui/QMouseEvent>
+#endif
 
 using namespace com::sun::star;
 
@@ -113,6 +117,100 @@ sal_Int8 lcl_getUserDropAction(const QDropEvent& rEvent, const sal_Int8 nSourceA
     }
     return nUserDropAction;
 }
+
+#ifdef EMSCRIPTEN
+/** Emulates a drag inside one frame for Qt WASM.
+ *
+ *  QDrag::exec needs a nested event loop, which the WASM build can't run, so
+ *  the drag would end right away.  Instead, watch the mouse on the frame
+ *  widget and turn the moves and the release into drag and drop events.
+ */
+class QtWasmDragFilter : public QObject
+{
+    QtFrame* m_pFrame;
+    QtDragSource* m_pSource;
+    QMimeData* m_pMimeData;
+    Qt::DropActions m_eActions;
+    bool m_bEntered = false;
+    bool m_bDone = false;
+
+    void enter(const QPoint& rPos, Qt::MouseButtons eButtons, Qt::KeyboardModifiers eMods)
+    {
+        if (m_bEntered)
+            return;
+        m_bEntered = true;
+        QDragEnterEvent aEvent(rPos, m_eActions, m_pMimeData, eButtons, eMods);
+        m_pFrame->handleDragEnter(&aEvent);
+    }
+
+    void finish(sal_Int8 nAction, bool bSuccess)
+    {
+        m_bDone = true;
+        m_pFrame->GetQWidget().removeEventFilter(this);
+        m_pSource->fire_dragEnd(nAction, bSuccess);
+        deleteLater();
+    }
+
+public:
+    QtWasmDragFilter(QtFrame* pFrame, QtDragSource* pSource, QMimeData* pMimeData,
+                     Qt::DropActions eActions)
+        : m_pFrame(pFrame)
+        , m_pSource(pSource)
+        , m_pMimeData(pMimeData)
+        , m_eActions(eActions)
+    {
+        m_pFrame->GetQWidget().installEventFilter(this);
+    }
+
+    ~QtWasmDragFilter() override { delete m_pMimeData; }
+
+    bool eventFilter(QObject*, QEvent* pEvent) override
+    {
+        if (m_bDone)
+            return false;
+        switch (pEvent->type())
+        {
+            case QEvent::MouseMove:
+            {
+                QMouseEvent* pMouse = static_cast<QMouseEvent*>(pEvent);
+                enter(pMouse->pos(), pMouse->buttons(), pMouse->modifiers());
+                QDragMoveEvent aEvent(pMouse->pos(), m_eActions, m_pMimeData, pMouse->buttons(),
+                                      pMouse->modifiers());
+                m_pFrame->handleDragMove(&aEvent);
+                return true;
+            }
+            case QEvent::MouseButtonRelease:
+            {
+                QMouseEvent* pMouse = static_cast<QMouseEvent*>(pEvent);
+                enter(pMouse->pos(), pMouse->buttons(), pMouse->modifiers());
+                QDropEvent aEvent(QPointF(pMouse->pos()), m_eActions, m_pMimeData,
+                                  pMouse->buttons(), pMouse->modifiers());
+                m_pFrame->handleDrop(&aEvent);
+                const bool bSuccess = aEvent.isAccepted();
+                finish(bSuccess ? toVclDropAction(aEvent.dropAction())
+                                : css::datatransfer::dnd::DNDConstants::ACTION_NONE,
+                       bSuccess);
+                return true;
+            }
+            case QEvent::MouseButtonPress:
+            case QEvent::MouseButtonDblClick:
+                return true;
+            case QEvent::KeyPress:
+                if (static_cast<QKeyEvent*>(pEvent)->key() == Qt::Key_Escape)
+                {
+                    if (m_bEntered)
+                        m_pFrame->handleDragLeave();
+                    finish(css::datatransfer::dnd::DNDConstants::ACTION_NONE, false);
+                    return true;
+                }
+                break;
+            default:
+                break;
+        }
+        return false;
+    }
+};
+#endif
 }
 
 QtDragSource::QtDragSource(QtFrame* pFrame)
@@ -137,6 +235,15 @@ void QtDragSource::startDrag(
 {
     m_xListener = rListener;
 
+#ifdef EMSCRIPTEN
+    if (m_pFrame)
+    {
+        // fire_dragEnd is called by the filter when the mouse is released
+        new QtWasmDragFilter(m_pFrame, this, new QtDragMimeData(rTrans),
+                             toQtDropActions(sourceActions));
+        return;
+    }
+#endif
     if (m_pFrame)
     {
         QDrag* drag = new QDrag(&m_pFrame->GetQWidget());
