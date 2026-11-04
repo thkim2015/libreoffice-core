@@ -61,7 +61,7 @@ css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ChartSpaceFra
     {
         if( mrModel.mnPivotButtons < 0 )
             mrModel.mnPivotButtons = 0;
-        return static_cast< ::oox::core::FragmentHandler* >( this );
+        return static_cast< ::oox::core::ContextHandler* >( this );
     }
     sal_Int32 nBit = 0;
     if( bC14 && rName == "dropZoneFilter" ) nBit = 1;
