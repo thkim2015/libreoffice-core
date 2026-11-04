@@ -31,6 +31,7 @@
 #include <fmtsrnd.hxx>
 #include <fmtfollowtextflow.hxx>
 #include <frmfmt.hxx>
+#include <svl/grabbagitem.hxx>
 #include <frameformats.hxx>
 #include <dflyobj.hxx>
 #include <swtable.hxx>
@@ -1753,7 +1754,21 @@ bool SwTextBoxHelper::TextBoxIsFramePr(const SwFrameFormat& rFrameFormat)
 {
     SdrObject* pSdrObj = const_cast<SdrObject*>(rFrameFormat.FindRealSdrObject());
     if (!pSdrObj)
-        return false;
+    {
+        // No layout yet (e.g. an even/first page footer that is never shown): the
+        // frame format itself still carries the import grab bag.
+        if (rFrameFormat.Which() != RES_FLYFRMFMT)
+            return false;
+        const SfxGrabBagItem* pGrabBag
+            = rFrameFormat.GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false);
+        if (!pGrabBag)
+            return false;
+        bool bFramePr = false;
+        auto it = pGrabBag->GetGrabBag().find(u"ParaFrameProperties"_ustr);
+        if (it != pGrabBag->GetGrabBag().end())
+            it->second >>= bFramePr;
+        return bFramePr;
+    }
 
     uno::Reference<beans::XPropertySet> xPropertySet(pSdrObj->getUnoShape(), uno::UNO_QUERY);
     if (!xPropertySet.is())

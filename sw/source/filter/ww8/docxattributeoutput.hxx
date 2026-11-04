@@ -974,6 +974,8 @@ private:
     std::unique_ptr<SwWriteTable> m_xTableWrt;
 
     FramePrHelper m_aFramePr;
+    /// body framePr state saved while headers/footers are written
+    FramePrHelper m_aFramePrOutsideHeaderFooter;
 
     bool m_bParagraphOpened;
     bool m_bParagraphFrameOpen;
@@ -1164,7 +1166,23 @@ public:
 
     void BulletDefinition(int nId, const Graphic& rGraphic, Size aSize) override;
 
-    void SetWritingHeaderFooter( bool bWritingHeaderFooter )    {   m_bWritingHeaderFooter = bWritingHeaderFooter;   }
+    void SetWritingHeaderFooter( bool bWritingHeaderFooter )
+    {
+        // Headers/footers may be written while a body framePr paragraph is being
+        // exported: keep the body frame aside so that header/footer paragraphs only
+        // see their own framePr frames (e.g. Word's PAGE number frame in a footer).
+        if (bWritingHeaderFooter && !m_bWritingHeaderFooter)
+        {
+            m_aFramePrOutsideHeaderFooter = m_aFramePr;
+            m_aFramePr = FramePrHelper();
+        }
+        else if (!bWritingHeaderFooter && m_bWritingHeaderFooter)
+        {
+            m_aFramePr = m_aFramePrOutsideHeaderFooter;
+            m_aFramePrOutsideHeaderFooter = FramePrHelper();
+        }
+        m_bWritingHeaderFooter = bWritingHeaderFooter;
+    }
     bool GetWritingHeaderFooter( ) const  {   return m_bWritingHeaderFooter;  }
     void SetAlternateContentChoiceOpen( bool bAltContentChoiceOpen ) { m_bAlternateContentChoiceOpen = bAltContentChoiceOpen; }
     bool IsAlternateContentChoiceOpen( ) const { return m_bAlternateContentChoiceOpen; }

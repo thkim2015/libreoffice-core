@@ -1223,7 +1223,7 @@ void DocxAttributeOutput::EndParagraph( const ww8::WW8TableNodeInfoInner::Pointe
             ww8::Frame aFrame = m_aFramesOfParagraph.top()[nIndex];
             const SwFrameFormat& rFrameFormat = aFrame.GetFrameFormat();
 
-            if (!m_bWritingHeaderFooter && SwTextBoxHelper::TextBoxIsFramePr(rFrameFormat))
+            if (SwTextBoxHelper::TextBoxIsFramePr(rFrameFormat))
             {
                 aFramePrTextbox.push_back(std::make_shared<ww8::Frame>(aFrame));
             }
@@ -1695,7 +1695,7 @@ void DocxAttributeOutput::EndParagraphProperties(const SfxItemSet& rParagraphMar
         WriteCollectedParagraphProperties();
     Redline( pRedlineData );
 
-    if (!m_bWritingHeaderFooter && m_aFramePr.Frame())
+    if (m_aFramePr.Frame())
     {
         // write the collected paragraph properties __without__ the <framePr> element
         m_rExport.SdrExporter().getFlyAttrList().clear();
@@ -1752,7 +1752,7 @@ void DocxAttributeOutput::EndParagraphProperties(const SfxItemSet& rParagraphMar
     m_pSerializer->mergeTopMarks(Tag_InitCollectedRunProperties);
     m_pSerializer->endElementNS( XML_w, XML_rPr );
 
-    if (!m_bWritingHeaderFooter && m_aFramePr.Frame())
+    if (m_aFramePr.Frame())
     {
         const SwFrameFormat& rFrameFormat = m_aFramePr.Frame()->GetFrameFormat();
         assert(SwTextBoxHelper::TextBoxIsFramePr(rFrameFormat) && "by definition, because Frame()");
