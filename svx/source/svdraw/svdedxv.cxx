@@ -39,6 +39,8 @@
 #include <svx/svdpage.hxx>
 #include <svx/svdpagv.hxx>
 #include <svx/svdundo.hxx>
+#include <svx/svdview.hxx>
+#include <svx/unoshtxt.hxx>
 #include <vcl/canvastools.hxx>
 #include <vcl/commandevent.hxx>
 #include <vcl/cursor.hxx>
@@ -2726,6 +2728,19 @@ void SdrObjEditView::getTextSelection(css::uno::Any& rSelection)
         SvxUnoTextBase* pRange = comphelper::getFromUnoTunnel<SvxUnoTextBase>(xText);
         if (pRange)
         {
+            // The text being edited lives in the view's edit outliner, not in the model.
+            // A cursor bound to the view writes through to the edit outliner, so attributes
+            // set on the returned selection show up at once and survive SdrEndTextEdit.
+            SdrView* pSdrView = dynamic_cast<SdrView*>(this);
+            vcl::Window* pWin = pOutlinerView->GetWindow();
+            if (pSdrView && pWin)
+            {
+                SvxTextEditSource aSource(*pObj, nullptr, *pSdrView, *pWin->GetOutDev());
+                rtl::Reference<SvxUnoText> xViewText(
+                    new SvxUnoText(&aSource, pRange->getPropertySet(), xText));
+                rSelection <<= xViewText->createTextCursorBySelection(pOutlinerView->GetSelection());
+                return;
+            }
             rSelection <<= pRange->createTextCursorBySelection(pOutlinerView->GetSelection());
         }
     }

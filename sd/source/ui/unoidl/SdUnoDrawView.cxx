@@ -33,6 +33,13 @@
 #include <sfx2/dispatch.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <svx/svdpagv.hxx>
+#include <View.hxx>
+#include <svx/svdotext.hxx>
+#include <svx/unoshtxt.hxx>
+#include <editeng/unotext.hxx>
+#include <editeng/outliner.hxx>
+#include <comphelper/servicehelper.hxx>
+#include <com/sun/star/text/XTextCursor.hpp>
 #include <svx/unopage.hxx>
 #include <sfx2/zoomitem.hxx>
 #include <com/sun/star/drawing/DrawViewMode.hpp>
@@ -344,6 +351,30 @@ void SdUnoDrawView::setFastPropertyValue (
     }
 }
 
+namespace
+{
+// Cursor over the current text edit selection (collapsed at the caret when nothing is selected).
+// It is bound to the view, so it reads and writes the edit outliner rather than the model.
+Any lcl_getTextEditCursor(::sd::View& rView)
+{
+    Any aRet;
+    if (!rView.IsTextEdit())
+        return aRet;
+    OutlinerView* pOLV = rView.GetTextEditOutlinerView();
+    SdrObject* pObj = rView.GetTextEditObject();
+    if (!pOLV || !pObj || !pOLV->GetWindow())
+        return aRet;
+    Reference<css::text::XText> xText(pObj->getUnoShape(), UNO_QUERY);
+    SvxUnoTextBase* pText = comphelper::getFromUnoTunnel<SvxUnoTextBase>(xText);
+    if (!pText)
+        return aRet;
+    SvxTextEditSource aSource(*pObj, nullptr, rView, *pOLV->GetWindow()->GetOutDev());
+    rtl::Reference<SvxUnoText> xViewText(new SvxUnoText(&aSource, pText->getPropertySet(), xText));
+    aRet <<= xViewText->createTextCursorBySelection(pOLV->GetSelection());
+    return aRet;
+}
+}
+
 Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
     sal_Int32 nHandle)
 {
@@ -378,6 +409,10 @@ Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
 
         case DrawController::PROPERTY_DRAWVIEWMODE:
             aValue = getDrawViewMode();
+            break;
+
+        case DrawController::PROPERTY_TEXTEDITCURSOR:
+            aValue = lcl_getTextEditCursor(mrView);
             break;
 
         default:

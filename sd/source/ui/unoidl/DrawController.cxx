@@ -35,6 +35,7 @@
 #include <cppuhelper/supportsservice.hxx>
 #include <cppuhelper/typeprovider.hxx>
 
+#include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/drawing/XDrawSubController.hpp>
 #include <com/sun/star/drawing/XLayer.hpp>
@@ -658,6 +659,12 @@ void DrawController::FillPropertyTable (
             PROPERTY_PAGE_CHANGE,
             ::cppu::UnoType<sal_Int16>::get(),
             beans::PropertyAttribute::BOUND );
+    // Cursor over the text being edited (also when only the caret is shown), bound to the
+    // view's edit outliner so that attributes set on it apply at once. Void outside text edit.
+    rProperties.emplace_back( "TextEditCursor",
+            PROPERTY_TEXTEDITCURSOR,
+            cppu::UnoType<css::text::XTextCursor>::get(),
+            beans::PropertyAttribute::READONLY | beans::PropertyAttribute::MAYBEVOID );
 }
 
 IPropertyArrayHelper & DrawController::getInfoHelper()
