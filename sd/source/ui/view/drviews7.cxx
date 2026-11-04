@@ -723,6 +723,17 @@ void DrawViewShell::GetMenuState( SfxItemSet &rSet )
             else
                 mbPastePossible = false;
         }
+#ifdef EMSCRIPTEN
+        // The Qt clipboard of the WASM build sends no change notification,
+        // so ClipboardChanged never runs: query the clipboard every time.
+        else if (dynamic_cast<const PresentationViewShell*>(this) == nullptr)
+        {
+            TransferableDataHelper aDataHelper(
+                TransferableDataHelper::CreateFromSystemClipboard(GetActiveWindow()));
+            mbPastePossible = (aDataHelper.GetFormatCount() != 0);
+            mpCurrentClipboardFormats = GetSupportedClipboardFormats(aDataHelper);
+        }
+#endif
 
         if( !mbPastePossible )
         {

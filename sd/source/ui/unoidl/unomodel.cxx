@@ -192,6 +192,7 @@
 #include <controller/SlsPageSelector.hxx>
 
 #include <app.hrc>
+#include <CustomAnimationPreset.hxx>
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
@@ -2704,6 +2705,25 @@ SdXImpressDocument::createInstanceWithArguments(
     OUString const & ServiceSpecifier,
     css::uno::Sequence<css::uno::Any> const & Arguments)
 {
+    if (ServiceSpecifier == "com.sun.star.presentation.AnimationPresetNode")
+    {
+        // Arguments: preset id, optional preset sub type. Returns a clone of
+        // the effect node of that preset (effects.xml), without a target.
+        ::SolarMutexGuard aGuard;
+        OUString aPresetId;
+        OUString aSubType;
+        if (Arguments.getLength() >= 1)
+            Arguments[0] >>= aPresetId;
+        if (Arguments.getLength() >= 2)
+            Arguments[1] >>= aSubType;
+        const sd::CustomAnimationPresets& rPresets
+            = sd::CustomAnimationPresets::getCustomAnimationPresets();
+        sd::CustomAnimationPresetPtr pPreset = rPresets.getEffectDescriptor(aPresetId);
+        if (!pPreset)
+            return nullptr;
+        return pPreset->create(aSubType);
+    }
+
     OUString arg;
     if ((ServiceSpecifier == "com.sun.star.drawing.GraphicObjectShape"
          || ServiceSpecifier == "com.sun.star.drawing.AppletShape"

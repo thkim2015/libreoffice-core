@@ -72,6 +72,10 @@
 #include <comphelper/processfactory.hxx>
 #include <svx/sdrhittesthelper.hxx>
 #include <svx/xbtmpit.hxx>
+#include <svx/sdtagitm.hxx>
+#include <svx/sdtditm.hxx>
+#include <svx/sdtmfitm.hxx>
+#include <svx/svdotext.hxx>
 #include <memory>
 #include <SlideSorter.hxx>
 #include <controller/SlideSorterController.hxx>
@@ -109,6 +113,44 @@ static SdrObject* ImpGetClone(std::vector<ImpRememberOrigAndClone>& aConnectorCo
             return rImp.pClone;
     }
     return nullptr;
+}
+
+/** Give text pasted outside of a text box the PowerPoint shape: a text box
+    half as wide as the slide, wrapping, growing in height, centered on the
+    slide, with the PowerPoint insets (0.25 cm left and right, 0.13 cm top
+    and bottom). */
+static void ImpFitPastedTextBox(SdrView& rView, SdDrawDocument& rDoc)
+{
+    if (rDoc.GetDocumentType() != DocumentType::Impress)
+        return;
+    const SdrMarkList& rMarkList = rView.GetMarkedObjectList();
+    if (rMarkList.GetMarkCount() != 1)
+        return;
+    SdrTextObj* pText = DynCastSdrTextObj(rMarkList.GetMark(0)->GetMarkedSdrObj());
+    if (!pText || pText->GetObjIdentifier() != SdrObjKind::Text)
+        return;
+    SdrPage* pPage = pText->getSdrPageFromSdrObject();
+    if (!pPage)
+        return;
+    const Size aPageSize(pPage->GetSize());
+    const ::tools::Long nWidth = aPageSize.Width() / 2;
+
+    SfxItemSet aSet(rDoc.GetPool(), svl::Items<SDRATTR_START, SDRATTR_END>);
+    aSet.Put(makeSdrTextAutoGrowWidthItem(false));
+    aSet.Put(makeSdrTextAutoGrowHeightItem(true));
+    aSet.Put(makeSdrTextMinFrameHeightItem(0));
+    aSet.Put(makeSdrTextLeftDistItem(254));
+    aSet.Put(makeSdrTextRightDistItem(254));
+    aSet.Put(makeSdrTextUpperDistItem(127));
+    aSet.Put(makeSdrTextLowerDistItem(127));
+    pText->SetMergedItemSet(aSet);
+
+    pText->SetLogicRect(::tools::Rectangle(Point(0, 0), Size(nWidth, 1)));
+    pText->AdjustTextFrameWidthAndHeight();
+    const ::tools::Rectangle aRect(pText->GetLogicRect());
+    pText->SetLogicRect(::tools::Rectangle(
+        Point((aPageSize.Width() - aRect.GetWidth()) / 2, (aPageSize.Height() - aRect.GetHeight()) / 2),
+        aRect.GetSize()));
 }
 
 // restrict movement to WorkArea
@@ -1512,7 +1554,10 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
             // mba: clipboard always must contain absolute URLs (could be from alien source)
             if (SdrView::Paste(*xStm, EETextFormat::Xml, maDropPos, pPage, nPasteOptions))
+            {
+                ImpFitPastedTextBox(*this, mrDoc);
                 return true;
+            }
         }
     }
 
@@ -1544,7 +1589,10 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                 // mba: clipboard always must contain absolute URLs (could be from alien source)
                 if (SdrView::Paste(*pHtmlStream, EETextFormat::Html, maDropPos, pPage, nPasteOptions))
+                {
+                    ImpFitPastedTextBox(*this, mrDoc);
                     return true;
+                }
             }
         }
 
@@ -1581,7 +1629,10 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
 
                     // mba: clipboard always must contain absolute URLs (could be from alien source)
                     if (SdrView::Paste(*xStm, EETextFormat::Rtf, maDropPos, pPage, nPasteOptions))
+                    {
+                        ImpFitPastedTextBox(*this, mrDoc);
                         return true;
+                    }
                 }
             }
         }
@@ -1651,7 +1702,10 @@ bool View::InsertData( const TransferableDataHelper& rDataHelper,
                 }
 
                 if (SdrView::Paste(aOUString, maDropPos, pPage, nPasteOptions))
+                {
+                    ImpFitPastedTextBox(*this, mrDoc);
                     return true;
+                }
             }
         }
     }

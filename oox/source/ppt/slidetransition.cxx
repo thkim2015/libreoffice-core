@@ -301,12 +301,11 @@ namespace oox::ppt {
             mbTransitionDirectionNormal = false;
             break;
         case PPT_TOKEN( cut ):
-            if( param1 )
-            {
-                mnTransitionType = TransitionType::BARWIPE;
-                mnTransitionSubType = TransitionSubType::FADEOVERCOLOR;
-            }
-            SAL_WARN("oox.ppt", "OOX: cut transition fallback." );
+            mnTransitionType = TransitionType::BARWIPE;
+            mnTransitionSubType = TransitionSubType::FADEOVERCOLOR;
+            // a plain cut (no thruBlk) keeps its own value: the reverse direction
+            if( !param1 )
+                mbTransitionDirectionNormal = false;
             break;
         case PPT_TOKEN( fade ):
             mnTransitionType = TransitionType::FADE;
