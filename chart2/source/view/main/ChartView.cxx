@@ -1773,10 +1773,40 @@ void lcl_collectFieldButtons(const SdrObjList* pList, std::vector<OUString>& rOu
         lcl_collectFieldButtons(pObj->GetSubList(), rOut);
     }
 }
+// Every chart object shape carries its ObjectIdentifier ("CID/...") as name.
+// Report them all with their rectangles so the web shell can hit-test a
+// click inside the chart (title, legend, axis, series, data point, ...).
+void lcl_collectObjectRects(const SdrObjList* pList, std::vector<OUString>& rOut)
+{
+    if (!pList)
+        return;
+    for (const rtl::Reference<SdrObject>& pObj : *pList)
+    {
+        if (!pObj)
+            continue;
+        if (pObj->GetName().startsWith("CID/"))
+        {
+            const tools::Rectangle aRect = pObj->GetCurrentBoundRect();
+            rOut.push_back(pObj->GetName() + "\t" + OUString::number(aRect.Left()) + "\t"
+                           + OUString::number(aRect.Top()) + "\t"
+                           + OUString::number(aRect.GetWidth()) + "\t"
+                           + OUString::number(aRect.GetHeight()));
+        }
+        lcl_collectObjectRects(pObj->GetSubList(), rOut);
+    }
+}
 }
 
 Any SAL_CALL ChartView::getPropertyValue( const OUString& rPropertyName )
 {
+    if( rPropertyName == "ZetaObjectRects" )
+    {
+        impl_updateView();
+        std::vector<OUString> aOut;
+        if (mxRootShape.is() && mxRootShape->GetSdrObject())
+            lcl_collectObjectRects(mxRootShape->GetSdrObject()->GetSubList(), aOut);
+        return Any(comphelper::containerToSequence(aOut));
+    }
     if( rPropertyName == "ZetaFieldButtons" )
     {
         impl_updateView();
