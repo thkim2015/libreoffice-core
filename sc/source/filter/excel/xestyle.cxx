@@ -3402,7 +3402,9 @@ void XclExpDxf::SaveXmlExt( XclExpXmlStream& rStrm )
 
 XclExpXmlTableStyle::XclExpXmlTableStyle(const XclExpRoot& rRoot, const ScTableStyle* pTableStyle):
     XclExpRoot(rRoot),
-    maStyleName(pTableStyle->GetName())
+    maStyleName(pTableStyle->GetName()),
+    mbTable(pTableStyle->IsTable()),
+    mbPivot(pTableStyle->IsPivot())
 {
     XclExpDxfs& rDxfs = GetDxfs();
     std::map<ScTableStyleElement, const ScPatternAttr*> aTableElements = pTableStyle->GetSetPatterns();
@@ -3415,12 +3417,21 @@ XclExpXmlTableStyle::XclExpXmlTableStyle(const XclExpRoot& rRoot, const ScTableS
     }
 }
 
-const std::map<ScTableStyleElement, const char*> aTableStyleElementToOOXML = { {ScTableStyleElement::WholeTable, "wholeTable"}, {ScTableStyleElement::FirstColumnStripe, "firstColumnStripe"}, {ScTableStyleElement::SecondColumnStripe, "secondColumnStripe"}, {ScTableStyleElement::FirstRowStripe, "firstRowStripe"}, {ScTableStyleElement::SecondRowStripe, "secondRowStripe"}, {ScTableStyleElement::LastColumn, "lastColumn"}, {ScTableStyleElement::FirstColumn, "firstColumn"}, {ScTableStyleElement::HeaderRow, "headerRow"}, {ScTableStyleElement::TotalRow, "totalRow"}, {ScTableStyleElement::FirstHeaderCell, "firstHeaderCell"}, {ScTableStyleElement::LastHeaderCell, "lastHeaderCell"} };
+const std::map<ScTableStyleElement, const char*> aTableStyleElementToOOXML = { {ScTableStyleElement::WholeTable, "wholeTable"}, {ScTableStyleElement::FirstColumnStripe, "firstColumnStripe"}, {ScTableStyleElement::SecondColumnStripe, "secondColumnStripe"}, {ScTableStyleElement::FirstRowStripe, "firstRowStripe"}, {ScTableStyleElement::SecondRowStripe, "secondRowStripe"}, {ScTableStyleElement::LastColumn, "lastColumn"}, {ScTableStyleElement::FirstColumn, "firstColumn"}, {ScTableStyleElement::HeaderRow, "headerRow"}, {ScTableStyleElement::TotalRow, "totalRow"}, {ScTableStyleElement::FirstHeaderCell, "firstHeaderCell"}, {ScTableStyleElement::LastHeaderCell, "lastHeaderCell"},
+    {ScTableStyleElement::PageFieldLabels, "pageFieldLabels"}, {ScTableStyleElement::PageFieldValues, "pageFieldValues"},
+    {ScTableStyleElement::FirstSubtotalColumn, "firstSubtotalColumn"}, {ScTableStyleElement::SecondSubtotalColumn, "secondSubtotalColumn"}, {ScTableStyleElement::ThirdSubtotalColumn, "thirdSubtotalColumn"},
+    {ScTableStyleElement::BlankRow, "blankRow"},
+    {ScTableStyleElement::FirstSubtotalRow, "firstSubtotalRow"}, {ScTableStyleElement::SecondSubtotalRow, "secondSubtotalRow"}, {ScTableStyleElement::ThirdSubtotalRow, "thirdSubtotalRow"},
+    {ScTableStyleElement::FirstColumnSubheading, "firstColumnSubheading"}, {ScTableStyleElement::SecondColumnSubheading, "secondColumnSubheading"}, {ScTableStyleElement::ThirdColumnSubheading, "thirdColumnSubheading"},
+    {ScTableStyleElement::FirstRowSubheading, "firstRowSubheading"}, {ScTableStyleElement::SecondRowSubheading, "secondRowSubheading"}, {ScTableStyleElement::ThirdRowSubheading, "thirdRowSubheading"} };
 
 void XclExpXmlTableStyle::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& rStyleSheet = rStrm.GetCurrentStream();
-    rStyleSheet->startElement( XML_tableStyle, XML_count, OString::number(maTableElements.size()), XML_name, maStyleName.toUtf8());
+    // table="0" / pivot="0": custom styles offered only for PivotTables or only for tables
+    rStyleSheet->startElement( XML_tableStyle, XML_name, maStyleName.toUtf8(),
+        XML_pivot, sax_fastparser::UseIf("0", !mbPivot), XML_table, sax_fastparser::UseIf("0", !mbTable),
+        XML_count, OString::number(maTableElements.size()));
     for (auto& rTableStyleElement : maTableElements)
     {
         const auto aFind = aTableStyleElementToOOXML.find(rTableStyleElement.first);
@@ -3453,6 +3464,17 @@ XclExpXmlTableStyles::XclExpXmlTableStyles( const XclExpRoot& rRoot):
             aTableStyleNames.insert(pParam->maStyleID);
         }
     }
+
+    // custom PivotTable styles are written even when no table uses them (Excel keeps them
+    // in the gallery; pivotTableStyleInfo refers to them by name)
+    for (const ScTableStyle* pCustom : pTableStyles->GetCustomTableStyles())
+        if (!pCustom->IsTable())
+            aTableStyleNames.insert(pCustom->GetName());
+    if (ScDPCollection* pDPs = GetDoc().GetDPCollection())
+        for (size_t i = 0; i < pDPs->GetCount(); ++i)
+            if (const auto& rInfo = (*pDPs)[i].getStyleInfo(); rInfo.isSet() && !rInfo.maName.isEmpty()
+                && pTableStyles->GetTableStyle(rInfo.maName))
+                aTableStyleNames.insert(rInfo.maName);
 
     for (const OUString& aTableStyleName : aTableStyleNames)
     {

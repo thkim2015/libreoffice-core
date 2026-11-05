@@ -3275,7 +3275,9 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScModelObj::getPropertySetInfo(
 namespace {
 
 // Custom table styles as UNO data (property ZetaTableStyles): each style is
-// { Name, Elements = [ { Name = OOXML element type, Value = format } ], <element>Size }
+// { Name, Elements = [ { Name = OOXML element type, Value = format } ], <element>Size,
+//   Table, Pivot (OOXML tableStyle table/pivot: a custom PivotTable style has Table = false),
+//   Remove (set only: delete the custom style of that name) }
 // and a format is { Fill, Color (RGB), Bold, Italic, Underline (1 single, 2 double),
 // Strike, Top/Bottom/Left/Right/InsideH/InsideV (BorderLine2) }.
 const std::pair<ScTableStyleElement, OUString> aZetaTableElements[] = {
@@ -3290,6 +3292,21 @@ const std::pair<ScTableStyleElement, OUString> aZetaTableElements[] = {
     { ScTableStyleElement::TotalRow, u"totalRow"_ustr },
     { ScTableStyleElement::FirstHeaderCell, u"firstHeaderCell"_ustr },
     { ScTableStyleElement::LastHeaderCell, u"lastHeaderCell"_ustr },
+    { ScTableStyleElement::PageFieldLabels, u"pageFieldLabels"_ustr },
+    { ScTableStyleElement::PageFieldValues, u"pageFieldValues"_ustr },
+    { ScTableStyleElement::FirstSubtotalColumn, u"firstSubtotalColumn"_ustr },
+    { ScTableStyleElement::SecondSubtotalColumn, u"secondSubtotalColumn"_ustr },
+    { ScTableStyleElement::ThirdSubtotalColumn, u"thirdSubtotalColumn"_ustr },
+    { ScTableStyleElement::BlankRow, u"blankRow"_ustr },
+    { ScTableStyleElement::FirstSubtotalRow, u"firstSubtotalRow"_ustr },
+    { ScTableStyleElement::SecondSubtotalRow, u"secondSubtotalRow"_ustr },
+    { ScTableStyleElement::ThirdSubtotalRow, u"thirdSubtotalRow"_ustr },
+    { ScTableStyleElement::FirstColumnSubheading, u"firstColumnSubheading"_ustr },
+    { ScTableStyleElement::SecondColumnSubheading, u"secondColumnSubheading"_ustr },
+    { ScTableStyleElement::ThirdColumnSubheading, u"thirdColumnSubheading"_ustr },
+    { ScTableStyleElement::FirstRowSubheading, u"firstRowSubheading"_ustr },
+    { ScTableStyleElement::SecondRowSubheading, u"secondRowSubheading"_ustr },
+    { ScTableStyleElement::ThirdRowSubheading, u"thirdRowSubheading"_ustr },
 };
 
 std::unique_ptr<ScPatternAttr> lcl_ZetaPatternFromProps(ScDocument& rDoc, const uno::Sequence<beans::PropertyValue>& rProps)
@@ -3393,11 +3410,18 @@ void lcl_ZetaSetTableStyles(ScDocument& rDoc, const uno::Sequence<uno::Sequence<
         OUString aName;
         uno::Sequence<beans::PropertyValue> aElements;
         std::map<OUString, sal_Int32> aSizes;
+        bool bTable = true, bPivot = true, bRemove = false;
         for (const beans::PropertyValue& rProp : rStyle)
         {
             sal_Int32 nSize = 0;
             if (rProp.Name == "Name")
                 rProp.Value >>= aName;
+            else if (rProp.Name == "Remove")
+                rProp.Value >>= bRemove;
+            else if (rProp.Name == "Table")
+                rProp.Value >>= bTable;
+            else if (rProp.Name == "Pivot")
+                rProp.Value >>= bPivot;
             else if (rProp.Name == "Elements")
                 rProp.Value >>= aElements;
             else if (rProp.Name.endsWith("Size") && (rProp.Value >>= nSize))
@@ -3405,8 +3429,15 @@ void lcl_ZetaSetTableStyles(ScDocument& rDoc, const uno::Sequence<uno::Sequence<
         }
         if (aName.isEmpty())
             continue;
+        if (bRemove)
+        {
+            pStyles->RemoveTableStyle(aName);
+            continue;
+        }
         auto pStyle = std::make_unique<ScTableStyle>(aName, std::optional<OUString>());
         pStyle->SetOOXMLDefault(false);
+        pStyle->SetTable(bTable);
+        pStyle->SetPivot(bPivot);
         for (const beans::PropertyValue& rElement : aElements)
         {
             uno::Sequence<beans::PropertyValue> aFormat;
@@ -3431,7 +3462,9 @@ uno::Sequence<uno::Sequence<beans::PropertyValue>> lcl_ZetaGetTableStyles(const 
         return {};
     for (const ScTableStyle* pStyle : pStyles->GetCustomTableStyles())
     {
-        std::vector<beans::PropertyValue> aStyle { comphelper::makePropertyValue(u"Name"_ustr, pStyle->GetName()) };
+        std::vector<beans::PropertyValue> aStyle { comphelper::makePropertyValue(u"Name"_ustr, pStyle->GetName()),
+                                                   comphelper::makePropertyValue(u"Table"_ustr, pStyle->IsTable()),
+                                                   comphelper::makePropertyValue(u"Pivot"_ustr, pStyle->IsPivot()) };
         std::vector<beans::PropertyValue> aElements;
         for (const auto& [eElement, pPattern] : pStyle->GetSetPatterns())
         {

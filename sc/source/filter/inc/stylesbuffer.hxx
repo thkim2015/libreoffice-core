@@ -856,11 +856,15 @@ class TableStyle : public WorkbookHelper
     OUString maName;
     std::unordered_map<ScTableStyleElement, TableStyleElementInfo> maTableStyleElements;
     bool mbDefaultOOXMLStyle;
+    bool mbTable = true;
+    bool mbPivot = true;
     std::optional<OUString> maUIName;
 public:
     explicit TableStyle( const WorkbookHelper& rHelper, bool bDefaultOOXMLStyle );
 
     void setName(const OUString& rName);
+    /// OOXML tableStyle table/pivot attributes
+    void setUsage(bool bTable, bool bPivot);
     void importTableStyleElement(const AttributeList& rAttribs);
     void finalizeImport(const DxfVector& mrDxfs);
 };

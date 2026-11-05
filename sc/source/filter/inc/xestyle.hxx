@@ -801,6 +801,8 @@ class XclExpXmlTableStyle : public XclExpRecordBase, protected XclExpRoot
     std::map<ScTableStyleElement, sal_Int32> maTableElements;
     std::map<ScTableStyleElement, sal_Int32> maStripeSizes;
     OUString maStyleName;
+    bool mbTable;
+    bool mbPivot;
 
 public:
     explicit            XclExpXmlTableStyle( const XclExpRoot& rRoot, const ScTableStyle* pTableStyle );

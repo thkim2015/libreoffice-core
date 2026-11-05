@@ -2586,6 +2586,12 @@ void TableStyle::setName(const OUString& rName)
     maName = rName;
 }
 
+void TableStyle::setUsage(bool bTable, bool bPivot)
+{
+    mbTable = bTable;
+    mbPivot = bPivot;
+}
+
 void TableStyle::importTableStyleElement(const AttributeList& rAttribs)
 {
     TableStyleElementInfo aInfo;
@@ -2602,7 +2608,22 @@ void TableStyle::importTableStyleElement(const AttributeList& rAttribs)
             { u"headerRow"_ustr, ScTableStyleElement::HeaderRow },
             { u"totalRow"_ustr, ScTableStyleElement::TotalRow },
             { u"firstHeaderCell"_ustr, ScTableStyleElement::FirstHeaderCell },
-            { u"lastHeaderCell"_ustr, ScTableStyleElement::LastHeaderCell }
+            { u"lastHeaderCell"_ustr, ScTableStyleElement::LastHeaderCell },
+            { u"pageFieldLabels"_ustr, ScTableStyleElement::PageFieldLabels },
+            { u"pageFieldValues"_ustr, ScTableStyleElement::PageFieldValues },
+            { u"firstSubtotalColumn"_ustr, ScTableStyleElement::FirstSubtotalColumn },
+            { u"secondSubtotalColumn"_ustr, ScTableStyleElement::SecondSubtotalColumn },
+            { u"thirdSubtotalColumn"_ustr, ScTableStyleElement::ThirdSubtotalColumn },
+            { u"blankRow"_ustr, ScTableStyleElement::BlankRow },
+            { u"firstSubtotalRow"_ustr, ScTableStyleElement::FirstSubtotalRow },
+            { u"secondSubtotalRow"_ustr, ScTableStyleElement::SecondSubtotalRow },
+            { u"thirdSubtotalRow"_ustr, ScTableStyleElement::ThirdSubtotalRow },
+            { u"firstColumnSubheading"_ustr, ScTableStyleElement::FirstColumnSubheading },
+            { u"secondColumnSubheading"_ustr, ScTableStyleElement::SecondColumnSubheading },
+            { u"thirdColumnSubheading"_ustr, ScTableStyleElement::ThirdColumnSubheading },
+            { u"firstRowSubheading"_ustr, ScTableStyleElement::FirstRowSubheading },
+            { u"secondRowSubheading"_ustr, ScTableStyleElement::SecondRowSubheading },
+            { u"thirdRowSubheading"_ustr, ScTableStyleElement::ThirdRowSubheading }
         };
     auto aElementItr = aTableStyleElementMap.find(aTableStyleElementName);
     if (aElementItr == aTableStyleElementMap.end())
@@ -2622,6 +2643,8 @@ void TableStyle::finalizeImport(const DxfVector& rDxfs)
     ::ScDocument& rDoc = getScDocument();
     std::unique_ptr<ScTableStyle> pTableStyle = std::make_unique<ScTableStyle>(maName, maUIName);
     pTableStyle->SetOOXMLDefault(mbDefaultOOXMLStyle);
+    pTableStyle->SetTable(mbTable);
+    pTableStyle->SetPivot(mbPivot);
     for (const auto& aTableStyleElementInfo : maTableStyleElements)
     {
         if (aTableStyleElementInfo.second.mnDxfID < 0 || aTableStyleElementInfo.second.mnDxfID >= sal_Int32(rDxfs.size()))

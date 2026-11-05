@@ -42,6 +42,22 @@ enum class ScTableStyleElement
     TotalRow,
     FirstHeaderCell,
     LastHeaderCell,
+    // pivot table style elements (OOXML ST_TableStyleType)
+    PageFieldLabels,
+    PageFieldValues,
+    FirstSubtotalColumn,
+    SecondSubtotalColumn,
+    ThirdSubtotalColumn,
+    BlankRow,
+    FirstSubtotalRow,
+    SecondSubtotalRow,
+    ThirdSubtotalRow,
+    FirstColumnSubheading,
+    SecondColumnSubheading,
+    ThirdColumnSubheading,
+    FirstRowSubheading,
+    SecondRowSubheading,
+    ThirdRowSubheading,
 };
 
 template <class T> const T* GetItemFromPattern(ScPatternAttr* pPattern, TypedWhichId<T> nWhich)
@@ -68,6 +84,8 @@ private:
     std::unique_ptr<ScPatternAttr> mpTotalRowPattern;
     std::unique_ptr<ScPatternAttr> mpFirstHeaderCellPattern;
     std::unique_ptr<ScPatternAttr> mpLastHeaderCellPattern;
+    /// pivot-only elements (page fields, subtotals, subheadings, blank row)
+    std::map<ScTableStyleElement, std::unique_ptr<ScPatternAttr>> maPivotPatterns;
 
     sal_Int32 mnFirstRowStripeSize;
     sal_Int32 mnSecondRowStripeSize;
@@ -77,6 +95,9 @@ private:
     OUString maStyleName;
     std::optional<OUString> maUIName;
     bool mbIsOOXMLDefault;
+    /// OOXML tableStyle table/pivot attributes: where the style is offered
+    bool mbTable;
+    bool mbPivot;
 
 public:
     ScTableStyle(const OUString& rName, const std::optional<OUString>& rUIName);
@@ -101,6 +122,11 @@ public:
 
     void SetOOXMLDefault(bool bDefault);
     bool IsOOXMLDefault() const;
+
+    void SetTable(bool bTable) { mbTable = bTable; }
+    bool IsTable() const { return mbTable; }
+    void SetPivot(bool bPivot) { mbPivot = bPivot; }
+    bool IsPivot() const { return mbPivot; }
 
     /// Re-resolve themed colors in custom style patterns against a new ColorSet
     void UpdateThemedColors(const model::ColorSet& rColorSet);
@@ -128,6 +154,8 @@ public:
     const ScTableStyle* GetTableStyle(const OUString& rName) const;
     /// add or replace a style with the same name
     void SetTableStyle(std::unique_ptr<ScTableStyle> pTableStyle);
+    /// remove a custom style (OOXML built-in styles stay)
+    void RemoveTableStyle(const OUString& rName);
     /// styles that are not OOXML built-in ones (custom styles of the document)
     std::vector<const ScTableStyle*> GetCustomTableStyles() const;
     bool HasTableStyle() const { return !maTableStyles.empty(); }
