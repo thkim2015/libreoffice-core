@@ -8921,14 +8921,18 @@ DocxAttributeOutput::hasProperties DocxAttributeOutput::WritePostitFields()
     hasProperties eResult = hasProperties::no;
     for (auto& [f1, data1] : m_postitFields)
     {
-        if (f1->GetParentId() != 0 || f1->GetParentPostItId() != 0)
+        // A reply made through the API only knows its parent by name
+        const bool bParentName = !f1->GetParentName().isEmpty();
+        if (f1->GetParentId() != 0 || f1->GetParentPostItId() != 0 || bParentName)
         {
             for (size_t i = 0; i < m_postitFields.size(); i++)
             {
                 auto& [f2, data2] = m_postitFields[i];
                 if ((f1->GetParentId() != 0 && f2->GetParaId() == f1->GetParentId())
                     || (f1->GetParentPostItId() != 0
-                        && f2->GetPostItId() == f1->GetParentPostItId()))
+                        && f2->GetPostItId() == f1->GetParentPostItId())
+                    || (f1->GetParentId() == 0 && f1->GetParentPostItId() == 0 && bParentName
+                        && f2 != f1 && f2->GetName() == f1->GetParentName()))
                 {
                     if (data2.parentStatus == ParentStatus::None)
                         data2.parentStatus = ParentStatus::IsParent;
@@ -9007,7 +9011,7 @@ void DocxAttributeOutput::WritePostItFieldsResolved()
             continue;
         OUString idstr = NumberToHexBinary(data.lastParaId);
         std::optional<OUString> sDone, sParentId;
-        if (f->GetParentId() != 0 || f->GetParentPostItId() != 0)
+        if (f->GetParentId() != 0 || f->GetParentPostItId() != 0 || !f->GetParentName().isEmpty())
         {
             if (data.parentStatus == ParentStatus::HasParent)
             {
