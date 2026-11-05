@@ -8104,7 +8104,12 @@ void DomainMapper_Impl::CloseFieldCommand()
         }
 
         FieldConversionMap_t::const_iterator const aIt = aFieldConversionMap.find(sType);
-        if (aIt != aFieldConversionMap.end()
+        // Word enclosed characters (Home > Font > Enclose Characters) are EQ \o\ac(sym,text):
+        // there is no Writer equivalent, so keep them as a generic fieldmark (code round-trips,
+        // the web shell paints a visible result) instead of dropping them.
+        bool const bEnclosedEq = sType == "EQ"
+            && pContext->GetCommand().toAsciiLowerCase().indexOf("\\ac") >= 0;
+        if (aIt != aFieldConversionMap.end() && !bEnclosedEq
             && (!m_bForceGenericFields
                 // these need to convert ffData to properties...
                     || (aIt->second.eFieldId == FIELD_FORMCHECKBOX)
