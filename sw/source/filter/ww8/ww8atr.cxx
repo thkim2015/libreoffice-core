@@ -3375,8 +3375,9 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                             eField = ww::eREF;
                             break;
                         default:
-                            eField =
-                                ReferencesSubtype::Endnote == nSubType ? ww::eNOTEREF : ww::eFOOTREF;
+                            // Word resolves a footnote reference mark only through NOTEREF;
+                            // REF to the same bookmark updates to an empty result in Word.
+                            eField = ww::eNOTEREF;
                             break;
                     }
                     sStr = FieldString(eField)
