@@ -957,6 +957,16 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         aRet <<= comphelper::containerToSequence(aRects);
         return aRet;
     }
+    // Selected frame (picture, text frame, embedded object) for the web shell: the print area
+    // of the selected fly in document coordinates (1/100 mm), void when no frame is selected.
+    // Lets the page map a click to a pixel of the picture (Word's "Set Transparent Color").
+    if (rPropertyName == "ZetaSelectedFrameRect")
+    {
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        if (rSh.IsFrameSelected())
+            aRet <<= toMm100(rSh.GetAnyCurRect(CurRectType::FlyEmbedded).SVRect());
+        return aRet;
+    }
     // Comment balloons beside the page (web shell): for every comment its name and the
     // rectangle of the first character of the commented text (the field itself for a
     // comment without a range), in document coordinates (1/100 mm). Nothing moves the cursor.
