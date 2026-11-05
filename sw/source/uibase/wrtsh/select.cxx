@@ -945,6 +945,14 @@ int SwWrtShell::IntelligentCut(SelectionType nSelection, bool bCut)
         // no word selected.
     sal_Unicode cPrev = GetChar(false);
     sal_Unicode cNext = GetChar(true, -1);
+    // Word: a word with the spaces after it selected ("alpha ") is still a
+    // word for smart paste; only the spaces inside the selection go with it.
+    tools::Long nTrail = 0;
+    while (cNext == ' ' && nTrail < 16)
+    {
+        ++nTrail;
+        cNext = GetChar(true, -1 - nTrail);
+    }
     if( !cPrev || !cNext ||
         !rCC.isLetterNumeric( ( sText = OUString(cPrev) ), 0 ) ||
         !rCC.isLetterNumeric( ( sText = OUString(cNext) ), 0 ) )
@@ -953,14 +961,19 @@ int SwWrtShell::IntelligentCut(SelectionType nSelection, bool bCut)
     cPrev = GetChar(false, -1);
     cNext = GetChar();
 
-    int cWord = NO_WORD;
-        // is a word selected?
-    if (cPrev && cNext &&
-        CH_TXTATR_BREAKWORD != cPrev && CH_TXTATR_INWORD != cPrev &&
-        CH_TXTATR_BREAKWORD != cNext && CH_TXTATR_INWORD != cNext &&
-        !rCC.isLetterNumeric( ( sText = OUString(cPrev) ), 0 ) &&
-        !rCC.isLetterNumeric( ( sText = OUString(cNext) ), 0 ) )
-       cWord = WORD_NO_SPACE;
+    auto isBoundary = [&](sal_Unicode c) {
+        // 0: the paragraph starts/ends here
+        return !c || ( CH_TXTATR_BREAKWORD != c && CH_TXTATR_INWORD != c &&
+                       !rCC.isLetterNumeric( ( sText = OUString(c) ), 0 ) );
+    };
+    if (!isBoundary(cPrev) || (!nTrail && !isBoundary(cNext)))
+        return NO_WORD;
+    // with trailing spaces selected or at the end of the paragraph nothing
+    // more is cut (Word keeps "alpha beta " when "gamma" at the end is cut)
+    if (nTrail || !cNext || (!cPrev && cNext != ' '))
+        return WORD_NO_SPACE;
+
+    int cWord = WORD_NO_SPACE;
 
     if(cWord == WORD_NO_SPACE && ' ' == cPrev )
     {

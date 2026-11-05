@@ -3884,6 +3884,69 @@ void SwTransferable::DragFinished( sal_Int8 nAction )
 namespace
 {
 
+bool lcl_IsSmartOpen(sal_Unicode c)
+{
+    return c == '(' || c == '[' || c == '{' || c == '"' || c == '\'' || c == 0x201C
+           || c == 0x2018 || c == 0x300C || c == 0x300E || c == 0x3008 || c == 0x300A;
+}
+
+bool lcl_IsSmartClose(sal_Unicode c)
+{
+    return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?' || c == ')'
+           || c == ']' || c == '}' || c == '"' || c == '\'' || c == '%' || c == 0x201D
+           || c == 0x2019 || c == 0x3001 || c == 0x3002 || c == 0x300D || c == 0x300F
+           || c == 0x3009 || c == 0x300B;
+}
+
+/** Smart cut and paste spacing like Word: the whole word(s) inserted at
+ *  [nStart, nEnd) of rNd get one space towards a neighbouring word, and a
+ *  space at either end is dropped where a space, the paragraph boundary or
+ *  punctuation already follows.
+ */
+void lcl_SmartSpaces(SwWrtShell& rSh, SwTextNode& rNd, sal_Int32 nStart, sal_Int32 nEnd)
+{
+    if (nEnd <= nStart)
+        return;
+    IDocumentContentOperations& rOps = rSh.GetDoc()->getIDocumentContentOperations();
+    auto charAt = [&rNd](sal_Int32 i) -> sal_Unicode {
+        const OUString& rText = rNd.GetText();
+        return (i >= 0 && i < rText.getLength()) ? rText[i] : 0;
+    };
+
+    const sal_Unicode cLast = charAt(nEnd - 1);
+    const sal_Unicode cAfter = charAt(nEnd);
+    if (cLast == ' ')
+    {
+        if (nEnd - 1 > nStart && (!cAfter || cAfter == ' ' || lcl_IsSmartClose(cAfter)))
+        {
+            SwPaM aPam(rNd, nEnd - 1, rNd, nEnd);
+            rOps.DeleteRange(aPam);
+            --nEnd;
+        }
+    }
+    else if (cAfter && cAfter != ' ' && !lcl_IsSmartClose(cAfter))
+    {
+        SwPaM aPam(rNd, nEnd);
+        rOps.InsertString(aPam, u" "_ustr);
+    }
+
+    const sal_Unicode cFirst = charAt(nStart);
+    const sal_Unicode cBefore = charAt(nStart - 1);
+    if (cFirst == ' ')
+    {
+        if (nEnd - 1 > nStart && (!nStart || cBefore == ' ' || lcl_IsSmartOpen(cBefore)))
+        {
+            SwPaM aPam(rNd, nStart, rNd, nStart + 1);
+            rOps.DeleteRange(aPam);
+        }
+    }
+    else if (nStart && cBefore != ' ' && !lcl_IsSmartOpen(cBefore))
+    {
+        SwPaM aPam(rNd, nStart);
+        rOps.InsertString(aPam, u" "_ustr);
+    }
+}
+
 bool lcl_checkClassification(SwDoc* pSourceDoc, SwDoc* pDestinationDoc)
 {
     if (!pSourceDoc || !pDestinationDoc)
@@ -3947,22 +4010,19 @@ bool SwTransferable::PrivatePaste(SwWrtShell& rShell, SwPasteContext* pContext, 
         rShell.ResetSelect(nullptr, false, ScrollSizeMode::ScrollSizeDefault);
     }
 
-    bool bInWrd = false, bEndWrd = false, bSttWrd = false,
-         bSmart(TransferBufferType::DocumentWord & m_eBufferType);
-    if( bSmart )
+    // Smart paste of whole words: remember where the text goes, the spaces
+    // around it are fixed afterwards (lcl_SmartSpaces)
+    SwTextNode* pSmartNd = nullptr;
+    sal_Int32 nSmartStart = 0, nSmartLen = 0;
+    if (TransferBufferType::DocumentWord & m_eBufferType)
     {
-            // Why not for other Scripts? If TransferBufferType::DocumentWord is set, we have a word
-            // in the buffer, word in this context means 'something with spaces at beginning
-            // and end'. In this case we definitely want these spaces to be inserted here.
-            bInWrd = rShell.IsInWord();
-            bEndWrd = rShell.IsEndWrd();
-            bSmart = bInWrd || bEndWrd;
-            if( bSmart )
-            {
-                bSttWrd = rShell.IsStartWord();
-                if (!bSttWrd && (bInWrd || bEndWrd))
-                    rShell.SwEditShell::Insert(' ');
-            }
+        const SwPosition* pPos = rShell.GetCursor()->GetPoint();
+        pSmartNd = pPos->GetNode().GetTextNode();
+        if (pSmartNd)
+        {
+            nSmartStart = pPos->GetContentIndex();
+            nSmartLen = pSmartNd->GetText().getLength();
+        }
     }
 
     bool bRet = true;
@@ -3977,9 +4037,15 @@ bool SwTransferable::PrivatePaste(SwWrtShell& rShell, SwPasteContext* pContext, 
     if( bKillPaMs )
         rShell.KillPams();
 
-    // If Smart Paste then insert blank
-    if( bRet && bSmart && ((bInWrd && !bEndWrd )|| bSttWrd) )
-        rShell.SwEditShell::Insert(' ');
+    // If Smart Paste then fix the blanks around the pasted word(s)
+    if (bRet && pSmartNd)
+    {
+        const SwPosition* pPos = rShell.GetCursor()->GetPoint();
+        const sal_Int32 nIns = pSmartNd->GetText().getLength() - nSmartLen;
+        if (pPos->GetNode().GetTextNode() == pSmartNd && nIns > 0
+            && pPos->GetContentIndex() == nSmartStart + nIns)
+            lcl_SmartSpaces(rShell, *pSmartNd, nSmartStart, nSmartStart + nIns);
+    }
 
     oAction.reset(); // inserting caption does not work when ActionPend()
 
@@ -3995,10 +4061,6 @@ bool SwTransferable::PrivateDrop( SwWrtShell& rSh, const Point& rDragPt,
                                 bool bMove, bool bIsXSelection )
 {
     int cWord    = 0;
-    bool bInWrd  = false;
-    bool bEndWrd = false;
-    bool bSttWrd = false;
-    bool bSttPara = false;
     bool bTableSel = false;
     bool bTableMove = false;
     bool bFrameSel = false;
@@ -4324,10 +4386,6 @@ bool SwTransferable::PrivateDrop( SwWrtShell& rSh, const Point& rDragPt,
         rSh.GoNextCursor();
     }
 
-    bInWrd  = rSh.IsInWord();
-    bEndWrd = rSh.IsEndWrd();
-    bSttWrd = !bEndWrd && rSh.IsStartWord();
-    bSttPara= rSh.IsSttPara();
 
     Point aSttPt = SwEditWin::GetDDStartPos();
 
@@ -4407,19 +4465,14 @@ bool SwTransferable::PrivateDrop( SwWrtShell& rSh, const Point& rDragPt,
 
     if( bRet && !bTableSel && !bFrameSel )
     {
-        if( (bInWrd || bEndWrd) &&
-            (cWord == SwWrtShell::WORD_SPACE_AFTER ||
-                cWord == SwWrtShell::WORD_SPACE_BEFORE) )
+        if (cWord != SwWrtShell::NO_WORD)
         {
-            if ( bSttWrd || (bInWrd && !bEndWrd))
-                rSh.SwEditShell::Insert(' ', bIsXSelection);
-            if ( !bSttWrd || (bInWrd && !bSttPara) )
-            {
-                rSh.SwapPam();
-                if ( !bSttWrd )
-                    rSh.SwEditShell::Insert(' ', bIsXSelection);
-                rSh.SwapPam();
-            }
+            const SwPaM* pCur = rSh.GetCursor();
+            const SwPosition* pStt = pCur->Start();
+            const SwPosition* pEnd = pCur->End();
+            SwTextNode* pNd = pStt->GetNode().GetTextNode();
+            if (pNd && pCur->HasMark() && &pEnd->GetNode() == &pStt->GetNode())
+                lcl_SmartSpaces(rSh, *pNd, pStt->GetContentIndex(), pEnd->GetContentIndex());
         }
 
         if( bIsXSelection )
