@@ -78,6 +78,14 @@
 #include <names.hxx>
 #ifdef EMSCRIPTEN
 #include <pagefrm.hxx>
+#include <txtfrm.hxx>
+#include <txtfld.hxx>
+#include <fmtfld.hxx>
+#include <docufld.hxx>
+#include <IDocumentFieldsAccess.hxx>
+#include <IDocumentMarkAccess.hxx>
+#include <annotationmark.hxx>
+#include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #endif
 
@@ -858,6 +866,44 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         for (const SwFrame* pPage = pRoot ? pRoot->Lower() : nullptr; pPage; pPage = pPage->GetNext())
             aRects.push_back(toMm100(pPage->getFrameArea().SVRect()));
         aRet <<= comphelper::containerToSequence(aRects);
+        return aRet;
+    }
+    // Comment balloons beside the page (web shell): for every comment its name and the
+    // rectangle of the first character of the commented text (the field itself for a
+    // comment without a range), in document coordinates (1/100 mm). Nothing moves the cursor.
+    if (rPropertyName == "ZetaAnnotationRects")
+    {
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        SwDoc* pDoc = rSh.GetDoc();
+        const SwRootFrame* pLayout = rSh.GetLayout();
+        std::vector<css::beans::NamedValue> aOut;
+        SwFieldType* pType = pDoc->getIDocumentFieldsAccess().GetFieldType(SwFieldIds::Postit, OUString(), false);
+        std::vector<SwFormatField*> vFields;
+        if (pType)
+            pType->GatherFields(vFields);
+        IDocumentMarkAccess* pMarks = pDoc->getIDocumentMarkAccess();
+        for (SwFormatField* pFormatField : vFields)
+        {
+            const SwTextField* pTextField = pFormatField->GetTextField();
+            if (!pTextField)
+                continue;
+            const SwPostItField* pPostIt = static_cast<const SwPostItField*>(pFormatField->GetField());
+            SwPosition aPos(pTextField->GetTextNode(), pTextField->GetStart());
+            auto it = pMarks->findAnnotationMark(pPostIt->GetName());
+            if (it != pMarks->getAnnotationMarksEnd())
+                aPos = (*it)->GetMarkStart();
+            const SwTextNode* pNd = aPos.GetNode().GetTextNode();
+            if (!pNd)
+                continue;
+            const SwContentFrame* pFrame = pNd->getLayoutFrame(pLayout, &aPos);
+            if (!pFrame || !pFrame->IsTextFrame())
+                continue;
+            SwRect aRect;
+            if (!static_cast<const SwTextFrame*>(pFrame)->GetCharRect(aRect, aPos))
+                continue;
+            aOut.emplace_back(pPostIt->GetName().toString(), css::uno::Any(toMm100(aRect.SVRect())));
+        }
+        aRet <<= comphelper::containerToSequence(aOut);
         return aRet;
     }
 #endif
