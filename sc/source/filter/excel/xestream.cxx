@@ -853,10 +853,12 @@ static const char* lcl_GetUnderlineStyle( FontLineStyle eUnderline, bool& bHaveU
     bHaveUnderline = true;
     switch( eUnderline )
     {
-        // OOXTODO: doubleAccounting, singleAccounting
         // OOXTODO: what should be done with the other FontLineStyle values?
         case LINESTYLE_SINGLE:  return "single";
         case LINESTYLE_DOUBLE:  return "double";
+        // accounting underlines (XclFontData::SetScUnderline)
+        case LINESTYLE_BOLD:        return "singleAccounting";
+        case LINESTYLE_DOUBLEWAVE:  return "doubleAccounting";
         case LINESTYLE_NONE:
         default:                bHaveUnderline = false; return "none";
     }
