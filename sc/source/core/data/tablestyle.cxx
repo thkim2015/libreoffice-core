@@ -26,6 +26,8 @@ ScTableStyle::ScTableStyle(const OUString& rName, const std::optional<OUString>&
     , maStyleName(rName)
     , maUIName(rUIName)
     , mbIsOOXMLDefault(false)
+    , mbTable(true)
+    , mbPivot(true)
 {
 }
 
@@ -769,6 +771,12 @@ void ScTableStyle::SetPattern(ScTableStyleElement eTableStyleElement,
         case ScTableStyleElement::LastHeaderCell:
             mpLastHeaderCellPattern = std::move(pPattern);
             break;
+        default:
+            if (pPattern)
+                maPivotPatterns[eTableStyleElement] = std::move(pPattern);
+            else
+                maPivotPatterns.erase(eTableStyleElement);
+            break;
     }
 }
 
@@ -831,6 +839,9 @@ std::map<ScTableStyleElement, const ScPatternAttr*> ScTableStyle::GetSetPatterns
         aPatterns.emplace(ScTableStyleElement::LastHeaderCell, mpLastHeaderCellPattern.get());
     }
 
+    for (const auto& [eElement, pPattern] : maPivotPatterns)
+        aPatterns.emplace(eElement, pPattern.get());
+
     return aPatterns;
 }
 
@@ -854,6 +865,16 @@ void ScTableStyles::SetTableStyle(std::unique_ptr<ScTableStyle> pTableStyle)
 {
     OUString aName = pTableStyle->GetName();
     maTableStyles.insert_or_assign(aName, std::move(pTableStyle));
+    if (mpBindings)
+        mpBindings->Invalidate(SID_TABLE_STYLES);
+}
+
+void ScTableStyles::RemoveTableStyle(const OUString& rName)
+{
+    auto it = maTableStyles.find(rName);
+    if (it == maTableStyles.end() || it->second->IsOOXMLDefault())
+        return;
+    maTableStyles.erase(it);
     if (mpBindings)
         mpBindings->Invalidate(SID_TABLE_STYLES);
 }
@@ -986,6 +1007,8 @@ void ScTableStyle::UpdateThemedColors(const model::ColorSet& rColorSet)
         if (*pPatternPtr)
             updatePatternThemedColors(**pPatternPtr, rColorSet);
     }
+    for (auto& rPivotPattern : maPivotPatterns)
+        updatePatternThemedColors(*rPivotPattern.second, rColorSet);
 }
 
 void ScTableStyles::UpdateCustomStyleThemedColors(const model::ColorSet& rColorSet)
@@ -1033,6 +1056,8 @@ std::string_view tableStyleElementName(ScTableStyleElement eElement)
             return "FirstHeaderCell";
         case ScTableStyleElement::LastHeaderCell:
             return "LastHeaderCell";
+        default:
+            break;
     }
     return {};
 }
