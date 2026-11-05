@@ -42,6 +42,12 @@ public:
         executed.  It is used as guard against recursive execution.
     */
     bool mbArrangeActive;
+    /** Set when the horizontal scroll bar of the Impress slide view was
+        hidden because the whole slide width fits into the window.
+    */
+    bool mbHorizontalScrollBarHiddenForFit;
+    /// Set when ArrangeGUIElements() has to run again after it finished.
+    bool mbArrangeAgain;
 
     /** Remember a link to the sub shell factory, so that it can be
         unregistered at the ViewShellManager when a ViewShell is deleted.
