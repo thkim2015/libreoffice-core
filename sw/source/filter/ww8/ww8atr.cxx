@@ -3318,19 +3318,6 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                         sStr = FieldString(eField)
                                + GetExport().GetBookmarkName(nSubType, &aRefName.toString(), 0);
                     }
-                    switch (rRField.GetFormat())
-                    {
-                        case RefFieldFormat::Number:
-                            sStr += " \\r";
-                            break;
-                        case RefFieldFormat::NumberNoContext:
-                            sStr += " \\n";
-                            break;
-                        case RefFieldFormat::NumberFullContext:
-                            sStr += " \\w";
-                            break;
-                        default: break;
-                    }
                     break;
                 case ReferencesSubtype::SequenceField:
                 {
@@ -3373,19 +3360,6 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                                     break;
                         }
                         sStr = FieldString(eField) + GetExport().GetBookmarkName(nSubType, &sName, 0);
-                    }
-                    switch (rRField.GetFormat())
-                    {
-                        case RefFieldFormat::Number:
-                            sStr += " \\r";
-                            break;
-                        case RefFieldFormat::NumberNoContext:
-                            sStr += " \\n";
-                            break;
-                        case RefFieldFormat::NumberFullContext:
-                            sStr += " \\w";
-                            break;
-                        default: break;
                     }
                     break;
                 }
@@ -3810,6 +3784,16 @@ static bool lcl_IsAtTextEnd(const SwFormatFootnote& rFootnote)
     return bRet;
 }
 
+void AttributeOutputBase::FootnoteRefBookmarkStart(const OUString& rName)
+{
+    GetExport().AppendBookmark(rName);
+}
+
+void AttributeOutputBase::FootnoteRefBookmarkEnd(const OUString& rName)
+{
+    GetExport().AppendBookmark(rName);
+}
+
 void AttributeOutputBase::TextFootnote( const SwFormatFootnote& rFootnote )
 {
     ReferencesSubtype nTyp;
@@ -3833,13 +3817,13 @@ void AttributeOutputBase::TextFootnote( const SwFormatFootnote& rFootnote )
     {
         sBkmkNm = GetExport().GetBookmarkName(nTyp, nullptr,
                                     rFootnote.GetTextFootnote()->GetSeqRefNo() );
-        GetExport().AppendBookmark( sBkmkNm );
+        FootnoteRefBookmarkStart( sBkmkNm );
     }
 
     TextFootnote_Impl( rFootnote );
 
     if ( !sBkmkNm.isEmpty() )
-        GetExport().AppendBookmark( sBkmkNm ); // FIXME: Why is it added twice?  Shouldn't this one go to WW8AttributeOutput::TextFootnote_Impl()?
+        FootnoteRefBookmarkEnd( sBkmkNm );
 }
 
 void WW8AttributeOutput::TextFootnote_Impl( const SwFormatFootnote& rFootnote )

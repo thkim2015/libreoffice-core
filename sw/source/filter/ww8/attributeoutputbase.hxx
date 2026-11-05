@@ -498,6 +498,11 @@ protected:
     /// Sfx item RES_TXTATR_FTN
     virtual void TextFootnote_Impl( const SwFormatFootnote& ) = 0;
 
+    /// Bookmark around a referenced footnote/endnote anchor (target of REF/NOTEREF fields).
+    /// The default marks a position on both sides of the anchor character.
+    virtual void FootnoteRefBookmarkStart(const OUString& rName);
+    virtual void FootnoteRefBookmarkEnd(const OUString& rName);
+
     /// RES_TXTATR_LINEBREAK, i.e. clearing breaks.
     virtual void TextLineBreak(const SwFormatLineBreak&) = 0;
 
