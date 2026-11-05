@@ -54,6 +54,8 @@ ViewShell::Implementation::Implementation (ViewShell& rViewShell)
     : mbIsMainViewShell(false),
       mbIsInitialized(false),
       mbArrangeActive(false),
+      mbHorizontalScrollBarHiddenForFit(false),
+      mbArrangeAgain(false),
       mrViewShell(rViewShell)
 {
 }

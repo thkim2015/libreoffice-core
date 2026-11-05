@@ -20,6 +20,8 @@
 #include <com/sun/star/embed/EmbedVerbs.hpp>
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
 
+#include <cmath>
+
 #include <ViewShell.hxx>
 #include <ViewShellHint.hxx>
 
@@ -79,6 +81,27 @@ inline double getViewToScrollScalarForPanAcrossPages(sal_uInt16 nTotalPages, dou
 
 namespace sd {
 
+bool ViewShell::GetCenteredVisibleX(double& rfX) const
+{
+    if (GetShellType() != ST_IMPRESS || comphelper::LibreOfficeKit::isActive() || !mpContentWindow
+        || GetDocSh()->IsPreview())
+        return false;
+    ::sd::View* pView = GetView();
+    SdrPageView* pPageView = pView ? pView->GetSdrPageView() : nullptr;
+    const ::tools::Long nViewWidth = mpContentWindow->GetViewSize().Width();
+    if (!pPageView || nViewWidth <= 0)
+        return false;
+    const ::tools::Rectangle aPage(pPageView->GetPageRect());
+    const ::tools::Rectangle aVisible(mpContentWindow->PixelToLogic(
+        ::tools::Rectangle(Point(0, 0), mpContentWindow->GetOutputSizePixel())));
+    if (aPage.IsEmpty() || aVisible.IsEmpty() || aPage.GetWidth() > aVisible.GetWidth())
+        return false;
+    const ::tools::Long nWinX
+        = mpContentWindow->GetWinViewPos().X() + aPage.Center().X() - aVisible.Center().X();
+    rfX = std::max(0.0, static_cast<double>(nWinX) / nViewWidth);
+    return true;
+}
+
 /**
  * adjust Thumbpos and VisibleSize
  */
@@ -86,6 +109,39 @@ void ViewShell::UpdateScrollBars()
 {
     if (mpHorizontalScrollBar)
     {
+        // Like PowerPoint: no horizontal scroll bar (and no horizontal
+        // scrolling) while the whole slide width is visible.
+        double fCenterX = 0.0;
+        const bool bFits = GetCenteredVisibleX(fCenterX);
+        bool bToggled = false;
+        if (bFits && mpHorizontalScrollBar->IsVisible())
+        {
+            mpHorizontalScrollBar->Hide();
+            mpImpl->mbHorizontalScrollBarHiddenForFit = true;
+            bToggled = true;
+        }
+        else if (!bFits && mpImpl->mbHorizontalScrollBarHiddenForFit)
+        {
+            mpHorizontalScrollBar->Show();
+            mpImpl->mbHorizontalScrollBarHiddenForFit = false;
+            bToggled = true;
+        }
+        if (bToggled)
+        {
+            if (mpImpl->mbArrangeActive)
+                mpImpl->mbArrangeAgain = true;
+            else
+                ArrangeGUIElements();
+            return;
+        }
+        if (bFits
+            && std::abs(mpContentWindow->GetVisibleX() - fCenterX)
+                       * mpContentWindow->GetViewSize().Width()
+                   > mpContentWindow->PixelToLogic(Size(1, 1)).Width())
+        {
+            mpHorizontalScrollBar->SetThumbPos(static_cast<::tools::Long>(fCenterX * 32000));
+            VirtHScrollHdl(mpHorizontalScrollBar);
+        }
         ::tools::Long nW = static_cast<::tools::Long>(std::min(1.0, mpContentWindow->GetVisibleWidth()) * 32000);
         ::tools::Long nX = static_cast<::tools::Long>(mpContentWindow->GetVisibleX() * 32000);
         mpHorizontalScrollBar->SetVisibleSize(nW);
@@ -172,6 +228,8 @@ IMPL_LINK_NOARG(ViewShell, HScrollHdl, weld::Scrollbar&, void)
 void ViewShell::VirtHScrollHdl(ScrollAdaptor* pHScroll)
 {
     double fX = static_cast<double>(pHScroll->GetThumbPos()) / pHScroll->GetRange().Len();
+    // keep the slide centered while its whole width is visible
+    (void)GetCenteredVisibleX(fX);
 
     // scroll all windows of the column
     ::sd::View* pView = GetView();
@@ -344,6 +402,8 @@ void ViewShell::Scroll(::tools::Long nScrollX, ::tools::Long nScrollY)
                             mpHorizontalScrollBar->GetRange().Len();
     double  fY = static_cast<double>(mpVerticalScrollBar->GetThumbPos()) /
                             mpVerticalScrollBar->GetRange().Len();
+    // keep the slide centered while its whole width is visible
+    (void)GetCenteredVisibleX(fX);
 
     GetActiveWindow()->SetVisibleXY(fX, fY);
 
