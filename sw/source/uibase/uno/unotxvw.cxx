@@ -84,6 +84,11 @@
 #include <docufld.hxx>
 #include <IDocumentFieldsAccess.hxx>
 #include <IDocumentMarkAccess.hxx>
+#include <IDocumentRedlineAccess.hxx>
+#include <IDocumentState.hxx>
+#include <IDocumentUndoRedo.hxx>
+#include <zetamarkupview.hxx>
+#include <svl/hint.hxx>
 #include <annotationmark.hxx>
 #include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
@@ -777,6 +782,56 @@ uno::Reference< beans::XPropertySetInfo > SAL_CALL SwXTextView::getPropertySetIn
     return aRef;
 }
 
+namespace
+{
+// Word "Display for Review": 0 All Markup, 1 Simple Markup, 2 No Markup, 3 Original
+sal_Int16 lcl_GetMarkupView(SwWrtShell& rSh)
+{
+    RedlineFlags const eShow
+        = rSh.GetDoc()->getIDocumentRedlineAccess().GetRedlineFlags() & RedlineFlags::ShowMask;
+    if (eShow == RedlineFlags::ShowDelete)
+        return 3;
+    if (rSh.GetLayout()->IsHideRedlines())
+        return sw::IsChangeBarsWhenHidden() ? 1 : 2;
+    return 0;
+}
+
+void lcl_SetMarkupView(SwView& rView, sal_Int16 const nMode)
+{
+    if (nMode < 0 || nMode > 3)
+        throw lang::IllegalArgumentException();
+    SwWrtShell& rSh = rView.GetWrtShell();
+    SwDoc& rDoc = *rSh.GetDoc();
+    IDocumentRedlineAccess& rIDRA = rDoc.getIDocumentRedlineAccess();
+    bool const bModified = rDoc.getIDocumentState().IsModified();
+    ::sw::UndoGuard const aUndoGuard(rDoc.GetIDocumentUndoRedo());
+    rSh.StartAllAction();
+    RedlineFlags const eOther = rIDRA.GetRedlineFlags() & ~RedlineFlags::ShowMask;
+    if (nMode == 3)
+    {
+        // Original: deletions as plain text, insertions moved out of the text
+        rSh.GetLayout()->SetHideRedlines(false);
+        rIDRA.SetRedlineFlags(eOther | RedlineFlags::ShowDelete);
+    }
+    else
+    {
+        rIDRA.SetRedlineFlags(eOther | RedlineFlags::ShowMask);
+        rSh.GetLayout()->SetHideRedlines(nMode != 0);
+    }
+    sw::SetChangeBarsWhenHidden(nMode == 1);
+    rSh.EndAllAction();
+    if (!bModified)
+        rDoc.getIDocumentState().ResetModified();
+    for (SwViewShell& rShell : rSh.GetRingContainer())
+        rShell.InvalidateWindows(rShell.GetLayout()->getFrameArea());
+    if (rSh.IsRedlineOn())
+        rSh.SetInsMode();
+    rView.GetViewFrame().GetBindings().Invalidate(FN_REDLINE_SHOW);
+    if (SwDocShell* pDocShell = rView.GetDocShell())
+        pDocShell->Broadcast(SfxHint(SfxHintId::SwRedlineShowChanged));
+}
+}
+
 void SAL_CALL SwXTextView::setPropertyValue(
         const OUString& rPropertyName, const uno::Any& rValue )
 {
@@ -792,6 +847,28 @@ void SAL_CALL SwXTextView::setPropertyValue(
         rSh.StartAllAction();
         rSh.GetLayout()->SetHideRedlines(!bShow);
         rSh.EndAllAction();
+        return;
+    }
+
+    if (rPropertyName == "ZetaHiddenRedlineAuthors")
+    {
+        uno::Sequence<OUString> aNames;
+        if (!(rValue >>= aNames))
+            throw lang::IllegalArgumentException();
+        sw::SetHiddenRedlineAuthors(comphelper::sequenceToContainer<std::vector<OUString>>(aNames));
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        rSh.StartAllAction();
+        rSh.GetLayout()->InvalidateAllContent(SwInvalidateFlags::Size);
+        rSh.EndAllAction();
+        return;
+    }
+
+    if (rPropertyName == "ZetaMarkupView")
+    {
+        sal_Int16 nMode = 0;
+        if (!(rValue >>= nMode))
+            throw lang::IllegalArgumentException();
+        lcl_SetMarkupView(*m_pView, nMode);
         return;
     }
 
@@ -836,6 +913,18 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
     {
         const bool bShow = !m_pView->GetWrtShell().GetLayout()->IsHideRedlines();
         aRet <<= bShow;
+        return aRet;
+    }
+
+    if (rPropertyName == "ZetaHiddenRedlineAuthors")
+    {
+        aRet <<= comphelper::containerToSequence(sw::GetHiddenRedlineAuthors());
+        return aRet;
+    }
+
+    if (rPropertyName == "ZetaMarkupView")
+    {
+        aRet <<= lcl_GetMarkupView(m_pView->GetWrtShell());
         return aRet;
     }
 #ifdef EMSCRIPTEN

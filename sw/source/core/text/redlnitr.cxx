@@ -47,6 +47,7 @@
 #include <ftnfrm.hxx>
 #include <vcl/svapp.hxx>
 #include "redlnitr.hxx"
+#include <zetamarkupview.hxx>
 #include <extinput.hxx>
 #include <fmtpdsc.hxx>
 #include <editeng/charhiddenitem.hxx>
@@ -957,15 +958,20 @@ short SwRedlineItr::Seek(SwFont& rFnt,
                         m_pSet = std::make_unique<SfxItemSet>(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_BEGIN, RES_CHRATR_END-1>(rPool));
                     }
 
-                    if( 1 < pRed->GetStackCount() )
-                        FillHints(pRed->GetAuthor(1), pRed->GetType(1), eRenderMode);
-                    FillHints(pRed->GetAuthor(), pRed->GetType(), eRenderMode);
+                    // a reviewer filtered out of the markup shows plain text
+                    bool const bHiddenAuthor = sw::IsRedlineAuthorHidden(pRed->GetAuthor());
+                    if (!bHiddenAuthor)
+                    {
+                        if( 1 < pRed->GetStackCount() )
+                            FillHints(pRed->GetAuthor(1), pRed->GetType(1), eRenderMode);
+                        FillHints(pRed->GetAuthor(), pRed->GetType(), eRenderMode);
+                    }
 
                     SfxWhichIter aIter( *m_pSet );
 
                     // moved text: dark green with double underline or strikethrough
                     bool bDisplayMovedTextInGreen = officecfg::Office::Writer::Comparison::DisplayMovedTextInGreen::get();
-                    if (bDisplayMovedTextInGreen && pRed->IsMoved()
+                    if (bDisplayMovedTextInGreen && !bHiddenAuthor && pRed->IsMoved()
                         && eRenderMode == SwRedlineRenderMode::Standard)
                     {
                         // Standard redline render mode, so move is more than just insert and
