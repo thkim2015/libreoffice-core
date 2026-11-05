@@ -2151,6 +2151,10 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
     // append the actual run end
     m_pSerializer->endElementNS( XML_w, XML_r );
 
+    // close the bookmark around a referenced footnote/endnote reference run
+    if (!m_aFootnoteRefBookmarksEnd.empty())
+        DoWriteBookmarksEnd(m_aFootnoteRefBookmarksEnd, true, false);
+
     // if there is some redlining in the document, output it
     // (except in the case of fields with multiple runs)
     if (!bSkipRedline)
@@ -9224,6 +9228,16 @@ void DocxAttributeOutput::TextFootnote_Impl( const SwFormatFootnote& rFootnote )
         m_pFootnotesList->add( rFootnote );
     else
         m_pEndnotesList->add( rFootnote );
+}
+
+void DocxAttributeOutput::FootnoteRefBookmarkStart(const OUString& rName)
+{
+    GetExport().AppendBookmarkStart(rName);
+}
+
+void DocxAttributeOutput::FootnoteRefBookmarkEnd(const OUString& rName)
+{
+    m_aFootnoteRefBookmarksEnd.push_back(rName);
 }
 
 void DocxAttributeOutput::FootnoteEndnoteReference()

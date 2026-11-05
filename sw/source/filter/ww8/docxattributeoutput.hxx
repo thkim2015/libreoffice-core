@@ -670,6 +670,10 @@ protected:
     /// Sfx item RES_TXTATR_FTN
     virtual void TextFootnote_Impl( const SwFormatFootnote& ) override;
 
+    /// The bookmark must enclose the w:footnoteReference run, otherwise Word's REF result is empty.
+    virtual void FootnoteRefBookmarkStart(const OUString& rName) override;
+    virtual void FootnoteRefBookmarkEnd(const OUString& rName) override;
+
     /// Output the footnote/endnote reference (if there's one to output).
     void FootnoteEndnoteReference();
 
@@ -924,6 +928,8 @@ private:
     /// Bookmarks to output
     std::vector<OUString> m_rBookmarksStart;
     std::vector<OUString> m_rBookmarksEnd;
+    /// Footnote reference bookmarks to close after the current run
+    std::vector<OUString> m_aFootnoteRefBookmarksEnd;
     SwRedlineData* m_pMoveRedlineData;
 
     /// Bookmarks to output at the end
