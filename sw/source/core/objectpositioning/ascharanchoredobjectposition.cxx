@@ -88,6 +88,14 @@ void SwAsCharAnchoredObjectPosition::CalcPosition()
 
     const SwFrameFormat& rFrameFormat = GetFrameFormat();
 
+    // weboffice: drawing objects with a relative size (e.g. a Word horizontal line, 100% of the
+    // text area) are resized by GetObjBoundRect(), reached through GetObjRectWithSpaces();
+    // GetObjRect() alone would keep the old size when the page margins change.
+    if ( !IsObjFly() && GetObject().GetRelativeWidth() )
+    {
+        GetAnchoredObj().InvalidateObjRectWithSpaces();
+        (void)GetAnchoredObj().GetObjRectWithSpaces();
+    }
     SwRect aObjBoundRect( GetAnchoredObj().GetObjRect() );
     SwTwips nObjWidth = aRectFnSet.GetWidth(aObjBoundRect);
 
