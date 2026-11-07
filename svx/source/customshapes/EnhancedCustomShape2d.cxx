@@ -764,6 +764,15 @@ EnhancedCustomShape2d::EnhancedCustomShape2d(SdrObjCustomShape& rSdrObjCustomSha
     // 2D helper shape.
     ClearItem(SDRATTR_SHADOW);
 
+    // Glow and soft edge are applied once around the whole AutoShape in
+    // SdrCustomShapePrimitive2D::create2DDecomposition. The helper SdrRectObj
+    // created for mso_sptRectangle would apply them a second time (a glow of
+    // the glow: twice as wide and twice as opaque, a doubled soft edge), so
+    // remove them from the helper objects, too.
+    ClearItem(SDRATTR_GLOW_RADIUS);
+    ClearItem(SDRATTR_SOFTEDGE_RADIUS);
+    ClearItem(SDRATTR_GLOW_TEXT_RADIUS);
+
     Point aP( mrSdrObjCustomShape.GetSnapRect().Center() );
     Size aS( mrSdrObjCustomShape.GetLogicRect().GetSize() );
     aP.AdjustX( -(aS.Width() / 2) );

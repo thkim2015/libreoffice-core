@@ -802,10 +802,12 @@ void Font::finalizeImport()
     switch( maModel.mnUnderline )
     {
         case XML_double:            maApiData.maDesc.Underline = css::awt::FontUnderline::DOUBLE; break;
-        case XML_doubleAccounting:  maApiData.maDesc.Underline = css::awt::FontUnderline::DOUBLE; break;
+        // Calc has no accounting underline: keep it as DOUBLEWAVE / BOLD so it round-trips
+        // (export: XclFontData::SetScUnderline, lcl_GetUnderlineStyle)
+        case XML_doubleAccounting:  maApiData.maDesc.Underline = css::awt::FontUnderline::DOUBLEWAVE; break;
         case XML_none:              maApiData.maDesc.Underline = css::awt::FontUnderline::NONE;   break;
         case XML_single:            maApiData.maDesc.Underline = css::awt::FontUnderline::SINGLE; break;
-        case XML_singleAccounting:  maApiData.maDesc.Underline = css::awt::FontUnderline::SINGLE; break;
+        case XML_singleAccounting:  maApiData.maDesc.Underline = css::awt::FontUnderline::BOLD; break;
     }
 
     // escapement
@@ -1014,6 +1016,11 @@ void Font::fillToItemSet( SfxItemSet& rItemSet, bool bEditEngineText, bool bSkip
             eScUnderl = LINESTYLE_DOUBLE;
         else if ( maApiData.maDesc.Underline == css::awt::FontUnderline::SINGLE )
             eScUnderl = LINESTYLE_SINGLE;
+        // accounting underlines (see finalizeImport)
+        else if ( maApiData.maDesc.Underline == css::awt::FontUnderline::BOLD )
+            eScUnderl = LINESTYLE_BOLD;
+        else if ( maApiData.maDesc.Underline == css::awt::FontUnderline::DOUBLEWAVE )
+            eScUnderl = LINESTYLE_DOUBLEWAVE;
         else
             eScUnderl = LINESTYLE_NONE;
         SvxUnderlineItem aUnderlItem( eScUnderl, ATTR_FONT_UNDERLINE );

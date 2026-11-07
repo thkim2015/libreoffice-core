@@ -293,10 +293,11 @@ FontLineStyle XclFontData::GetScUnderline() const
     FontLineStyle eScUnderl = LINESTYLE_NONE;
     switch( mnUnderline )
     {
-        case EXC_FONTUNDERL_SINGLE:
-        case EXC_FONTUNDERL_SINGLE_ACC: eScUnderl = LINESTYLE_SINGLE;  break;
-        case EXC_FONTUNDERL_DOUBLE:
-        case EXC_FONTUNDERL_DOUBLE_ACC: eScUnderl = LINESTYLE_DOUBLE;  break;
+        case EXC_FONTUNDERL_SINGLE:     eScUnderl = LINESTYLE_SINGLE;  break;
+        // accounting underlines are kept as BOLD / DOUBLEWAVE (see SetScUnderline)
+        case EXC_FONTUNDERL_SINGLE_ACC: eScUnderl = LINESTYLE_BOLD;  break;
+        case EXC_FONTUNDERL_DOUBLE:     eScUnderl = LINESTYLE_DOUBLE;  break;
+        case EXC_FONTUNDERL_DOUBLE_ACC: eScUnderl = LINESTYLE_DOUBLEWAVE;  break;
     }
     return eScUnderl;
 }
@@ -375,8 +376,11 @@ void XclFontData::SetScUnderline( FontLineStyle eScUnderl )
     {
         case LINESTYLE_NONE:
         case LINESTYLE_DONTKNOW:    mnUnderline = EXC_FONTUNDERL_NONE;      break;
-        case LINESTYLE_DOUBLE:
-        case LINESTYLE_DOUBLEWAVE:  mnUnderline = EXC_FONTUNDERL_DOUBLE;    break;
+        case LINESTYLE_DOUBLE:      mnUnderline = EXC_FONTUNDERL_DOUBLE;    break;
+        // Calc has no accounting underline: BOLD and DOUBLEWAVE stand for Excel's
+        // singleAccounting and doubleAccounting so they survive a round trip
+        case LINESTYLE_BOLD:        mnUnderline = EXC_FONTUNDERL_SINGLE_ACC; break;
+        case LINESTYLE_DOUBLEWAVE:  mnUnderline = EXC_FONTUNDERL_DOUBLE_ACC; break;
         default:                    mnUnderline = EXC_FONTUNDERL_SINGLE;
     }
 }
@@ -442,10 +446,10 @@ sal_Int16 XclFontData::GetApiUnderline() const
     sal_Int16 nApiUnderl = AwtFontLineStyle::NONE;
     switch( mnUnderline )
     {
-        case EXC_FONTUNDERL_SINGLE:
-        case EXC_FONTUNDERL_SINGLE_ACC: nApiUnderl = AwtFontLineStyle::SINGLE;  break;
-        case EXC_FONTUNDERL_DOUBLE:
-        case EXC_FONTUNDERL_DOUBLE_ACC: nApiUnderl = AwtFontLineStyle::DOUBLE;  break;
+        case EXC_FONTUNDERL_SINGLE:     nApiUnderl = AwtFontLineStyle::SINGLE;  break;
+        case EXC_FONTUNDERL_SINGLE_ACC: nApiUnderl = AwtFontLineStyle::BOLD;  break;
+        case EXC_FONTUNDERL_DOUBLE:     nApiUnderl = AwtFontLineStyle::DOUBLE;  break;
+        case EXC_FONTUNDERL_DOUBLE_ACC: nApiUnderl = AwtFontLineStyle::DOUBLEWAVE;  break;
     }
     return nApiUnderl;
 }
@@ -505,8 +509,9 @@ void XclFontData::SetApiUnderline( sal_Int16 nApiUnderl )
     {
         case AwtFontLineStyle::NONE:
         case AwtFontLineStyle::DONTKNOW:    mnUnderline = EXC_FONTUNDERL_NONE;      break;
-        case AwtFontLineStyle::DOUBLE:
-        case AwtFontLineStyle::DOUBLEWAVE:  mnUnderline = EXC_FONTUNDERL_DOUBLE;    break;
+        case AwtFontLineStyle::DOUBLE:      mnUnderline = EXC_FONTUNDERL_DOUBLE;    break;
+        case AwtFontLineStyle::BOLD:        mnUnderline = EXC_FONTUNDERL_SINGLE_ACC; break;
+        case AwtFontLineStyle::DOUBLEWAVE:  mnUnderline = EXC_FONTUNDERL_DOUBLE_ACC; break;
         default:                            mnUnderline = EXC_FONTUNDERL_SINGLE;
     }
 }
