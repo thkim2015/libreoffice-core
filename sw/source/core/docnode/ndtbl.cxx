@@ -1118,9 +1118,6 @@ SwTableNode* SwNodes::TextToTable( const SwNodeRange& rRange, sal_Unicode cCh,
         SwStartNode* pSttNd;
         SwPosition aCntPos( aSttIdx, pTextNd, 0);
 
-        const std::shared_ptr< sw::mark::ContentIdxStore> pContentStore(sw::mark::ContentIdxStore::Create());
-        pContentStore->Save(rDoc, aSttIdx.GetIndex(), SAL_MAX_INT32);
-
         if( T2T_PARA != cCh )
         {
             for (sal_Int32 nChPos = 0; nChPos < pTextNd->GetText().getLength();)
@@ -1128,12 +1125,23 @@ SwTableNode* SwNodes::TextToTable( const SwNodeRange& rRange, sal_Unicode cCh,
                 if (pTextNd->GetText()[nChPos] == cCh)
                 {
                     aCntPos.SetContent(nChPos);
+                    // ZetaOffice: save the marks/flys in front of this separator for this split
+                    // only, like SwDoc::SplitNode. A single store saved for the whole paragraph
+                    // was restored once per separator with its original offsets: every split
+                    // moved all marks of the paragraph again (bookmarks ended up collapsed in the
+                    // last cell), and the mark indexes it keeps went stale once RestoreBkmks
+                    // re-sorted the mark container, so a later restore could read the other
+                    // position of a collapsed mark (memory access out of bounds in wasm).
+                    // Marks behind the separator stay in this node and are moved by CutText.
+                    const std::shared_ptr<sw::mark::ContentIdxStore> pContentStore(sw::mark::ContentIdxStore::Create());
+                    pContentStore->Save(rDoc, aSttIdx.GetIndex(), nChPos, true);
                     std::function<void (SwTextNode *, sw::mark::RestoreMode, bool)> restoreFunc(
-                        [&](SwTextNode *const pNewNode, sw::mark::RestoreMode const eMode, bool)
+                        [&](SwTextNode *const pNewNode, sw::mark::RestoreMode const eMode, bool const bAtStart)
                         {
                             if (!pContentStore->Empty())
                             {
-                                pContentStore->Restore(*pNewNode, nChPos, nChPos + 1, eMode);
+                                pContentStore->Restore(rDoc, pNewNode->GetIndex(), 0, true,
+                                    bAtStart && (eMode & sw::mark::RestoreMode::Flys), eMode);
                             }
                         });
                     SwContentNode *const pNewNd =
@@ -1160,10 +1168,6 @@ SwTableNode* SwNodes::TextToTable( const SwNodeRange& rRange, sal_Unicode cCh,
                 }
             }
         }
-
-        // Now for the last substring
-        if( !pContentStore->Empty())
-            pContentStore->Restore( *pTextNd, pTextNd->GetText().getLength(), pTextNd->GetText().getLength()+1 );
 
         pSttNd = new SwStartNode( aCntPos.GetNode(), SwNodeType::Start, SwTableBoxStartNode );
         const SwNodeIndex aTmpIdx( aCntPos.GetNode(), 1 );
