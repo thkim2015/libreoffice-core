@@ -1226,7 +1226,14 @@ void SwXShape::setPropertyValue(const OUString& rPropertyName, const uno::Any& a
                 aValue >>= nPositionLayoutDir;
                 pFormat->SetPositionLayoutDir( nPositionLayoutDir );
             }
-            else if( rDoc.getIDocumentLayoutAccess().GetCurrentLayout())
+            // weboffice: relative size goes to the SdrObject even when a layout exists, otherwise
+            // RelativeWidth/Height set via UNO on a live document only reaches the frame format and
+            // GetRelativeWidth() (layout, DOCX export, getPropertyValue) stays empty.
+            else if( rDoc.getIDocumentLayoutAccess().GetCurrentLayout()
+                     && !( RES_FRM_SIZE == pEntry->nWID &&
+                           ( pEntry->nMemberId == MID_FRMSIZE_REL_HEIGHT || pEntry->nMemberId == MID_FRMSIZE_REL_WIDTH
+                             || pEntry->nMemberId == MID_FRMSIZE_REL_HEIGHT_RELATION
+                             || pEntry->nMemberId == MID_FRMSIZE_REL_WIDTH_RELATION ) ) )
             {
                 UnoActionContext aCtx(&rDoc);
                 if(RES_ANCHOR == pEntry->nWID && MID_ANCHOR_ANCHORTYPE == pEntry->nMemberId)
