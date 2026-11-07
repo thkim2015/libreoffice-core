@@ -50,6 +50,39 @@
 #include <IDocumentRedlineAccess.hxx>
 #include <IDocumentSettingAccess.hxx>
 #include <IDocumentStylePoolAccess.hxx>
+#include <zetamarkupview.hxx>
+#include <o3tl/sorted_vector.hxx>
+
+namespace
+{
+bool g_bChangeBarsWhenHidden = false;
+o3tl::sorted_vector<OUString> g_aHiddenRedlineAuthors;
+}
+
+namespace sw
+{
+void SetChangeBarsWhenHidden(bool const bOn) { g_bChangeBarsWhenHidden = bOn; }
+bool IsChangeBarsWhenHidden() { return g_bChangeBarsWhenHidden; }
+
+void SetHiddenRedlineAuthors(std::vector<OUString> const& rAuthors)
+{
+    g_aHiddenRedlineAuthors.clear();
+    for (OUString const& rName : rAuthors)
+        g_aHiddenRedlineAuthors.insert(rName);
+}
+
+std::vector<OUString> GetHiddenRedlineAuthors()
+{
+    return std::vector<OUString>(g_aHiddenRedlineAuthors.begin(), g_aHiddenRedlineAuthors.end());
+}
+
+bool IsRedlineAuthorHidden(std::size_t const nAuthor)
+{
+    return !g_aHiddenRedlineAuthors.empty()
+        && g_aHiddenRedlineAuthors.find(SwModule::get()->GetRedlineAuthor(nAuthor))
+               != g_aHiddenRedlineAuthors.end();
+}
+}
 
 #define REDLINE_DISTANCE 567/4
 #define REDLINE_MINDIST  567/10
@@ -298,7 +331,12 @@ void SwExtraPainter::PaintRedline( SwTwips nY, tools::Long nMax, sal_Int16 nWord
         }
     }
     auto popIt = m_pSh->GetOut()->ScopedPush(vcl::PushFlags::LINECOLOR);
-    m_pSh->GetOut()->SetLineColor(nWordSpacing ? COL_LIGHTRED : SwModule::get()->GetRedlineMarkColor());
+    // Simple Markup paints a red bar like Word
+    bool const bSimpleMarkup
+        = g_bChangeBarsWhenHidden && m_pTextFrame->getRootFrame()->IsHideRedlines();
+    m_pSh->GetOut()->SetLineColor((nWordSpacing || bSimpleMarkup)
+                                      ? COL_LIGHTRED
+                                      : SwModule::get()->GetRedlineMarkColor());
 
     if ( nWordSpacing )
     {
@@ -310,6 +348,30 @@ void SwExtraPainter::PaintRedline( SwTwips nY, tools::Long nMax, sal_Int16 nWord
     }
     else
         m_pSh->GetOut()->DrawLine( aStart, aEnd );
+}
+
+namespace
+{
+/// does any tracked change touch the model range of this line?
+bool lcl_LineHasAnyRedline(const SwTextFrame& rFrame, const IDocumentRedlineAccess& rIDRA,
+                           TextFrameIndex const nStart, TextFrameIndex const nEnd)
+{
+    std::pair<SwTextNode*, sal_Int32> const start(rFrame.MapViewToModel(nStart));
+    std::pair<SwTextNode*, sal_Int32> const end(rFrame.MapViewToModel(nEnd));
+    SwPosition const aStart(*start.first, start.second);
+    SwPosition const aEnd(*end.first, end.second);
+    const SwRedlineTable& rTable = rIDRA.GetRedlineTable();
+    for (SwRedlineTable::size_type i = rIDRA.GetRedlinePos(*start.first, RedlineType::Any);
+         i < rTable.size(); ++i)
+    {
+        auto [pRStart, pREnd] = rTable[i]->StartEnd();
+        if (aEnd < *pRStart)
+            break;
+        if (aStart <= *pREnd)
+            return true;
+    }
+    return false;
+}
 }
 
 void SwTextFrame::PaintExtraData( const SwRect &rRect ) const
@@ -345,7 +407,7 @@ void SwTextFrame::PaintExtraData( const SwRect &rRect ) const
     if (eHor != text::HoriOrientation::NONE
         && !bWordSpacingIndicator
         && (!IDocumentRedlineAccess::IsShowChanges(rIDRA.GetRedlineFlags())
-            || getRootFrame()->IsHideRedlines()))
+            || (getRootFrame()->IsHideRedlines() && !g_bChangeBarsWhenHidden)))
     {
         eHor = text::HoriOrientation::NONE;
     }
@@ -414,6 +476,12 @@ void SwTextFrame::PaintExtraData( const SwRect &rRect ) const
                     aExtra.PaintRedline( aLine.Y(), aLine.GetLineHeight(), nExtraSpaceSize );
 
                 bool bRed = bRedLine && aLine.GetCurr()->HasRedline();
+                // Simple Markup: the line layout knows nothing of hidden changes
+                if (bRedLine && !bRed && g_bChangeBarsWhenHidden
+                    && getRootFrame()->IsHideRedlines())
+                {
+                    bRed = lcl_LineHasAnyRedline(*this, rIDRA, aLine.GetStart(), aLine.GetEnd());
+                }
                 if( rLineInf.IsCountBlankLines() || aLine.GetCurr()->HasContent() )
                 {
                     bool bRedInMargin = bIsShowChangesInMargin && bRed;

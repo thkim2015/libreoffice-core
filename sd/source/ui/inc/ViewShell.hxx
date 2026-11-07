@@ -200,6 +200,11 @@ public:
         bar controls are not modified.
     */
     virtual void UpdateScrollBars();
+    /** In the Impress slide view, when the whole slide width fits into the
+        window, return true and the horizontal position (as fraction of the
+        working area, see sd::Window::SetVisibleXY) that centers the slide.
+    */
+    bool GetCenteredVisibleX(double& rfX) const;
     void    Scroll(::tools::Long nX, ::tools::Long nY);
     void    ScrollLines(::tools::Long nX, ::tools::Long nY);
     virtual void    SetZoom(::tools::Long nZoom);

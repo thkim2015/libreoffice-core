@@ -78,6 +78,19 @@
 #include <names.hxx>
 #ifdef EMSCRIPTEN
 #include <pagefrm.hxx>
+#include <txtfrm.hxx>
+#include <txtfld.hxx>
+#include <fmtfld.hxx>
+#include <docufld.hxx>
+#include <IDocumentFieldsAccess.hxx>
+#include <IDocumentMarkAccess.hxx>
+#include <IDocumentRedlineAccess.hxx>
+#include <IDocumentState.hxx>
+#include <IDocumentUndoRedo.hxx>
+#include <zetamarkupview.hxx>
+#include <svl/hint.hxx>
+#include <annotationmark.hxx>
+#include <com/sun/star/beans/NamedValue.hpp>
 #include <com/sun/star/awt/Rectangle.hpp>
 #endif
 
@@ -769,6 +782,56 @@ uno::Reference< beans::XPropertySetInfo > SAL_CALL SwXTextView::getPropertySetIn
     return aRef;
 }
 
+namespace
+{
+// Word "Display for Review": 0 All Markup, 1 Simple Markup, 2 No Markup, 3 Original
+sal_Int16 lcl_GetMarkupView(SwWrtShell& rSh)
+{
+    RedlineFlags const eShow
+        = rSh.GetDoc()->getIDocumentRedlineAccess().GetRedlineFlags() & RedlineFlags::ShowMask;
+    if (eShow == RedlineFlags::ShowDelete)
+        return 3;
+    if (rSh.GetLayout()->IsHideRedlines())
+        return sw::IsChangeBarsWhenHidden() ? 1 : 2;
+    return 0;
+}
+
+void lcl_SetMarkupView(SwView& rView, sal_Int16 const nMode)
+{
+    if (nMode < 0 || nMode > 3)
+        throw lang::IllegalArgumentException();
+    SwWrtShell& rSh = rView.GetWrtShell();
+    SwDoc& rDoc = *rSh.GetDoc();
+    IDocumentRedlineAccess& rIDRA = rDoc.getIDocumentRedlineAccess();
+    bool const bModified = rDoc.getIDocumentState().IsModified();
+    ::sw::UndoGuard const aUndoGuard(rDoc.GetIDocumentUndoRedo());
+    rSh.StartAllAction();
+    RedlineFlags const eOther = rIDRA.GetRedlineFlags() & ~RedlineFlags::ShowMask;
+    if (nMode == 3)
+    {
+        // Original: deletions as plain text, insertions moved out of the text
+        rSh.GetLayout()->SetHideRedlines(false);
+        rIDRA.SetRedlineFlags(eOther | RedlineFlags::ShowDelete);
+    }
+    else
+    {
+        rIDRA.SetRedlineFlags(eOther | RedlineFlags::ShowMask);
+        rSh.GetLayout()->SetHideRedlines(nMode != 0);
+    }
+    sw::SetChangeBarsWhenHidden(nMode == 1);
+    rSh.EndAllAction();
+    if (!bModified)
+        rDoc.getIDocumentState().ResetModified();
+    for (SwViewShell& rShell : rSh.GetRingContainer())
+        rShell.InvalidateWindows(rShell.GetLayout()->getFrameArea());
+    if (rSh.IsRedlineOn())
+        rSh.SetInsMode();
+    rView.GetViewFrame().GetBindings().Invalidate(FN_REDLINE_SHOW);
+    if (SwDocShell* pDocShell = rView.GetDocShell())
+        pDocShell->Broadcast(SfxHint(SfxHintId::SwRedlineShowChanged));
+}
+}
+
 void SAL_CALL SwXTextView::setPropertyValue(
         const OUString& rPropertyName, const uno::Any& rValue )
 {
@@ -784,6 +847,41 @@ void SAL_CALL SwXTextView::setPropertyValue(
         rSh.StartAllAction();
         rSh.GetLayout()->SetHideRedlines(!bShow);
         rSh.EndAllAction();
+        return;
+    }
+
+    if (rPropertyName == "ZetaHiddenRedlineAuthors")
+    {
+        uno::Sequence<OUString> aNames;
+        if (!(rValue >>= aNames))
+            throw lang::IllegalArgumentException();
+        sw::SetHiddenRedlineAuthors(comphelper::sequenceToContainer<std::vector<OUString>>(aNames));
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        rSh.StartAllAction();
+        rSh.GetLayout()->InvalidateAllContent(SwInvalidateFlags::Size);
+        rSh.EndAllAction();
+        return;
+    }
+
+    if (rPropertyName == "ZetaMarkupView")
+    {
+        sal_Int16 nMode = 0;
+        if (!(rValue >>= nMode))
+            throw lang::IllegalArgumentException();
+        lcl_SetMarkupView(*m_pView, nMode);
+        return;
+    }
+    // re-read Office.Writer/Revision display attributes into the shown redlines
+    if (rPropertyName == "ZetaUpdateRedlineAttr")
+    {
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        SwDoc& rDoc = *rSh.GetDoc();
+        bool const bModified = rDoc.getIDocumentState().IsModified();
+        rSh.UpdateRedlineAttr();
+        if (!bModified)
+            rDoc.getIDocumentState().ResetModified();
+        for (SwViewShell& rShell : rSh.GetRingContainer())
+            rShell.InvalidateWindows(rShell.GetLayout()->getFrameArea());
         return;
     }
 
@@ -830,6 +928,18 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         aRet <<= bShow;
         return aRet;
     }
+
+    if (rPropertyName == "ZetaHiddenRedlineAuthors")
+    {
+        aRet <<= comphelper::containerToSequence(sw::GetHiddenRedlineAuthors());
+        return aRet;
+    }
+
+    if (rPropertyName == "ZetaMarkupView")
+    {
+        aRet <<= lcl_GetMarkupView(m_pView->GetWrtShell());
+        return aRet;
+    }
 #ifdef EMSCRIPTEN
     // zetaOffice(웹 셸) 잉크 오버레이: 화면 점을 문서 점으로 바꾸려면 보이는 영역과 편집 창 자리, 쪽 자리가 필요하다.
     // 모두 읽기 전용, 문서 좌표는 1/100mm(도형 PolyPolygon과 같은 좌표계), 편집 창은 프레임 창 기준 픽셀.
@@ -858,6 +968,54 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         for (const SwFrame* pPage = pRoot ? pRoot->Lower() : nullptr; pPage; pPage = pPage->GetNext())
             aRects.push_back(toMm100(pPage->getFrameArea().SVRect()));
         aRet <<= comphelper::containerToSequence(aRects);
+        return aRet;
+    }
+    // Selected frame (picture, text frame, embedded object) for the web shell: the print area
+    // of the selected fly in document coordinates (1/100 mm), void when no frame is selected.
+    // Lets the page map a click to a pixel of the picture (Word's "Set Transparent Color").
+    if (rPropertyName == "ZetaSelectedFrameRect")
+    {
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        if (rSh.IsFrameSelected())
+            aRet <<= toMm100(rSh.GetAnyCurRect(CurRectType::FlyEmbedded).SVRect());
+        return aRet;
+    }
+    // Comment balloons beside the page (web shell): for every comment its name and the
+    // rectangle of the first character of the commented text (the field itself for a
+    // comment without a range), in document coordinates (1/100 mm). Nothing moves the cursor.
+    if (rPropertyName == "ZetaAnnotationRects")
+    {
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        SwDoc* pDoc = rSh.GetDoc();
+        const SwRootFrame* pLayout = rSh.GetLayout();
+        std::vector<css::beans::NamedValue> aOut;
+        SwFieldType* pType = pDoc->getIDocumentFieldsAccess().GetFieldType(SwFieldIds::Postit, OUString(), false);
+        std::vector<SwFormatField*> vFields;
+        if (pType)
+            pType->GatherFields(vFields);
+        IDocumentMarkAccess* pMarks = pDoc->getIDocumentMarkAccess();
+        for (SwFormatField* pFormatField : vFields)
+        {
+            const SwTextField* pTextField = pFormatField->GetTextField();
+            if (!pTextField)
+                continue;
+            const SwPostItField* pPostIt = static_cast<const SwPostItField*>(pFormatField->GetField());
+            SwPosition aPos(pTextField->GetTextNode(), pTextField->GetStart());
+            auto it = pMarks->findAnnotationMark(pPostIt->GetName());
+            if (it != pMarks->getAnnotationMarksEnd())
+                aPos = (*it)->GetMarkStart();
+            const SwTextNode* pNd = aPos.GetNode().GetTextNode();
+            if (!pNd)
+                continue;
+            const SwContentFrame* pFrame = pNd->getLayoutFrame(pLayout, &aPos);
+            if (!pFrame || !pFrame->IsTextFrame())
+                continue;
+            SwRect aRect;
+            if (!static_cast<const SwTextFrame*>(pFrame)->GetCharRect(aRect, aPos))
+                continue;
+            aOut.emplace_back(pPostIt->GetName().toString(), css::uno::Any(toMm100(aRect.SVRect())));
+        }
+        aRet <<= comphelper::containerToSequence(aOut);
         return aRet;
     }
 #endif

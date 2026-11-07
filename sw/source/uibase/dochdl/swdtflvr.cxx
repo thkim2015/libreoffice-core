@@ -3485,6 +3485,11 @@ bool SwTransferable::IsPasteOwnFormat( const TransferableDataHelper& rData )
     return ( GetSwTransferable( rData ) != nullptr );
 }
 
+namespace
+{
+void lcl_SmartSpaces(SwWrtShell& rSh, SwTextNode& rNd, sal_Int32 nStart, sal_Int32 nEnd);
+}
+
 bool SwTransferable::PasteFormat( SwWrtShell& rSh,
                                     const TransferableDataHelper& rData,
                                     SotClipboardFormatId nFormat )
@@ -3522,9 +3527,33 @@ bool SwTransferable::PasteFormat( SwWrtShell& rSh,
                                     lcl_getTransferPointer ( xTransferable ),
                                     &nActionFlags );
 
+        // Word fixes the spaces around a whole word also for "Keep Text Only"
+        SwTextNode* pSmartNd = nullptr;
+        sal_Int32 nSmartStart = 0, nSmartLen = 0;
+        if (pClipboard && (TransferBufferType::DocumentWord & pClipboard->m_eBufferType)
+            && !rSh.HasSelection())
+        {
+            const SwPosition* pPos = rSh.GetCursor()->GetPoint();
+            pSmartNd = pPos->GetNode().GetTextNode();
+            if (pSmartNd)
+            {
+                nSmartStart = pPos->GetContentIndex();
+                nSmartLen = pSmartNd->GetText().getLength();
+            }
+        }
+
         if( EXCHG_INOUT_ACTION_NONE != nAction )
             bRet = SwTransferable::PasteData( rData, rSh, nAction, nActionFlags, nFormat,
                                                 nDestination, true, false );
+
+        if (bRet && pSmartNd)
+        {
+            const SwPosition* pPos = rSh.GetCursor()->GetPoint();
+            const sal_Int32 nIns = pSmartNd->GetText().getLength() - nSmartLen;
+            if (pPos->GetNode().GetTextNode() == pSmartNd && nIns > 0
+                && pPos->GetContentIndex() == nSmartStart + nIns)
+                lcl_SmartSpaces(rSh, *pSmartNd, nSmartStart, nSmartStart + nIns);
+        }
     }
     return bRet;
 }
@@ -3886,14 +3915,15 @@ namespace
 
 bool lcl_IsSmartOpen(sal_Unicode c)
 {
-    return c == '(' || c == '[' || c == '{' || c == '"' || c == '\'' || c == 0x201C
+    // Word: straight quotes get a space on either side like letters
+    return c == '(' || c == '[' || c == '{' || c == 0x201C
            || c == 0x2018 || c == 0x300C || c == 0x300E || c == 0x3008 || c == 0x300A;
 }
 
 bool lcl_IsSmartClose(sal_Unicode c)
 {
     return c == '.' || c == ',' || c == ';' || c == ':' || c == '!' || c == '?' || c == ')'
-           || c == ']' || c == '}' || c == '"' || c == '\'' || c == '%' || c == 0x201D
+           || c == ']' || c == '}' || c == '%' || c == 0x201D
            || c == 0x2019 || c == 0x3001 || c == 0x3002 || c == 0x300D || c == 0x300F
            || c == 0x3009 || c == 0x300B;
 }

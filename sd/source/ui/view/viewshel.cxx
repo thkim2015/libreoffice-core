@@ -1201,6 +1201,13 @@ void ViewShell::ArrangeGUIElements()
     UpdateScrollBars();
 
     mpImpl->mbArrangeActive = false;
+
+    // UpdateScrollBars() showed or hid the horizontal scroll bar: lay out again
+    if (mpImpl->mbArrangeAgain)
+    {
+        mpImpl->mbArrangeAgain = false;
+        ArrangeGUIElements();
+    }
 }
 
 void ViewShell::SetUIUnit(FieldUnit eUnit)

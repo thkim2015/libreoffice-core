@@ -663,8 +663,14 @@ namespace
 SwRect SwAnchoredDrawObject::GetObjBoundRect() const
 {
     bool bGroupShape = dynamic_cast<const SdrObjGroup*>( GetDrawObj() );
+    // weboffice: as-character drawing objects (e.g. a Word horizontal line, 100% of the text
+    // area) are not registered at a page frame, so fall back to the anchor's page; otherwise
+    // their relative size never follows page margin changes.
+    const SwPageFrame* pPageFrame = GetPageFrame();
+    if ( !pPageFrame && GetAnchorFrame() )
+        pPageFrame = GetAnchorFrame()->FindPageFrame();
     // Resize objects with relative width or height
-    if ( !bGroupShape && GetPageFrame( ) && ( GetDrawObj( )->GetRelativeWidth( ) || GetDrawObj()->GetRelativeHeight( ) ) )
+    if ( !bGroupShape && pPageFrame && ( GetDrawObj( )->GetRelativeWidth( ) || GetDrawObj()->GetRelativeHeight( ) ) )
     {
         tools::Rectangle aCurrObjRect = GetDrawObj()->GetCurrentBoundRect();
 
@@ -674,29 +680,29 @@ SwRect SwAnchoredDrawObject::GetObjBoundRect() const
             tools::Long nWidth = 0;
             if (GetDrawObj()->GetRelativeWidthRelation() == text::RelOrientation::FRAME)
                 // Exclude margins.
-                nWidth = GetPageFrame()->getFramePrintArea().SVRect().GetWidth();
+                nWidth = pPageFrame->getFramePrintArea().SVRect().GetWidth();
             // Here we handle the relative size of the width of some shape.
             // The size of the shape's width is going to be relative to the size of the left margin.
             // E.g.: (left margin = 8 && relative size = 150%) -> width of some shape = 12.
             else if (GetDrawObj()->GetRelativeWidthRelation() == text::RelOrientation::PAGE_LEFT)
             {
-                if (GetPageFrame()->GetPageDesc()->GetUseOn() == UseOnPage::Mirror)
+                if (pPageFrame->GetPageDesc()->GetUseOn() == UseOnPage::Mirror)
                     // We want to get the width of whatever is going through here using the size of the
                     // outside margin.
-                    nWidth = getInsideOutsideRelativeWidth(true, GetPageFrame());
+                    nWidth = getInsideOutsideRelativeWidth(true, pPageFrame);
                 else
-                    nWidth = GetPageFrame()->GetLeftMargin();
+                    nWidth = pPageFrame->GetLeftMargin();
             }
             // Same as the left margin above.
             else if (GetDrawObj()->GetRelativeWidthRelation() == text::RelOrientation::PAGE_RIGHT)
-                if (GetPageFrame()->GetPageDesc()->GetUseOn() == UseOnPage::Mirror)
+                if (pPageFrame->GetPageDesc()->GetUseOn() == UseOnPage::Mirror)
                     // We want to get the width of whatever is going through here using the size of the
                     // inside margin.
-                    nWidth = getInsideOutsideRelativeWidth(false, GetPageFrame());
+                    nWidth = getInsideOutsideRelativeWidth(false, pPageFrame);
                 else
-                    nWidth = GetPageFrame()->GetRightMargin();
+                    nWidth = pPageFrame->GetRightMargin();
             else
-                nWidth = GetPageFrame( )->GetBoundRect( GetPageFrame()->getRootFrame()->GetCurrShell()->GetOut() ).SVRect().GetWidth();
+                nWidth = pPageFrame->GetBoundRect( pPageFrame->getRootFrame()->GetCurrShell()->GetOut() ).SVRect().GetWidth();
             nTargetWidth = nWidth * (*GetDrawObj( )->GetRelativeWidth());
         }
 
@@ -713,34 +719,34 @@ SwRect SwAnchoredDrawObject::GetObjBoundRect() const
             tools::Long nHeight = 0;
             if (GetDrawObj()->GetRelativeHeightRelation() == text::RelOrientation::FRAME)
                 // Exclude margins.
-                nHeight = GetPageFrame()->getFramePrintArea().SVRect().GetHeight();
+                nHeight = pPageFrame->getFramePrintArea().SVRect().GetHeight();
             else if (GetDrawObj()->GetRelativeHeightRelation() == text::RelOrientation::PAGE_PRINT_AREA)
             {
                 // count required height: print area top = top margin + header
                 SwRect aHeaderRect;
-                const SwHeaderFrame* pHeaderFrame = GetPageFrame()->GetHeaderFrame();
+                const SwHeaderFrame* pHeaderFrame = pPageFrame->GetHeaderFrame();
                 if (pHeaderFrame)
                     aHeaderRect = pHeaderFrame->GetPaintArea();
-                nHeight = GetPageFrame()->GetTopMargin() + aHeaderRect.Height();
+                nHeight = pPageFrame->GetTopMargin() + aHeaderRect.Height();
             }
             else if (GetDrawObj()->GetRelativeHeightRelation() == text::RelOrientation::PAGE_PRINT_AREA_BOTTOM)
             {
                 // count required height: print area bottom = bottom margin + footer
                 SwRect aFooterRect;
-                auto pFooterFrame = GetPageFrame()->GetFooterFrame();
+                auto pFooterFrame = pPageFrame->GetFooterFrame();
                 if (pFooterFrame)
                     aFooterRect = pFooterFrame->GetPaintArea();
-                nHeight = GetPageFrame()->GetBottomMargin() + aFooterRect.Height();
+                nHeight = pPageFrame->GetBottomMargin() + aFooterRect.Height();
             }
             else
-                nHeight = GetPageFrame( )->GetBoundRect( GetPageFrame()->getRootFrame()->GetCurrShell()->GetOut() ).SVRect().GetHeight();
+                nHeight = pPageFrame->GetBoundRect( pPageFrame->getRootFrame()->GetCurrShell()->GetOut() ).SVRect().GetHeight();
             nTargetHeight = nHeight * (*GetDrawObj()->GetRelativeHeight());
         }
 
         if ( (nTargetWidth != aCurrObjRect.GetWidth( ) || nTargetHeight != aCurrObjRect.GetHeight( ))
              && aCurrObjRect.GetWidth() && aCurrObjRect.GetHeight() )
         {
-            SwDoc& rDoc = const_cast<SwDoc&>(GetPageFrame()->GetFormat()->GetDoc());
+            SwDoc& rDoc = const_cast<SwDoc&>(pPageFrame->GetFormat()->GetDoc());
 
             bool bEnableSetModified = rDoc.getIDocumentState().IsEnableSetModified();
             rDoc.getIDocumentState().SetEnableSetModified(false);
