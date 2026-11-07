@@ -871,6 +871,19 @@ void SAL_CALL SwXTextView::setPropertyValue(
         lcl_SetMarkupView(*m_pView, nMode);
         return;
     }
+    // re-read Office.Writer/Revision display attributes into the shown redlines
+    if (rPropertyName == "ZetaUpdateRedlineAttr")
+    {
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        SwDoc& rDoc = *rSh.GetDoc();
+        bool const bModified = rDoc.getIDocumentState().IsModified();
+        rSh.UpdateRedlineAttr();
+        if (!bModified)
+            rDoc.getIDocumentState().ResetModified();
+        for (SwViewShell& rShell : rSh.GetRingContainer())
+            rShell.InvalidateWindows(rShell.GetLayout()->getFrameArea());
+        return;
+    }
 
     const SfxItemPropertyMapEntry* pEntry = m_pPropSet->getPropertyMap().getByName( rPropertyName );
     if (!pEntry)
