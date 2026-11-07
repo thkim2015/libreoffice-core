@@ -746,7 +746,17 @@ void SwUndoTextToTable::UndoImpl(::sw::UndoRedoContext & rContext)
     SwTableNode *const pTNd = aIdx.GetNode().GetTableNode();
     OSL_ENSURE( pTNd, "Could not find a TableNode" );
 
-    RemoveIdxFromSection( rDoc, nTableNd );
+    // ZetaOffice: move only the cursors out of the table. RemoveIdxFromSection also
+    // deleted every bookmark in it (SwDoc::CorrAbs -> DelBookmarks), but TableToText
+    // below keeps the text and moves the marks of each joined box itself, so undoing
+    // text-to-table lost the bookmarks of the converted paragraphs.
+    {
+        SwNodeIndex const aStt(rDoc.GetNodes(), nTableNd);
+        SwNodeIndex const aEnd(rDoc.GetNodes(), aStt.GetNode().EndOfSectionIndex());
+        SwContentNode const*const pEndCNd = aEnd.GetNode().GetContentNode();
+        SwPaM const aPam(aStt, 0, aEnd, pEndCNd ? pEndCNd->Len() : 0);
+        ::PaMCorrAbs(aPam, SwPosition(rDoc.GetNodes().GetEndOfPostIts()));
+    }
 
     m_sTableName = pTNd->GetTable().GetFrameFormat()->GetName();
 
@@ -811,7 +821,9 @@ void SwUndoTextToTable::UndoImpl(::sw::UndoRedoContext & rContext)
 void SwUndoTextToTable::RedoImpl(::sw::UndoRedoContext & rContext)
 {
     SwPaM & rPam( AddUndoRedoPaM(rContext) );
-    RemoveIdxFromRange(rPam, false);
+    // ZetaOffice: move only the cursors; RemoveIdxFromRange also deleted the bookmarks
+    // inside the paragraphs, which TextToTable keeps in the cells
+    ::PaMCorrAbs(rPam, *rPam.End());
     SetPaM(rPam);
 
     SwTable const*const pTable = rContext.GetDoc().TextToTable(
