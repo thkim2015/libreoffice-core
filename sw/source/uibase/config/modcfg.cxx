@@ -249,15 +249,27 @@ SwRevisionConfig::~SwRevisionConfig()
 {
 }
 
-static sal_Int32 lcl_ConvertAttrToCfg(const AuthorCharAttr& rAttr)
+// 10 single strikethrough on insertions/formatting, 11 double strikethrough,
+// 12 single underline on deletions (Word track changes marks)
+static sal_Int32 lcl_ConvertAttrToCfg(const AuthorCharAttr& rAttr, bool bDelete = false)
 {
     sal_Int32 nRet = 0;
     switch(rAttr.m_nItemId)
     {
         case  SID_ATTR_CHAR_WEIGHT: nRet = 1; break;
         case  SID_ATTR_CHAR_POSTURE: nRet = 2; break;
-        case  SID_ATTR_CHAR_UNDERLINE: nRet = LINESTYLE_SINGLE == rAttr.m_nAttr ? 3 : 4; break;
-        case  SID_ATTR_CHAR_STRIKEOUT: nRet = 3; break;
+        case  SID_ATTR_CHAR_UNDERLINE:
+            if (LINESTYLE_SINGLE == rAttr.m_nAttr)
+                nRet = bDelete ? 12 : 3;
+            else
+                nRet = 4;
+            break;
+        case  SID_ATTR_CHAR_STRIKEOUT:
+            if (STRIKEOUT_DOUBLE == rAttr.m_nAttr)
+                nRet = 11;
+            else
+                nRet = bDelete ? 3 : 10;
+            break;
         case  SID_ATTR_CHAR_CASEMAP:
         {
             switch(static_cast<SvxCaseMap>(rAttr.m_nAttr))
@@ -292,7 +304,7 @@ void SwRevisionConfig::ImplCommit()
         {
             case 0 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aInsertAttr); break;
             case 1 : pValues[nProp] <<= m_aInsertAttr.m_nColor;   break;
-            case 2 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aDeletedAttr); break;
+            case 2 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aDeletedAttr, true); break;
             case 3 : pValues[nProp] <<= m_aDeletedAttr.m_nColor;  break;
             case 4 : pValues[nProp] <<= lcl_ConvertAttrToCfg(m_aFormatAttr); break;
             case 5 : pValues[nProp] <<= m_aFormatAttr.m_nColor;   break;
@@ -327,6 +339,9 @@ static void lcl_ConvertCfgToAttr(sal_Int32 nVal, AuthorCharAttr& rAttr, bool bDe
         case 7: rAttr.m_nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.m_nAttr = sal_uInt16(SvxCaseMap::SmallCaps); break;
         case 8: rAttr.m_nItemId = SID_ATTR_CHAR_CASEMAP;  rAttr.m_nAttr = sal_uInt16(SvxCaseMap::Capitalize); break;
         case 9: rAttr.m_nItemId = SID_ATTR_BRUSH; break;
+        case 10: rAttr.m_nItemId = SID_ATTR_CHAR_STRIKEOUT; rAttr.m_nAttr = STRIKEOUT_SINGLE; break;
+        case 11: rAttr.m_nItemId = SID_ATTR_CHAR_STRIKEOUT; rAttr.m_nAttr = STRIKEOUT_DOUBLE; break;
+        case 12: rAttr.m_nItemId = SID_ATTR_CHAR_UNDERLINE; rAttr.m_nAttr = LINESTYLE_SINGLE; break;
     }
 }
 void SwRevisionConfig::Load()
