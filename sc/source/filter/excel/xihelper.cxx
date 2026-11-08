@@ -437,11 +437,29 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                 switch( *pChar )
                 {
                     case '\"':
+                    {
                         SetAttribs();
                         if( !aReadFont.isEmpty() )
                             mxFontData->maName = aReadFont.toString();
-                        mxFontData->maStyle = aReadStyle.toString();
+                        // ZETA: Excel writes the style name in its UI language (Korean, Japanese)
+                        // or English ("Bold Italic"); FontList only knows LibreOffice's
+                        // own UI strings, so known names were lost. Map them to weight/posture.
+                        OUString aStyle = aReadStyle.toString();
+                        OUString aLower = aStyle.toAsciiLowerCase();
+                        bool bBold = aLower.indexOf("bold") >= 0 || aStyle.indexOf(u"\uAD75") >= 0 || aStyle.indexOf(u"\u592A\u5B57") >= 0;
+                        bool bItalic = aLower.indexOf("italic") >= 0 || aLower.indexOf("oblique") >= 0 || aStyle.indexOf(u"\uAE30\uC6B8\uC784") >= 0
+                            || aStyle.indexOf(u"\uC774\uD0E4\uB9AD") >= 0 || aStyle.indexOf(u"\u659C\u4F53") >= 0;
+                        bool bRegular = aLower == "regular" || aLower == "normal" || aStyle == OUString(u"\uBCF4\uD1B5") || aStyle == OUString(u"\u6A19\u6E96");
+                        if( bBold || bItalic || bRegular )
+                        {
+                            mxFontData->SetScWeight( bBold ? WEIGHT_BOLD : WEIGHT_NORMAL );
+                            mxFontData->SetScPosture( bItalic ? ITALIC_NORMAL : ITALIC_NONE );
+                            mxFontData->maStyle.clear();
+                        }
+                        else
+                            mxFontData->maStyle = aStyle;
                         eState = xlPSText;
+                    }
                     break;
                     default:
                         aReadStyle.append(*pChar);

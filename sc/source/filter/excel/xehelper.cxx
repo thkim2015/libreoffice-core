@@ -716,13 +716,6 @@ void XclExpHFConverter::AppendPortion( const EditTextObject* pTextObj, sal_Unico
     else
         aFontData.mnHeight = 10;
 
-    const FontList* pFontList = nullptr;
-    if( SfxObjectShell* pDocShell = GetDocShell() )
-    {
-        if( const SvxFontListItem* pInfoItem = pDocShell->GetItem( SID_ATTR_CHAR_FONTLIST ) )
-            pFontList = pInfoItem->GetFontList();
-    }
-
     sal_Int32 nParaCount = mrEE.GetParagraphCount();
     for( sal_Int32 nPara = 0; nPara < nParaCount; ++nPara )
     {
@@ -755,19 +748,22 @@ void XclExpHFConverter::AppendPortion( const EditTextObject* pTextObj, sal_Unico
                 bool bNewFont = (aFontData.maName != aNewData.maName);
                 bool bNewStyle = (aFontData.mnWeight != aNewData.mnWeight) ||
                                  (aFontData.mbItalic != aNewData.mbItalic);
-                if( bNewFont || (bNewStyle && pFontList) )
+                if( bNewFont || bNewStyle )
                 {
                     aParaText.append("&\"" + aNewData.maName);
-                    if( pFontList )
-                    {
-                        FontMetric aFontMetric( pFontList->Get(
-                            aNewData.maName,
-                            (aNewData.mnWeight > EXC_FONTWGHT_NORMAL) ? WEIGHT_BOLD : WEIGHT_NORMAL,
-                            aNewData.mbItalic ? ITALIC_NORMAL : ITALIC_NONE ) );
-                        aNewData.maStyle = pFontList->GetStyleName( aFontMetric );
-                        if( !aNewData.maStyle.isEmpty() && aNewData.maStyle != pFontList->GetNormalStr() )
-                            aParaText.append("," + aNewData.maStyle);
-                    }
+                    // ZETA: English style names - every Excel UI language reads them (the
+                    // localized LibreOffice name, e.g. Korean, printed as regular in Excel).
+                    bool bBold = aNewData.mnWeight > EXC_FONTWGHT_NORMAL;
+                    if( bBold && aNewData.mbItalic )
+                        aNewData.maStyle = "Bold Italic";
+                    else if( bBold )
+                        aNewData.maStyle = "Bold";
+                    else if( aNewData.mbItalic )
+                        aNewData.maStyle = "Italic";
+                    else
+                        aNewData.maStyle = bNewStyle ? OUString("Regular") : OUString();
+                    if( !aNewData.maStyle.isEmpty() )
+                        aParaText.append("," + aNewData.maStyle);
                     aParaText.append("\"");
                 }
 
