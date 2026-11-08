@@ -844,6 +844,16 @@ void HeaderFooterParser::convertFontStyle( std::u16string_view rStyle )
                 maFontModel.mbItalic = true;
         }
     }
+    // ZETA: Korean/Japanese Excel writes localized style names (e.g. Korean
+    // "bold italic" = two words, Japanese = two kanji words); older LibreOffice
+    // exports wrote its own Korean name. Match the stems anywhere in the style.
+    if( rStyle.find( u"\uAD75" ) != std::u16string_view::npos             // Korean bold stem
+        || rStyle.find( u"\u592A\u5B57" ) != std::u16string_view::npos )   // Japanese bold
+        maFontModel.mbBold = true;
+    if( rStyle.find( u"\uAE30\uC6B8\uC784" ) != std::u16string_view::npos  // Korean italic
+        || rStyle.find( u"\uC774\uD0E4\uB9AD" ) != std::u16string_view::npos  // Korean "italic" loanword
+        || rStyle.find( u"\u659C\u4F53" ) != std::u16string_view::npos )   // Japanese italic
+        maFontModel.mbItalic = true;
 }
 
 void HeaderFooterParser::convertFontColor( std::u16string_view aColor )
