@@ -1582,6 +1582,13 @@ Reference< XShape > const & Shape::createAndInsert(
         {
             putPropertyToGrabBag(u"mso-sp-txBox"_ustr, Any(mbTxBox));
         }
+        // A picture with a non-rectangular preset geometry (PowerPoint "Crop to Shape") is
+        // imported as a custom shape with bitmap fill; remember it so that PPTX export can
+        // write it back as <p:pic> instead of <p:sp>.
+        if (bIsCroppedGraphic)
+        {
+            putPropertyToGrabBag(u"mso-pic-crop-to-shape"_ustr, Any(true));
+        }
         if (!msTitle.isEmpty())
         {
             xSet->setPropertyValue(u"Title"_ustr, Any(msTitle));
