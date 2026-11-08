@@ -449,7 +449,7 @@ void XclImpHFConverter::ParseString( const OUString& rHFString )
                         bool bBold = aLower.indexOf("bold") >= 0 || aStyle.indexOf(u"\uAD75") >= 0 || aStyle.indexOf(u"\u592A\u5B57") >= 0;
                         bool bItalic = aLower.indexOf("italic") >= 0 || aLower.indexOf("oblique") >= 0 || aStyle.indexOf(u"\uAE30\uC6B8\uC784") >= 0
                             || aStyle.indexOf(u"\uC774\uD0E4\uB9AD") >= 0 || aStyle.indexOf(u"\u659C\u4F53") >= 0;
-                        bool bRegular = aLower == "regular" || aLower == "normal" || aStyle == OUString(u"\uBCF4\uD1B5") || aStyle == OUString(u"\u6A19\u6E96");
+                        bool bRegular = aLower == "regular" || aLower == "normal" || std::u16string_view(aStyle) == u"\uBCF4\uD1B5" || std::u16string_view(aStyle) == u"\u6A19\u6E96";
                         if( bBold || bItalic || bRegular )
                         {
                             mxFontData->SetScWeight( bBold ? WEIGHT_BOLD : WEIGHT_NORMAL );
