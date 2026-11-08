@@ -849,6 +849,27 @@ static void lcl_WriteClickAction(const FSHelperPtr& pFS, oox::core::XmlFilterBas
                              sBookmark.isEmpty() ? "ppaction://noaction" : "ppaction://hlinksldjump");
 }
 
+// A custom shape with bitmap fill that stands for a picture cropped to a preset shape
+// (imported from <p:pic> with <a:prstGeom>, or made by the UI with the same grab bag flag).
+static bool lcl_IsCropToShapePicture(const Reference<XPropertySet>& rXPropSet)
+{
+    if (!rXPropSet.is() || !rXPropSet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return false;
+    FillStyle eFillStyle = FillStyle_NONE;
+    rXPropSet->getPropertyValue(u"FillStyle"_ustr) >>= eFillStyle;
+    if (eFillStyle != FillStyle_BITMAP)
+        return false;
+    uno::Sequence<beans::PropertyValue> aGrabBag;
+    rXPropSet->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+    for (auto const& rProp : aGrabBag)
+    {
+        bool bFlag = false;
+        if (rProp.Name == u"mso-pic-crop-to-shape"_ustr && (rProp.Value >>= bFlag) && bFlag)
+            return true;
+    }
+    return false;
+}
+
 ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
 {
     SAL_INFO("oox.shape", "write custom shape");
@@ -930,6 +951,50 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
     }
 
     FSHelperPtr pFS = GetFS();
+
+    // PowerPoint "Crop to Shape": <p:pic> with <p:blipFill> and <a:prstGeom> in <p:spPr>
+    if (GetDocumentType() == DOCUMENT_PPTX && !mbUserShapes && !sPresetShape.isEmpty()
+        && sShapeType != "non-primitive" && sShapeType != "ooxml-non-primitive"
+        && !IsNonEmptySimpleText(xShape) && lcl_IsCropToShapePicture(rXPropSet))
+    {
+        bool bVisible = true;
+        if (GetProperty(rXPropSet, u"Visible"_ustr))
+            mAny >>= bVisible;
+        OUString sDescr;
+        if (GetProperty(rXPropSet, u"Description"_ustr))
+            mAny >>= sDescr;
+        OUString sTitle;
+        if (GetProperty(rXPropSet, u"Title"_ustr))
+            mAny >>= sTitle;
+        pFS->startElementNS(mnXmlNamespace, XML_pic);
+        pFS->startElementNS(mnXmlNamespace, XML_nvPicPr);
+        pFS->startElementNS(
+            mnXmlNamespace, XML_cNvPr, XML_id,
+            OString::number(GetShapeID(xShape) == -1 ? GetNewShapeID(xShape) : GetShapeID(xShape)),
+            XML_name, GetShapeName(xShape), XML_hidden, sax_fastparser::UseIf("1", !bVisible),
+            XML_descr, sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()), XML_title,
+            sax_fastparser::UseIf(sTitle, !sTitle.isEmpty()));
+        lcl_WriteClickAction(pFS, mpFB, rXPropSet);
+        AddExtLst(pFS, rXPropSet);
+        pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
+        pFS->singleElementNS(mnXmlNamespace, XML_cNvPicPr);
+        WriteNonVisualProperties(xShape);
+        pFS->endElementNS(mnXmlNamespace, XML_nvPicPr);
+        WriteBlipFill(rXPropSet, xShape->getSize(), u"FillBitmap"_ustr, mnXmlNamespace);
+        pFS->startElementNS(mnXmlNamespace, XML_spPr);
+        WriteShapeTransformation(xShape, XML_a, bFlipH, bFlipV);
+        if (nAdjustmentValuesIndex != -1)
+            WritePresetShape(sPresetShape, eShapeType, bPredefinedHandlesUsed,
+                             aGeometrySeq[nAdjustmentValuesIndex]);
+        else
+            WritePresetShape(sPresetShape);
+        WriteOutline(rXPropSet);
+        WriteShapeEffects(rXPropSet);
+        pFS->endElementNS(mnXmlNamespace, XML_spPr);
+        pFS->endElementNS(mnXmlNamespace, XML_pic);
+        return *this;
+    }
+
     // non visual shape properties
     if (GetDocumentType() != DOCUMENT_DOCX || mbUserShapes)
     {
