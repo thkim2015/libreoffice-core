@@ -1633,14 +1633,13 @@ static void lcl_DelBox( SwTableBox* pBox, DelTabPara* pDelPara )
                     pDelPara->pUndo->AddBoxPos( rDoc, nNdIdx, aDelRg.aEnd.GetIndex(),
                                                 aCntIdx.GetIndex() );
 
-                const std::shared_ptr<sw::mark::ContentIdxStore> pContentStore(sw::mark::ContentIdxStore::Create());
-                const sal_Int32 nOldTextLen = aCntIdx.GetIndex();
-                pContentStore->Save(rDoc, nNdIdx, SAL_MAX_INT32);
-
+                // ZetaOffice: JoinNext saves and restores the marks of the joined node itself.
+                // A second store saved here kept mark container indexes that went stale once
+                // JoinNext's restore re-sorted the container (equal positions, e.g. a collapsed
+                // bookmark next to another), so its restore gave a bookmark the position of
+                // another one (undoing text-to-table made a collapsed bookmark wrap a cell text,
+                // only sometimes).
                 pDelPara->pLastNd->JoinNext();
-
-                if( !pContentStore->Empty() )
-                    pContentStore->Restore( rDoc, pDelPara->pLastNd->GetIndex(), nOldTextLen );
             }
             else if( pDelPara->pUndo )
             {
