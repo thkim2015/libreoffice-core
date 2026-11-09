@@ -201,7 +201,16 @@ TextParagraphPropertiesContext::~TextParagraphPropertiesContext()
     rPropertyMap.setProperty( PROP_NumberingIsNumber, true);
 
     if( mrTextParagraphProperties.getParaAdjust() )
-        rPropertyMap.setProperty( PROP_ParaAdjust, *mrTextParagraphProperties.getParaAdjust());
+    {
+        if( *mrTextParagraphProperties.getParaAdjust() == ParagraphAdjust_STRETCH )
+        {
+            // algn="dist": justified including the last line (editeng has no STRETCH)
+            rPropertyMap.setProperty( PROP_ParaAdjust, ParagraphAdjust_BLOCK);
+            rPropertyMap.setProperty( PROP_ParaLastLineAdjust, static_cast<sal_Int16>(ParagraphAdjust_BLOCK));
+        }
+        else
+            rPropertyMap.setProperty( PROP_ParaAdjust, *mrTextParagraphProperties.getParaAdjust());
+    }
 }
 
 bool TextParagraphPropertiesContext::markListNumbered()

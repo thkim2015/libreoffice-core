@@ -2657,6 +2657,10 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
                 underline = "wavyHeavy";
                 break;
         }
+        // underline of words only
+        if (underline && std::string_view(underline) == "sng" && GetProperty(rXPropSet, u"CharWordMode"_ustr)
+            && *o3tl::doAccess<bool>(mAny))
+            underline = "words";
     }
 
     if (GetProperty(rXPropSet, u"CharStrikeout"_ustr))
@@ -3685,6 +3689,11 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
     if (GetProperty(rXPropSet, u"ParaAdjust"_ustr))
         mAny >>= nTmp;
     style::ParagraphAdjust nAlignment = static_cast<style::ParagraphAdjust>(nTmp);
+    // justified including the last line is PowerPoint "distributed"
+    sal_Int16 nLastLine = sal_Int16(style::ParagraphAdjust_LEFT);
+    if (nAlignment == style::ParagraphAdjust_BLOCK && GetProperty(rXPropSet, u"ParaLastLineAdjust"_ustr))
+        mAny >>= nLastLine;
+    const bool bDistributed = nAlignment == style::ParagraphAdjust_BLOCK && nLastLine == sal_Int16(style::ParagraphAdjust_BLOCK);
 
     bool bHasLinespacing = false;
     LineSpacing aLineSpacing;
@@ -3753,7 +3762,7 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
                            XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaLeftMargin)), nParaLeftMargin > 0),
                            XML_lvl, sax_fastparser::UseIf(OString::number(nOutLevel), nOutLevel > 0),
                            XML_indent, sax_fastparser::UseIf(OString::number((bForceZeroIndent && nParaFirstLineIndent == 0) ? 0 : oox::drawingml::convertHmmToEmu(nParaFirstLineIndent)), (bForceZeroIndent || nParaFirstLineIndent != 0)),
-                           XML_algn, GetAlignment( nAlignment, bRtl, mbPlaceholder ),
+                           XML_algn, bDistributed ? "dist" : GetAlignment( nAlignment, bRtl, mbPlaceholder ),
                            XML_defTabSz, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaDefaultTabSize)), nParaDefaultTabSize > 0),
                            XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl));
     else
@@ -3761,7 +3770,7 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
                            XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nLeftMargin)), nLeftMargin > 0),
                            XML_lvl, sax_fastparser::UseIf(OString::number(nOutLevel), nOutLevel > 0),
                            XML_indent, sax_fastparser::UseIf(OString::number(!bForceZeroIndent ? oox::drawingml::convertHmmToEmu(nLineIndentation) : 0), (bForceZeroIndent || ( nLineIndentation != 0))),
-                           XML_algn, GetAlignment( nAlignment, bRtl, mbPlaceholder ),
+                           XML_algn, bDistributed ? "dist" : GetAlignment( nAlignment, bRtl, mbPlaceholder ),
                            XML_defTabSz, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaDefaultTabSize)), nParaDefaultTabSize > 0),
                            XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl));
 
@@ -6783,10 +6792,10 @@ void DrawingML::Write3DEffects( const Reference< XPropertySet >& xPropSet, bool 
         }
         else if( rShape3DProp.Name == "bevelT" || rShape3DProp.Name == "bevelB" )
         {
+            // An empty attribute list is the default bevel (circle, 6pt x 6pt, e.g. the first
+            // item of the PowerPoint bevel gallery): the element must still be written.
             Sequence< PropertyValue > aBevelProps;
             rShape3DProp.Value >>= aBevelProps;
-            if ( !aBevelProps.hasElements() )
-                continue;
 
             rtl::Reference<sax_fastparser::FastAttributeList> aBevelAttrList;
             if( rShape3DProp.Name == "bevelT" )

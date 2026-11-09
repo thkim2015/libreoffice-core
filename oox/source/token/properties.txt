@@ -112,6 +112,7 @@ CharUnderlineHasColor
 CharWeight
 CharWeightAsian
 CharWeightComplex
+CharWordMode
 CircleEndAngle
 CircleKind
 CircleStartAngle
@@ -447,6 +448,7 @@ ParaIndent
 ParaIsHangingPunctuation
 ParaIsHyphenation
 ParaIsNumberingRestart
+ParaLastLineAdjust
 ParaLeftMargin
 ParaLineSpacing
 ParaRightMargin
