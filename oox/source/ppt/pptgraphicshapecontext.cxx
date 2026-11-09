@@ -58,6 +58,7 @@ ContextHandlerRef PPTGraphicShapeContext::onCreateContext( sal_Int32 aElementTok
     {
         sal_Int32 nSubType( rAttribs.getToken( XML_type, XML_obj ) );
         mpShapePtr->setSubType( nSubType );
+        mpShapePtr->setPlaceholderAttrs( rAttribs.getStringDefaulted( XML_type ), rAttribs.getStringDefaulted( XML_orient ), rAttribs.getStringDefaulted( XML_sz ) ); // ZETA
         OUString sIdx( rAttribs.getStringDefaulted( XML_idx ) );
         bool bHasIdx = !sIdx.isEmpty();
         sal_uInt32 nUnsignedIdx = rAttribs.getUnsigned( XML_idx, 0 );
