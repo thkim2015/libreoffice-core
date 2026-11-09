@@ -8878,6 +8878,22 @@ void DomainMapper_Impl::CloseFieldCommand()
                                 aValues.getArray()[3] = std::move(aFontVal3);
                             }
 
+                            // \s gives the symbol's font size in points; it wins over the run size.
+                            OUString sSize;
+                            double fSize = 0;
+                            if (lcl_FindInCommand(pContext->GetCommand(), 's', sSize))
+                                fSize = sSize.trim().toDouble();
+                            const bool bHasSize = fSize > 0 && fSize <= 1638;
+                            if (bHasSize)
+                            {
+                                const float fHeight = static_cast<float>(fSize);
+                                aValues.realloc(aValues.getLength() + 3);
+                                auto pValues = aValues.getArray() + aValues.getLength() - 3;
+                                pValues[0] = comphelper::makePropertyValue(getPropertyName(PROP_CHAR_HEIGHT), fHeight);
+                                pValues[1] = comphelper::makePropertyValue(getPropertyName(PROP_CHAR_HEIGHT_ASIAN), fHeight);
+                                pValues[2] = comphelper::makePropertyValue(getPropertyName(PROP_CHAR_HEIGHT_COMPLEX), fHeight);
+                            }
+
                             PropertyMapPtr pCharTopContext = GetTopContextOfType(CONTEXT_CHARACTER);
                             if (pCharTopContext.is())
                             {
@@ -8885,8 +8901,11 @@ void DomainMapper_Impl::CloseFieldCommand()
                                     = pCharTopContext->GetPropertyValues(
                                         /*bCharGrabBag=*/!IsInComments());
                                 OUString sFontName = getPropertyName(PROP_CHAR_FONT_NAME);
+                                OUString sHeight = getPropertyName(PROP_CHAR_HEIGHT);
                                 for (const beans::PropertyValue& rProperty : rContextValues)
                                 {
+                                    if (bHasSize && rProperty.Name.startsWith(sHeight))
+                                        continue;
                                     if (!bHasFont || !rProperty.Name.startsWith(sFontName))
                                     {
                                         aValues.realloc(aValues.getLength() + 1);
