@@ -505,6 +505,11 @@ void PivotTableField::finalizeImport(const rtl::Reference<ScDataPilotDescriptorB
                 // separate group field (fieldGroup base= + rangePr) with only par= on the date
                 // field. That parent is a date group, not a named one: create it from the base.
                 mrPivotTable.finalizeDateGroupingImport( xDPField, mnFieldIndex );
+                // The first date grouping is done in place on the date field (no new
+                // dimension, empty name): the group field then shows as the date field.
+                PivotTableField* pGroupField = mrPivotTable.getFields().get( pCacheField->getParentGroupField() ).get();
+                if( pGroupField && pGroupField->maDPFieldName.isEmpty() && xDPField.is() )
+                    pGroupField->maDPFieldName = xDPField->getName();
             }
             else if( pCacheField->hasParentGrouping() )
             {
@@ -1471,10 +1476,16 @@ void PivotTable::finalizeImport()
         aVisFields.insert( maColFields.begin(), maColFields.end() );
         for( const auto& rPageField : maPageFields )
             aVisFields.insert( rPageField.mnField );
+        // ZETA: a date field grouped in place by its (visible) group field shares its name
+        ::std::set< OUString > aVisNames;
+        for( sal_Int32 nVis : aVisFields )
+            if( PivotTableField* pField = getTableField( nVis ) )
+                if( !pField->getDPFieldName().isEmpty() )
+                    aVisNames.insert( pField->getDPFieldName() );
         sal_Int32 nIndex = 0;
         for( auto& rxField : maFields )
         {
-            if( aVisFields.count( nIndex ) == 0 )
+            if( aVisFields.count( nIndex ) == 0 && aVisNames.count( rxField->getDPFieldName() ) == 0 )
                 rxField->convertHiddenField();
             ++nIndex;
         }
