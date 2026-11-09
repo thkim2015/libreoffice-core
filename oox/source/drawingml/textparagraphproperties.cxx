@@ -544,7 +544,13 @@ void TextParagraphProperties::pushToPropSet( const ::oox::core::XmlFilterBase* p
         aPropSet.setProperty( PROP_ParaTabStopDefaultDistance, *moDefaultTabSize );
     }
 
-    if ( moParaAdjust )
+    if ( moParaAdjust && *moParaAdjust == css::style::ParagraphAdjust_STRETCH )
+    {
+        // algn="dist"/"thaiDist": editeng has no STRETCH, it is justified including the last line
+        aPropSet.setProperty( PROP_ParaAdjust, css::style::ParagraphAdjust_BLOCK);
+        aPropSet.setProperty( PROP_ParaLastLineAdjust, static_cast<sal_Int16>(css::style::ParagraphAdjust_BLOCK));
+    }
+    else if ( moParaAdjust )
     {
         aPropSet.setProperty( PROP_ParaAdjust, *moParaAdjust);
     }

@@ -190,6 +190,8 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
     rPropMap.setProperty( PROP_CharKerning, static_cast<sal_Int16>(GetTextSpacingPoint( moSpacing.value_or( 0 ) )));
 
     rPropMap.setProperty( PROP_CharUnderline, GetFontUnderline( moUnderline.value_or( XML_none ) ));
+    if( moUnderline.has_value() )
+        rPropMap.setProperty( PROP_CharWordMode, *moUnderline == XML_words );
     rPropMap.setProperty( PROP_CharStrikeout, GetFontStrikeout( moStrikeout.value_or( XML_noStrike ) ));
     rPropMap.setProperty( PROP_CharCaseMap, GetCaseMap( moCaseMap.value_or( XML_none ) ));
 

@@ -136,7 +136,7 @@ sal_Int16 GetFontUnderline( sal_Int32 nToken )
         case XML_wavy:              return awt::FontUnderline::WAVE;
         case XML_wavyDbl:           return awt::FontUnderline::DOUBLEWAVE;
         case XML_wavyHeavy:         return awt::FontUnderline::BOLDWAVE;
-//        case XML_words:             // TODO
+        case XML_words:             return awt::FontUnderline::SINGLE; // + CharWordMode
     }
     return awt::FontUnderline::DONTKNOW;
 }
