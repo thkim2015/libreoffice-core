@@ -10896,8 +10896,11 @@ void DocxAttributeOutput::FormatTextGrid( const SwTextGridItem& rGrid )
     pGridAttrList->add( FSNS( XML_w, XML_linePitch ),
             OString::number( nHeight ) );
 
+    // w:charSpace is a signed ST_DecimalNumber: a condensed grid (pitch below
+    // the font size) is negative. Writing the raw unsigned DOP value gives
+    // e.g. 4294965042 for -2254, which Word reads as a huge pitch.
     pGridAttrList->add( FSNS( XML_w, XML_charSpace ),
-            OString::number( GridCharacterPitch( rGrid ) ) );
+            OString::number( static_cast<sal_Int32>( GridCharacterPitch( rGrid ) ) ) );
 
     m_pSerializer->singleElementNS( XML_w, XML_docGrid, pGridAttrList );
 }
