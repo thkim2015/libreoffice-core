@@ -66,6 +66,10 @@
 #include <documentimport.hxx>
 #include <workbooksettings.hxx>
 #include <PivotTableFormat.hxx>
+#include <stylesbuffer.hxx>
+#include <scitems.hxx>
+#include <docpool.hxx>
+#include <svl/itemset.hxx>
 
 namespace oox::xls {
 
@@ -509,7 +513,13 @@ void PivotTableField::finalizeImport(const rtl::Reference<ScDataPilotDescriptorB
                 // dimension, empty name): the group field then shows as the date field.
                 PivotTableField* pGroupField = mrPivotTable.getFields().get( pCacheField->getParentGroupField() ).get();
                 if( pGroupField && pGroupField->maDPFieldName.isEmpty() && xDPField.is() )
+                {
                     pGroupField->maDPFieldName = xDPField->getName();
+                    // Excel shows the group field's name (e.g. "개월(Date)") as the header
+                    if( const PivotCacheField* pGroupCache = mrPivotTable.getCacheField( pCacheField->getParentGroupField() );
+                        pGroupCache && !pGroupCache->getName().isEmpty() && pGroupCache->getName() != maDPFieldName )
+                        xDPField->setName( pGroupCache->getName() );
+                }
             }
             else if( pCacheField->hasParentGrouping() )
             {
@@ -726,6 +736,18 @@ void PivotTableField::convertDataField( const PTDataFieldModel& rDataField )
           break;
     }
     aPropSet.setProperty( PROP_Function, eAggFunc );
+
+    // ZETA: the data field's own number format (else the source cells' format is used)
+    if( rDataField.mnNumFmtId > 0 ) try
+    {
+        SfxItemSet aSet( SfxItemSet::makeFixedSfxItemSet<ATTR_VALUE_FORMAT, ATTR_LANGUAGE_FORMAT>( *getScDocument().GetPool() ) );
+        sal_uInt32 nScFmt = getStyles().writeNumFmtToItemSet( aSet, rDataField.mnNumFmtId, false );
+        if( aSet.GetItemState( ATTR_VALUE_FORMAT, false ) == SfxItemState::SET )
+            xDPField->setPropertyValue( u"ZetaNumberFormat"_ustr, css::uno::Any( sal_Int32( nScFmt ) ) );
+    }
+    catch( css::uno::Exception& )
+    {
+    }
 
     // field reference ('show data as')
     DataPilotFieldReference aReference;

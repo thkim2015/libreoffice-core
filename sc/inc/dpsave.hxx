@@ -117,6 +117,8 @@ private:
     std::unique_ptr<css::sheet::DataPilotFieldLayoutInfo> pLayoutInfo; // (level)
     // ZetaOffice: Excel label/value filter "type\tvalue1\tvalue2\tdatafield" (level), empty = none
     OUString maZetaFilter;
+    // ZetaOffice: number format of a data field (Excel dataField numFmtId), -1 = source format
+    sal_Int32 mnZetaNumFmt = -1;
 
 public:
     typedef std::unordered_set<OUString> MemberSetType;
@@ -206,6 +208,8 @@ public:
 
     const OUString& GetZetaFilter() const { return maZetaFilter; }
     void SetZetaFilter(const OUString& rFilter) { maZetaFilter = rFilter; }
+    sal_Int32 GetZetaNumFmt() const { return mnZetaNumFmt; }
+    void SetZetaNumFmt(sal_Int32 nFmt) { mnZetaNumFmt = nFmt; }
 
     SC_DLLPUBLIC void SetCurrentPage( const OUString* pPage ); // NULL = no selection (all)
     OUString GetCurrentPage() const; // only for ODF compatibility

@@ -3784,7 +3784,8 @@ void ChartExport::exportLineChart( const Reference< chart2::XChartType >& xChart
 
         if( !mbIs3DChart )
         {
-            exportHiLowLines();
+            // ZETA: no hiLowLines for a line chart - the diagram always has a min/max line
+            // object (only stock charts use it), so Excel showed high-low lines on every one
             exportUpDownBars(xChartType);
             const char* marker = nSymbolType == css::chart::ChartSymbolType::NONE? "0":"1";
             pFS->singleElement(FSNS(XML_c, XML_marker), XML_val, marker);
@@ -3941,6 +3942,17 @@ void ChartExport::exportUpDownBars( const Reference< chart2::XChartType >& xChar
 {
     if(xChartType->getChartType() != "com.sun.star.chart2.CandleStickChartType")
         return;
+
+    // ZETA: up/down bars only with open values (Excel's high-low-close has none; with the
+    // bars Excel reads the chart as open-high-low-close)
+    {
+        bool bShowFirst = true;
+        Reference< beans::XPropertySet > xTypeProps( xChartType, uno::UNO_QUERY );
+        if( xTypeProps.is() )
+            xTypeProps->getPropertyValue( u"ShowFirst"_ustr ) >>= bShowFirst;
+        if( !bShowFirst )
+            return;
+    }
 
     FSHelperPtr pFS = GetFS();
     // export the chart property
@@ -4577,7 +4589,23 @@ void ChartExport::exportCandleStickSeries(
                         if( xLabelSeq.is() )
                             exportSeriesText( xLabelSeq, false );
 
-                        // TODO:export shape properties
+                        // ZETA: stock series draw no line and (but the close) no marker, as
+                        // Excel writes them - without these Excel joins the values with lines
+                        pFS->startElement(FSNS(XML_c, XML_spPr));
+                        pFS->startElement(FSNS(XML_a, XML_ln), XML_w, "19050");
+                        pFS->singleElement(FSNS(XML_a, XML_noFill));
+                        pFS->endElement(FSNS(XML_a, XML_ln));
+                        pFS->endElement(FSNS(XML_c, XML_spPr));
+                        pFS->startElement(FSNS(XML_c, XML_marker));
+                        if (std::string_view(series) == "values-last"
+                            && !lcl_getDataSequenceByRole(aSeqCnt, u"values-first"_ustr).is())
+                        {
+                            pFS->singleElement(FSNS(XML_c, XML_symbol), XML_val, "dot");
+                            pFS->singleElement(FSNS(XML_c, XML_size), XML_val, "3");
+                        }
+                        else
+                            pFS->singleElement(FSNS(XML_c, XML_symbol), XML_val, "none");
+                        pFS->endElement(FSNS(XML_c, XML_marker));
 
                         // export categories
                         if( mxCategoriesValues.is() )
@@ -4586,6 +4614,8 @@ void ChartExport::exportCandleStickSeries(
                         // export values
                         if( xValueSeq.is() )
                             exportSeriesValues( xValueSeq );
+
+                        pFS->singleElement(FSNS(XML_c, XML_smooth), XML_val, "0");
 
                         pFS->endElement( FSNS( XML_c, XML_ser ) );
                     }
@@ -6096,6 +6126,34 @@ void ChartExport::exportDataLabels(
 
     uno::Sequence<sal_Int32> aAttrLabelIndices;
     xPropSet->getPropertyValue(u"AttributedDataPoints"_ustr) >>= aAttrLabelIndices;
+
+    // ZETA: no series data labels element when the series and its points show no label -
+    // Excel takes an element with everything off as data labels that exist (HasDataLabels)
+    if (!bIsChartex)
+    {
+        auto lclShowsLabel = [](const uno::Reference<beans::XPropertySet>& xProps)
+        {
+            chart2::DataPointLabel aLabel;
+            return xProps.is() && (xProps->getPropertyValue(u"Label"_ustr) >>= aLabel)
+                   && (aLabel.ShowNumber || aLabel.ShowNumberInPercent || aLabel.ShowCategoryName
+                       || aLabel.ShowLegendSymbol || aLabel.ShowCustomLabel || aLabel.ShowSeriesName);
+        };
+        bool bAnyLabel = lclShowsLabel(xPropSet);
+        for (const sal_Int32 nIdx : aAttrLabelIndices)
+        {
+            if (bAnyLabel)
+                break;
+            try
+            {
+                bAnyLabel = lclShowsLabel(xSeries->getDataPointByIndex(nIdx));
+            }
+            catch (const uno::Exception&)
+            {
+            }
+        }
+        if (!bAnyLabel)
+            return;
+    }
 
     // We must not export label placement property when the chart type doesn't
     // support this option in MS Office, else MS Office would think the file

@@ -1949,7 +1949,14 @@ void XclExpDV::SaveXml( XclExpXmlStream& rStrm )
                 rWorksheet->endElement(XML_formula1);
             }
         }
-        if (const std::unique_ptr<ScTokenArray> xScTokArr = pValData->CreateFlatCopiedTokenArray(1))
+        // ZetaOffice: a second value only for between/not between of a value check - LO keeps
+        // a 0 for every other rule, which Excel then shows as Formula2 "0"
+        const bool bZetaTwoValues
+            = (pValData->GetOperation() == ScConditionMode::Between
+               || pValData->GetOperation() == ScConditionMode::NotBetween)
+              && pValData->GetDataMode() != SC_VALID_LIST && pValData->GetDataMode() != SC_VALID_CUSTOM
+              && pValData->GetDataMode() != SC_VALID_ANY;
+        if (const std::unique_ptr<ScTokenArray> xScTokArr = bZetaTwoValues ? pValData->CreateFlatCopiedTokenArray(1) : nullptr)
         {
             msFormula2 = XclXmlUtils::ToOUString(GetCompileFormulaContext(), pValData->GetSrcPos(),
                                                  xScTokArr.get());

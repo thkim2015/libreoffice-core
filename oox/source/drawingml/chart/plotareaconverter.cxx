@@ -605,6 +605,9 @@ void PlotAreaConverter::convertFromModel( View3DModel& rView3DModel,
         else
         {
             maAutoTitle.clear();
+            // ZETA: a combo chart (two axes sets) has no single series title - else its
+            // automatic title (no text) was taken as an empty title and lost
+            mbSingleSeriesTitle = false;
         }
         nAxesSetIdx = 1 - nAxesSetIdx;
     }
