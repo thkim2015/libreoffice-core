@@ -265,7 +265,20 @@ void SlideFragmentHandler::finalizeImport()
         {
             Reference< XNamed > xNamed( xSlide, UNO_QUERY );
             if( xNamed.is() )
+            {
                 xNamed->setName( maSlideName );
+                // ZETA: master page names are unique in Impress, and a second slide master's
+                // layouts repeat the first one's names ("Title Slide"); name such a layout
+                // "1_Title Slide" as PowerPoint names a copy, rather than leave it "Default 12"
+                OUString aName = maSlideName;
+                for (sal_Int32 n = 1; mpSlidePersistPtr->isMasterPage() && n < 1000
+                                      && xNamed->getName() != aName;
+                     ++n)
+                {
+                    aName = OUString::number(n) + "_" + maSlideName;
+                    xNamed->setName(aName);
+                }
+            }
         }
     }
     catch( uno::Exception& )
