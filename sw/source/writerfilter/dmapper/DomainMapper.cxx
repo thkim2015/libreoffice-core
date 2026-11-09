@@ -2091,6 +2091,10 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         // the export (DocxAttributeOutput::ParaHangingPunctuation) writes the value as is.
         rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, uno::Any( nIntValue != 0 ));
         break;
+    case NS_ooxml::LN_CT_PPrBase_kinsoku:
+        // East Asian line breaking rules; the export (ParaForbiddenRules) writes it back.
+        rContext->Insert(PROP_PARA_IS_FORBIDDEN_RULES, uno::Any( nIntValue != 0 ));
+        break;
     case NS_ooxml::LN_CT_PPrBase_topLinePunct:
         break;
     case NS_ooxml::LN_CT_PPrBase_autoSpaceDE:

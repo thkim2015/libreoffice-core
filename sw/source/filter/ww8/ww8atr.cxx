@@ -5222,6 +5222,11 @@ void AttributeOutputBase::FormatColumns( const SwFormatCol& rCol )
         const SvxLRSpaceItem &rLR = pFormat->GetLRSpace();
         nPageSize = pFormat->GetFrameSize().GetWidth();
         nPageSize -= rLR.ResolveLeft() + rLR.ResolveRight({});
+        // Page borders and their padding take text area width too (an imported
+        // page border keeps part of the Word margin there).
+        const SvxBoxItem& rBox = pFormat->GetBox();
+        nPageSize -= rBox.CalcLineSpace(SvxBoxItemLine::LEFT, /*bEvenIfNoLine*/ true)
+                     + rBox.CalcLineSpace(SvxBoxItemLine::RIGHT, /*bEvenIfNoLine*/ true);
         //i120133: The Section width should consider page indent value.
         nPageSize -= rCol.GetAdjustValue();
 

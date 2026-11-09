@@ -77,6 +77,7 @@ public:
 
     // Getters
     sal_Int16 GetNumberingType(sal_Int16 nDefault) const;
+    sal_Int32 GetNFC() const { return m_nNFC; }
     bool HasBulletChar() const { return m_sBulletChar.has_value(); };
     OUString GetBulletChar( ) const { return m_sBulletChar.has_value()? *m_sBulletChar : OUString(); };
     const tools::SvRef< StyleSheetEntry >& GetParaStyle( ) const { return m_pParaStyle; };

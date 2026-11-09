@@ -58,6 +58,7 @@
 #include <com/sun/star/text/XTextTablesSupplier.hpp>
 #include <com/sun/star/text/TextGridMode.hpp>
 #include <com/sun/star/text/XTextCopy.hpp>
+#include <com/sun/star/text/XTextRangeCompare.hpp>
 #include <com/sun/star/style/VerticalAlignment.hpp>
 #include <comphelper/sequence.hxx>
 #include <comphelper/propertyvalue.hxx>
@@ -1300,6 +1301,45 @@ static uno::Reference< beans::XPropertySet > lcl_GetRangeProperties( bool bIsFir
     return xRangeProperties;
 }
 
+// Stop counting lines in the paragraphs from xStart (or the document start) up to
+// the paragraph before xEnd (or before the paragraph already appended for the
+// next section).
+static void lcl_SuppressLineNumbers(DomainMapper_Impl& rDM_Impl,
+                                    const uno::Reference<text::XTextRange>& xStart,
+                                    const uno::Reference<text::XTextRange>& xEnd)
+{
+    try
+    {
+        uno::Reference<text::XTextAppend> const& xTextAppend = rDM_Impl.GetTopTextAppend();
+        if (!xTextAppend.is())
+            return;
+        rtl::Reference<SwXTextCursor> xCursor = dynamic_cast<SwXTextCursor*>(
+            xTextAppend->createTextCursorByRange(xStart.is() ? xStart : xTextAppend->getStart()).get());
+        rtl::Reference<SwXTextCursor> xEndCursor = dynamic_cast<SwXTextCursor*>(
+            xTextAppend->createTextCursorByRange(xEnd.is() ? xEnd : xTextAppend->getEnd()).get());
+        if (!xCursor || !xEndCursor)
+            return;
+        xCursor->gotoStartOfParagraph(false);
+        // The last section has no paragraph of a next section after it.
+        if (xEnd.is() || !rDM_Impl.GetIsLastSectionGroup())
+        {
+            xEndCursor->gotoStartOfParagraph(false);
+            if (!xEndCursor->gotoPreviousParagraph(false))
+                return;
+        }
+        xEndCursor->gotoEndOfParagraph(false);
+        uno::Reference<text::XTextRangeCompare> xCompare(xTextAppend, uno::UNO_QUERY);
+        if (xCompare.is() && xCompare->compareRegionStarts(xCursor->getStart(), xEndCursor->getEnd()) < 0)
+            return; // nothing before xEnd
+        xCursor->gotoRange(xEndCursor->getEnd(), true);
+        xCursor->setPropertyValue(getPropertyName(PROP_PARA_LINE_NUMBER_COUNT), uno::Any(false));
+    }
+    catch (const uno::Exception&)
+    {
+        DBG_UNHANDLED_EXCEPTION("writerfilter.dmapper", "lcl_SuppressLineNumbers");
+    }
+}
+
 void SectionPropertyMap::HandleMarginsHeaderFooter(DomainMapper_Impl& rDM_Impl)
 {
     Insert( PROP_LEFT_MARGIN, uno::Any( m_nLeftMargin ) );
@@ -1612,6 +1652,12 @@ void SectionPropertyMap::CreateEvenOddPageStyleCopy(DomainMapper_Impl& rDM_Impl,
                 && (!bEvenAndOdd || !rDM_Impl.SeenHeaderFooter(PagePartType::Header, PageType::LEFT)),
             !rDM_Impl.SeenHeaderFooter(PagePartType::Footer, PageType::RIGHT)
                 && (!bEvenAndOdd || !rDM_Impl.SeenHeaderFooter(PagePartType::Footer, PageType::LEFT)));
+        // The first page header/footer now lives in the copy only (the source
+        // was made first-shared above), so later sections must link to it.
+        if (rDM_Impl.m_xFirstHeaderChainStyle == pageProperties)
+            rDM_Impl.m_xFirstHeaderChainStyle = evenOddStyle;
+        if (rDM_Impl.m_xFirstFooterChainStyle == pageProperties)
+            rDM_Impl.m_xFirstFooterChainStyle = evenOddStyle;
     }
 
     // Ignore write-only properties.
@@ -1772,6 +1818,16 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
     catch (const uno::Exception&)
     {
         DBG_UNHANDLED_EXCEPTION("writerfilter", "HandleIncreasedAnchoredObjectSpacing() failed");
+    }
+
+    // Writer line numbering is document wide, Word's is per section: stop counting
+    // the paragraphs of sections without w:lnNumType (exported as suppressLineNumbers).
+    if (!rDM_Impl.IsInFootOrEndnote() && !rDM_Impl.IsInComments())
+    {
+        if (m_nLnnMod && !rDM_Impl.IsLineNumberingSet() && m_xStartingRange.is())
+            lcl_SuppressLineNumbers(rDM_Impl, nullptr, m_xStartingRange);
+        else if (!m_nLnnMod && rDM_Impl.IsLineNumberingSet())
+            lcl_SuppressLineNumbers(rDM_Impl, m_xStartingRange, nullptr);
     }
 
     if ( m_nLnnMod )

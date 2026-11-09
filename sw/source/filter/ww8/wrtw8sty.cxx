@@ -1765,6 +1765,9 @@ void MSWordExportBase::SectionProperties( const WW8_SepInfo& rSepInfo, WW8_PdAtt
                 SvxIndentValue::twips(rPageLR.ResolveLeft() + rSectionLR.ResolveLeft()),
                 SvxIndentValue::twips(rPageLR.ResolveRight({}) + rSectionLR.ResolveRight({})),
                 SvxIndentValue::zero(), RES_LR_SPACE);
+            // Keep the page gutter, which the section never has.
+            aResultLR.SetGutterMargin(rPageLR.GetGutterMargin());
+            aResultLR.SetRightGutterMargin(rPageLR.GetRightGutterMargin());
             //i120133: The Section width should consider section indent value.
             if (rSectionLR.ResolveLeft() + rSectionLR.ResolveRight({}) != 0)
             {

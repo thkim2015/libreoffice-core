@@ -8214,6 +8214,28 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
     OString aCustomFormat;
     OString aFormat(lcl_ConvertNumberingType(nNumberingType, pOutSet, aCustomFormat, "decimal"_ostr));
 
+    // NUMBER_LOWER_ZH stands for several East Asian counting formats; the
+    // DOCX import keeps the original one per level in the rule's grab bag.
+    if (nNumberingType == style::NumberingType::NUMBER_LOWER_ZH)
+    {
+        const SwNumRule* pRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
+                                                     : m_pExportingNumRule;
+        if (pRule)
+        {
+            uno::Any aAny;
+            pRule->GetGrabBagItem(aAny);
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            aAny >>= aGrabBag;
+            for (const auto& rProp : aGrabBag)
+            {
+                uno::Sequence<OUString> aNumFmts;
+                if (rProp.Name == "OoxmlNumFmts" && (rProp.Value >>= aNumFmts)
+                    && nLevel < aNumFmts.getLength() && !aNumFmts[nLevel].isEmpty())
+                    aFormat = aNumFmts[nLevel].toUtf8();
+            }
+        }
+    }
+
     if (aCustomFormat.isEmpty())
     {
         m_pSerializer->singleElementNS(XML_w, XML_numFmt, FSNS(XML_w, XML_val), aFormat);
