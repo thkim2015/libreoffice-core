@@ -3346,8 +3346,19 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
     // and the autofit.
     const bool bInheritsItsPrompt = isGraphicPlaceholder(ePlaceholder) && !mbMaster
                                     && bIsEmptyPresObj;
+    // ZETA: a layout's chart, table, SmartArt, online-image or media placeholder is an outline in
+    // Impress, which fills it with its outline levels; PowerPoint writes it without text
+    bool bContentOnlyOutline = false;
+    if (ePlaceholder == Outliner && mePageType == PageType::MASTER && !mbSlideMasterPart)
+    {
+        OUString aType, aOrient, aSize;
+        sal_Int32 nIdx = -1;
+        if (getImportedPlaceholder(xProps, ePlaceholder, aType, nIdx, aOrient, aSize))
+            bContentOnlyOutline = aType == "chart" || aType == "tbl" || aType == "dgm"
+                                  || aType == "clipArt" || aType == "media";
+    }
     WriteTextBox(xShape, XML_p, bUsePlaceholderIndex || bWritePropertiesAsLstStyles,
-                 /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt);
+                 /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt && !bContentOnlyOutline);
 
     mpFS->endElementNS(XML_p, XML_sp);
 
