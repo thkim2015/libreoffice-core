@@ -2997,7 +2997,10 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
         case PlaceholderType::Subtitle:
             return rType == "subTitle";
         case PlaceholderType::Outliner:
-            return rType.isEmpty() || rType == "obj" || rType == "body";
+            // ZETA: a layout's chart, table, SmartArt and online-image placeholders are outlines
+            // in Impress (oox imports them so); keep the type PowerPoint gave them
+            return rType.isEmpty() || rType == "obj" || rType == "body" || rType == "chart"
+                   || rType == "tbl" || rType == "dgm" || rType == "clipArt";
         case PlaceholderType::Picture:
             return rType == "pic";
         case PlaceholderType::Media:
