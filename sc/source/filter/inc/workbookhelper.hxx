@@ -180,6 +180,9 @@ public:
     /** Final conversion after importing the workbook. */
     void                finalizeWorkbookImport();
     void                useInternalChartDataTable( bool bInternal );
+    /** ZETA: rows whose height comes from the file (ht without customHeight). They are
+        kept as written at load (Excel does not re-fit them either) and stay automatic. */
+    void                addFileHeightRows( SCTAB nTab, SCROW nFirst, SCROW nLast );
 
     // document model ---------------------------------------------------------
     ScDocument& getScDocument();

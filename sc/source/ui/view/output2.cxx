@@ -1437,6 +1437,28 @@ bool beginsWithRTLCharacter(const OUString& rStr)
 
 }
 
+/** ZETA: Excel draws 'general' rotated text by its angle, not by value vs
+    string: 1-89 degrees counter-clockwise and 90 degrees clockwise look left
+    aligned, 90 degrees counter-clockwise, other clockwise angles and stacked
+    text look right aligned (the rule the xlsx import used to bake into the
+    cell attribute, see oox Alignment::importAlignment). Returns Standard when
+    the cell is not rotated or not 'general'.
+ */
+static SvxCellHorJustify lcl_GetExcelRotatedGeneralJustify( SvxCellHorJustify eHorJust,
+        const ScPatternAttr& rPattern, const SfxItemSet* pCondSet )
+{
+    if (eHorJust != SvxCellHorJustify::Standard)
+        return SvxCellHorJustify::Standard;
+    if (rPattern.GetItem(ATTR_STACKED, pCondSet).GetValue())
+        return SvxCellHorJustify::Right;
+    const sal_Int32 nRot = ((rPattern.GetItem(ATTR_ROTATE_VALUE, pCondSet).GetValue().get() % 36000) + 36000) % 36000;
+    if (nRot == 0)
+        return SvxCellHorJustify::Standard;
+    if ((nRot > 0 && nRot < 9000) || nRot == 27000)
+        return SvxCellHorJustify::Left;
+    return SvxCellHorJustify::Right;
+}
+
 /** Get left, right or centered alignment from RTL context.
 
     Does not return standard, block or repeat, for these the contextual left or
@@ -1447,6 +1469,9 @@ static SvxCellHorJustify getAlignmentFromContext( SvxCellHorJustify eInHorJust,
         const ScPatternAttr& rPattern, const SfxItemSet* pCondSet,
         const ScDocument* pDoc, SCTAB mnTab, const bool  bNumberFormatIsText )
 {
+    if (SvxCellHorJustify eRot = lcl_GetExcelRotatedGeneralJustify(eInHorJust, rPattern, pCondSet);
+        eRot != SvxCellHorJustify::Standard)
+        return eRot;
     SvxCellHorJustify eHorJustContext = eInHorJust;
     bool bUseWritingDirection = false;
     if (eInHorJust == SvxCellHorJustify::Standard)
@@ -4840,6 +4865,10 @@ void ScOutputData::DrawRotated(bool bPixelToLogic)
 
                         SvxCellHorJustify eHorJust =
                                             pPattern->GetItem(ATTR_HOR_JUSTIFY, pCondSet).GetValue();
+                        // ZETA: Excel look of 'general' rotated text (was centered)
+                        if (SvxCellHorJustify eRot = lcl_GetExcelRotatedGeneralJustify(eHorJust, *pPattern, pCondSet);
+                            eRot != SvxCellHorJustify::Standard)
+                            eHorJust = eRot;
                         bool bBreak = ( eHorJust == SvxCellHorJustify::Block ) ||
                                     pPattern->GetItem(ATTR_LINEBREAK, pCondSet).GetValue();
                         bool bRepeat = ( eHorJust == SvxCellHorJustify::Repeat && !bBreak );

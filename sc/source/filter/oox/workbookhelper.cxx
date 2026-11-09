@@ -79,6 +79,10 @@
 #include <editutil.hxx>
 #include <editeng/editstat.hxx>
 #include <unotools/charclass.hxx>
+
+#include <mutex>
+#include <tuple>
+#include <vector>
 #include <o3tl/string_view.hxx>
 #include <ViewSettingsSequenceDefines.hxx>
 
@@ -172,6 +176,12 @@ public:
     Reference< XStyle > createStyleObject( OUString& orStyleName, bool bPageStyle );
     /** Helper to switch chart data table - specifically for xlsx imports */
     void useInternalChartDataTable( bool bInternal );
+    /** ZETA: remembers rows whose file height is kept at load (see finalize()). */
+    void addFileHeightRows( SCTAB nTab, SCROW nFirst, SCROW nLast )
+    {
+        std::scoped_lock aGuard( maFileHeightMutex );
+        maFileHeightRows.emplace_back( nTab, nFirst, nLast );
+    }
 
     // buffers ----------------------------------------------------------------
 
@@ -308,6 +318,10 @@ private:
     // BIFF2-BIFF8 specific
     rtl_TextEncoding    meTextEnc;              /// BIFF byte string text encoding.
     std::unique_ptr<ScDocumentImport> mxDocImport;
+
+    // ZETA: rows with a file height (ht, no customHeight) that the optimal row height pass skips
+    std::mutex          maFileHeightMutex;
+    std::vector< std::tuple< SCTAB, SCROW, SCROW > > maFileHeightRows;
 };
 
 WorkbookGlobals::WorkbookGlobals( ExcelFilter& rFilter ) :
@@ -653,6 +667,13 @@ void WorkbookGlobals::finalize()
     // check settings (potentially asking the user if optimal row height should be run now)
     if (mpDocShell->GetRecalcRowHeightsMode()) // default is to always update
         mpDocShell->UpdateAllRowHeights(/*bOnlyUsedRows=*/true);
+    // ZETA: rows with a file height were marked manual during import so the pass above kept
+    // the height Excel wrote (Excel shows the stored ht and does not re-fit at load; Calc's own
+    // fit differed, e.g. 17.25pt rows became 16.5pt). Make them automatic again, as in Excel,
+    // so editing re-fits them and export writes no customHeight.
+    for (const auto& [nTab, nFirst, nLast] : maFileHeightRows)
+        mpDoc->SetManualHeight( nFirst, nLast, nTab, false );
+    maFileHeightRows.clear();
 
     // #i76026# enable Undo after loading the document
     mpDoc->EnableUndo(true);
@@ -1039,6 +1060,11 @@ oox::drawingml::chart::ChartConverter* WorkbookHelper::getChartConverter() const
 void WorkbookHelper::useInternalChartDataTable( bool bInternal )
 {
     mrBookGlob.useInternalChartDataTable( bInternal );
+}
+
+void WorkbookHelper::addFileHeightRows( SCTAB nTab, SCROW nFirst, SCROW nLast )
+{
+    mrBookGlob.addFileHeightRows( nTab, nFirst, nLast );
 }
 
 PageSettingsConverter& WorkbookHelper::getPageSettingsConverter() const
