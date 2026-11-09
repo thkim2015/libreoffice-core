@@ -2874,9 +2874,28 @@ XclExpCellTable::XclExpCellTable( const XclExpRoot& rRoot ) :
                     }
                 }
 
-                xCell = new XclExpFormulaCell(
-                    GetRoot(), aXclPos, pPattern, nMergeBaseXFId,
-                    *rScCell.getFormula(), maArrayBfr, maShrfmlaBfr, maTableopBfr);
+                // ZetaOffice: the xlsx import keeps a Boolean cell (t="b") as formula TRUE()/FALSE();
+                // write such a cell as a Boolean value again, else Excel shows a =TRUE() formula
+                {
+                    const ScFormulaCell& rFCell = *rScCell.getFormula();
+                    const ScTokenArray* pCode = rFCell.GetCode();
+                    if (pCode && rFCell.GetMatrixFlag() == ScMatrixMode::NONE
+                        && (pCode->GetLen() == 1 || pCode->GetLen() == 3))
+                    {
+                        formula::FormulaToken* const* pTok = pCode->GetArray();
+                        const OpCode eOp = pTok[0]->GetOpCode();
+                        if ((eOp == ocTrue || eOp == ocFalse)
+                            && (pCode->GetLen() == 1
+                                || (pTok[1]->GetOpCode() == ocOpen && pTok[2]->GetOpCode() == ocClose)))
+                            xCell = new XclExpBooleanCell(
+                                GetRoot(), aXclPos, pPattern, nMergeBaseXFId, eOp == ocTrue );
+                    }
+                }
+
+                if (!xCell)
+                    xCell = new XclExpFormulaCell(
+                        GetRoot(), aXclPos, pPattern, nMergeBaseXFId,
+                        *rScCell.getFormula(), maArrayBfr, maShrfmlaBfr, maTableopBfr);
             }
             break;
 
