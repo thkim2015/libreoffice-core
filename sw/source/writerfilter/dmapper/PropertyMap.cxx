@@ -2202,6 +2202,12 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
                 CreateEvenOddPageStyleCopy(rDM_Impl, PageBreakType::Odd);
             }
 
+            // Writer has no chapter number in page numbers: remember w:chapStyle/w:chapSep
+            // for the page style that this section ends up using, so DOCX export keeps them.
+            if (!m_sPageNumberChapStyle.isEmpty() || !m_sPageNumberChapSep.isEmpty())
+                rDM_Impl.m_aPageNumberChapters[m_sPageStyleName]
+                    = m_sPageNumberChapStyle + "|" + m_sPageNumberChapSep;
+
             if (rDM_Impl.m_xAltChunkStartingRange.is())
             {
                 xRangeProperties.set(rDM_Impl.m_xAltChunkStartingRange, uno::UNO_QUERY);

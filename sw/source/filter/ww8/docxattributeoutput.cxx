@@ -7869,6 +7869,36 @@ void DocxAttributeOutput::SectionPageNumbering( sal_uInt16 nNumType, const ::std
     if (!aFormat.isEmpty() && aCustomFormat.isEmpty())
         pAttr->add(FSNS(XML_w, XML_fmt), aFormat);
 
+    // w:chapStyle/w:chapSep kept from DOCX import for this page style, see
+    // SectionPropertyMap::CloseSectionGroup()
+    const SwPageDesc* pPd = m_rExport.m_pCurrentPageDesc;
+    const SwDocShell* pDocShell = m_rExport.m_rDoc.GetDocShell();
+    if (pPd && pDocShell)
+    {
+        rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
+        uno::Sequence<beans::PropertyValue> aGrabBag;
+        uno::Sequence<beans::PropertyValue> aChapters;
+        if (xProps.is() && (xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
+            && (comphelper::SequenceAsHashMap(aGrabBag).getValue(u"OoxmlPageNumberChapters"_ustr)
+                >>= aChapters))
+        {
+            const OUString sProgName
+                = SwStyleNameMapper::GetProgName(pPd->GetName(), SwGetPoolIdFromName::PageDesc)
+                      .toString();
+            OUString sValue;
+            if (comphelper::SequenceAsHashMap(aChapters).getValue(sProgName) >>= sValue)
+            {
+                const sal_Int32 nBar = sValue.indexOf('|');
+                const OUString sStyle = nBar < 0 ? sValue : sValue.copy(0, nBar);
+                const OUString sSep = nBar < 0 ? OUString() : sValue.copy(nBar + 1);
+                if (!sStyle.isEmpty())
+                    pAttr->add(FSNS(XML_w, XML_chapStyle), sStyle.toUtf8());
+                if (!sSep.isEmpty())
+                    pAttr->add(FSNS(XML_w, XML_chapSep), sSep.toUtf8());
+            }
+        }
+    }
+
     m_pSerializer->singleElementNS( XML_w, XML_pgNumType, pAttr );
 
     // see 2.6.12 pgNumType (Page Numbering Settings)

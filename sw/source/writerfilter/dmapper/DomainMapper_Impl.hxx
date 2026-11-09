@@ -1208,6 +1208,9 @@ public:
     /// localized name (Korean Word: "제목 1" for "heading 1"); the export writes them back unchanged.
     o3tl::sorted_vector<OUString> m_aStyleRefUINames;
 
+    /// Page style name -> "chapStyle|chapSep" of w:pgNumType, written back by the DOCX export.
+    std::map<OUString, OUString> m_aPageNumberChapters;
+
     /// If we're importing into a new document, or just pasting to an existing one.
     bool IsNewDoc() const { return m_bIsNewDoc;}
 

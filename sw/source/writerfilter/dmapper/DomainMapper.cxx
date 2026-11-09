@@ -79,6 +79,7 @@
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/propertyvalue.hxx>
 #include <editeng/escapementitem.hxx>
 #include <filter/msfilter/util.hxx>
 #include <sfx2/DocumentMetadataAccess.hxx>
@@ -286,6 +287,16 @@ DomainMapper::~DomainMapper()
             uno::Sequence<OUString> aNames(m_pImpl->m_aStyleRefUINames.size());
             std::copy(m_pImpl->m_aStyleRefUINames.begin(), m_pImpl->m_aStyleRefUINames.end(), aNames.getArray());
             aProperties[u"StyleRefUINames"_ustr] <<= aNames;
+        }
+
+        // w:pgNumType chapStyle/chapSep per page style, see DocxAttributeOutput::SectionPageNumbering()
+        if (!m_pImpl->m_aPageNumberChapters.empty())
+        {
+            uno::Sequence<beans::PropertyValue> aChapters(m_pImpl->m_aPageNumberChapters.size());
+            auto pChapters = aChapters.getArray();
+            for (const auto& [rStyle, rValue] : m_pImpl->m_aPageNumberChapters)
+                *pChapters++ = comphelper::makePropertyValue(rStyle, rValue);
+            aProperties[u"OoxmlPageNumberChapters"_ustr] <<= aChapters;
         }
 
         if (m_pImpl->GetTextDocument())
@@ -1461,6 +1472,26 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                 sal_Int16 nNumberType = ConversionHelper::ConvertNumberingType(nIntValue, -1);
                 if (nNumberType != -1)
                     pSectionContext->SetPageNumberType(nNumberType);
+            }
+        break;
+        case NS_ooxml::LN_CT_PageNumber_chapStyle:
+            if (pSectionContext)
+                pSectionContext->SetPageNumberChapStyle(OUString::number(nIntValue));
+        break;
+        case NS_ooxml::LN_CT_PageNumber_chapSep:
+            if (pSectionContext)
+            {
+                OUString sSep;
+                switch (nIntValue)
+                {
+                    case NS_ooxml::LN_Value_ST_ChapterSep_hyphen: sSep = u"hyphen"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_period: sSep = u"period"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_colon: sSep = u"colon"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_emDash: sSep = u"emDash"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_enDash: sSep = u"enDash"_ustr; break;
+                    default: break;
+                }
+                pSectionContext->SetPageNumberChapSep(sSep);
             }
         break;
         case NS_ooxml::LN_CT_FtnEdn_type:
