@@ -294,7 +294,9 @@ public:
 
     void setCellArrayFormula(const ScRange& rRangeAddress, const ScAddress& rTokenAddress,
                              const OUString& rTokenStr, bool bCachedSpill = false,
-                             bool bDynamicArrayMaster = false);
+                             bool bDynamicArrayMaster = false,
+                             const OUString& rCachedValue = OUString(),
+                             sal_Int32 nCachedType = 0);
 
     void createSharedFormulaMapEntry(
         const ScAddress& rAddress,

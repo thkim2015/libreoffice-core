@@ -14,6 +14,7 @@
 #include <formulacell.hxx>
 #include <document.hxx>
 #include <documentimport.hxx>
+#include <scmatrix.hxx>
 
 #include <autonamecache.hxx>
 #include <tokenarray.hxx>
@@ -451,10 +452,107 @@ void applyCellFormulas(
     }
 }
 
+/* ZETA: the cached results of an array formula (<v> of the master and of the
+   other cells of the range, which arrive as plain value cells before the
+   matrix cells replace them). Returns an empty reference when any cell has no
+   usable cached value; the matrix then stays dirty as before. */
+ScMatrixRef lcl_collectArrayCache(
+    ScDocumentImport& rDoc, const FormulaBuffer::TokenRangeAddressItem& rItem,
+    bool bGeneratorKnownGood )
+{
+    if (rItem.mbCachedSpill || rItem.maCachedValue.isEmpty())
+        return ScMatrixRef();
+    const sal_Int32 nType = rItem.mnCachedType;
+    if (nType != XML_n && nType != XML_b && !(nType == XML_str && bGeneratorKnownGood))
+        return ScMatrixRef();
+    const ScRange& rRange = rItem.maRange;
+    const SCSIZE nCols = rRange.aEnd.Col() - rRange.aStart.Col() + 1;
+    const SCSIZE nRows = rRange.aEnd.Row() - rRange.aStart.Row() + 1;
+    if (nCols * nRows > 65536)
+        return ScMatrixRef();
+    ScDocument& rD = rDoc.getDoc();
+    svl::SharedStringPool& rPool = rD.GetSharedStringPool();
+    ScMatrixRef pMat(new ScMatrix(nCols, nRows));
+    const ScAddress& rMaster = rItem.maTokenAndAddress.maAddress;
+    for (SCSIZE nR = 0; nR < nRows; ++nR)
+    {
+        for (SCSIZE nC = 0; nC < nCols; ++nC)
+        {
+            const ScAddress aPos(rRange.aStart.Col() + nC, rRange.aStart.Row() + nR, rRange.aStart.Tab());
+            if (aPos == rMaster)
+            {
+                if (nType == XML_str)
+                    pMat->PutString(rPool.intern(rItem.maCachedValue), nC, nR);
+                else
+                    pMat->PutDouble(rItem.maCachedValue.toDouble(), nC, nR);
+                continue;
+            }
+            switch (rD.GetCellType(aPos))
+            {
+                case CELLTYPE_VALUE:
+                    pMat->PutDouble(rD.GetValue(aPos), nC, nR);
+                break;
+                case CELLTYPE_STRING:
+                case CELLTYPE_EDIT:
+                    if (!bGeneratorKnownGood)
+                        return ScMatrixRef();
+                    pMat->PutString(rPool.intern(rD.GetString(aPos)), nC, nR);
+                break;
+                default:
+                    return ScMatrixRef();
+            }
+        }
+    }
+    return pMat;
+}
+
+/* ZETA: give the new matrix cells the cached results so that they are not
+   dirty: a manual-calc document (calcMode="manual") otherwise shows and saves
+   0 for every array formula until the user recalculates. */
+void lcl_applyArrayCache(
+    ScDocumentImport& rDoc, const ScRange& rRange, const ScAddress& rMaster, const ScMatrixRef& pMat )
+{
+    ScDocument& rD = rDoc.getDoc();
+    ScFormulaCell* pMaster = rD.GetFormulaCell(rMaster);
+    if (!pMaster || pMaster->GetMatrixFlag() != ScMatrixMode::Formula)
+        return;
+    const SCSIZE nCols = rRange.aEnd.Col() - rRange.aStart.Col() + 1;
+    const SCSIZE nRows = rRange.aEnd.Row() - rRange.aStart.Row() + 1;
+    auto aTokenOf = [&](SCSIZE nC, SCSIZE nR) -> formula::FormulaToken*
+    {
+        if (pMat->IsStringOrEmpty(nC, nR))
+            return new formula::FormulaStringToken(pMat->GetString(nC, nR));
+        return new formula::FormulaDoubleToken(pMat->GetDouble(nC, nR));
+    };
+    const SCSIZE nMC = rMaster.Col() - rRange.aStart.Col();
+    const SCSIZE nMR = rMaster.Row() - rRange.aStart.Row();
+    formula::FormulaConstTokenRef xUL(aTokenOf(nMC, nMR));
+    pMaster->SetResultMatrix(static_cast<SCCOL>(nCols), static_cast<SCROW>(nRows), pMat, xUL.get());
+    pMaster->ResetDirty();
+    pMaster->SetChanged(false);
+    for (SCSIZE nR = 0; nR < nRows; ++nR)
+    {
+        for (SCSIZE nC = 0; nC < nCols; ++nC)
+        {
+            const ScAddress aPos(rRange.aStart.Col() + nC, rRange.aStart.Row() + nR, rRange.aStart.Tab());
+            if (aPos == rMaster)
+                continue;
+            ScFormulaCell* pCell = rD.GetFormulaCell(aPos);
+            if (!pCell || pCell->GetMatrixFlag() != ScMatrixMode::Reference)
+                continue;
+            formula::FormulaConstTokenRef xTok(aTokenOf(nC, nR));
+            pCell->SetResultToken(xTok.get());
+            pCell->ResetDirty();
+            pCell->SetChanged(false);
+        }
+    }
+}
+
 void applyArrayFormulas(
     ScDocumentImport& rDoc,
     const Sequence<ExternalLinkInfo>& rExternalLinks,
-    const std::vector<FormulaBuffer::TokenRangeAddressItem>& rArrays )
+    const std::vector<FormulaBuffer::TokenRangeAddressItem>& rArrays,
+    bool bGeneratorKnownGood )
 {
     for (const FormulaBuffer::TokenRangeAddressItem& rAddressItem : rArrays)
     {
@@ -486,6 +584,8 @@ void applyArrayFormulas(
                 continue;
             }
 
+            // read the cached values before the matrix cells replace the plain value cells
+            const ScMatrixRef pCache = lcl_collectArrayCache(rDoc, rAddressItem, bGeneratorKnownGood);
             rDoc.setMatrixCells(rAddressItem.maRange, *pArray,
                                 formula::FormulaGrammar::GRAM_OOXML,
                                 rAddressItem.mbCachedSpill);
@@ -495,6 +595,8 @@ void applyArrayFormulas(
                 if (pMaster)
                     pMaster->SetDynamicArrayMaster(true);
             }
+            if (pCache)
+                lcl_applyArrayCache(rDoc, rAddressItem.maRange, aPos, pCache);
         }
     }
 }
@@ -581,7 +683,8 @@ void processSheetFormulaCells(
     }
 
     if (rItem.mpArrayFormulas)
-        applyArrayFormulas(rDoc, rExternalLinks, *rItem.mpArrayFormulas);
+        applyArrayFormulas(rDoc, rExternalLinks, *rItem.mpArrayFormulas,
+                           rWorkbookHelper.isGeneratorKnownGood());
 
     if (rItem.mpCellFormulaValues)
         applyCellFormulaValues(rDoc, *rItem.mpCellFormulaValues, rWorkbookHelper);
@@ -725,12 +828,16 @@ void FormulaBuffer::setCellFormula(
 
 void FormulaBuffer::setCellArrayFormula(const ScRange& rRangeAddress, const ScAddress& rTokenAddress,
                                         const OUString& rTokenStr, bool bCachedSpill,
-                                        bool bDynamicArrayMaster)
+                                        bool bDynamicArrayMaster,
+                                        const OUString& rCachedValue, sal_Int32 nCachedType)
 {
 
     TokenAddressItem tokenPair( rTokenStr, rTokenAddress );
     assert( rRangeAddress.aStart.Tab() >= 0 && o3tl::make_unsigned(rRangeAddress.aStart.Tab()) < maCellArrayFormulas.size() );
-    maCellArrayFormulas[rRangeAddress.aStart.Tab()].emplace_back(tokenPair, rRangeAddress, bCachedSpill, bDynamicArrayMaster);
+    TokenRangeAddressItem& rItem = maCellArrayFormulas[rRangeAddress.aStart.Tab()].emplace_back(
+        tokenPair, rRangeAddress, bCachedSpill, bDynamicArrayMaster);
+    rItem.maCachedValue = rCachedValue;
+    rItem.mnCachedType = nCachedType;
 }
 
 void FormulaBuffer::setCellFormulaValue(
