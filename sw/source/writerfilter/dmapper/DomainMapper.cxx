@@ -279,6 +279,15 @@ DomainMapper::~DomainMapper()
         // Add the saved w:doNotHyphenateCaps setting
         aProperties[u"NoHyphenateCaps"_ustr] <<= m_pImpl->GetSettingsTable()->GetNoHyphenateCaps();
 
+        // STYLEREF and TOC \t style names written in Word's UI language, see
+        // DomainMapper_Impl::ConvertTOCStyleName()
+        if (!m_pImpl->m_aStyleRefUINames.empty())
+        {
+            uno::Sequence<OUString> aNames(m_pImpl->m_aStyleRefUINames.size());
+            std::copy(m_pImpl->m_aStyleRefUINames.begin(), m_pImpl->m_aStyleRefUINames.end(), aNames.getArray());
+            aProperties[u"StyleRefUINames"_ustr] <<= aNames;
+        }
+
         if (m_pImpl->GetTextDocument())
         {
             comphelper::SequenceAsHashMap aGrabBag(m_pImpl->GetTextDocument()->getPropertyValue(u"InteropGrabBag"_ustr));

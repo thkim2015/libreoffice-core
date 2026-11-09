@@ -157,6 +157,8 @@
 #include <unosett.hxx>
 #include <unodraw.hxx>
 #include <unoparagraph.hxx>
+#include <SwStyleNameMapper.hxx>
+#include <poolfmt.hxx>
 
 using namespace ::com::sun::star;
 using namespace oox;
@@ -7496,6 +7498,26 @@ static OUString UnquoteFieldText(std::u16string_view s)
 OUString DomainMapper_Impl::ConvertTOCStyleName(OUString const& rTOCStyleName)
 {
     assert(!rTOCStyleName.isEmpty());
+    // Word writes the style names of STYLEREF and TOC \t in its UI language and finds them only so:
+    // Korean Word writes and finds "제목 1", not "heading 1". If the name is no style of the document
+    // but the UI name of a built-in paragraph style, refer to that style (by its programmatic name)
+    // and keep the original spelling for the export.
+    if (!GetStyleSheetTable()->FindStyleSheetByConvertedStyleName(rTOCStyleName))
+    {
+        const UIName aUIName(rTOCStyleName);
+        const SwPoolFormatId nPoolId
+            = SwStyleNameMapper::GetPoolIdFromUIName(aUIName, SwGetPoolIdFromName::TxtColl);
+        if (nPoolId != SwPoolFormatId::UNKNOWN)
+        {
+            const OUString sProgName = SwStyleNameMapper::GetProgName(nPoolId, aUIName).toString();
+            const rtl::Reference<SwXStyleFamily>& xParaStyles = GetParagraphStyles();
+            if (sProgName != rTOCStyleName && xParaStyles.is() && xParaStyles->hasByName(sProgName))
+            {
+                m_aStyleRefUINames.insert(rTOCStyleName);
+                return sProgName;
+            }
+        }
+    }
     if (auto const pStyle = GetStyleSheetTable()->FindStyleSheetByISTD(FilterChars(rTOCStyleName)))
     {
         auto const [convertedStyleName, isBuiltIn] = StyleSheetTable::ConvertStyleName(pStyle->m_sStyleName);
