@@ -2991,15 +2991,15 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
     }
     switch (ePlaceholder)
     {
-        case Title:
+        case PlaceholderType::Title:
             return rType == "title" || rType == "ctrTitle" || rType == "vertTitle";
-        case Subtitle:
+        case PlaceholderType::Subtitle:
             return rType == "subTitle";
-        case Outliner:
+        case PlaceholderType::Outliner:
             return rType.isEmpty() || rType == "obj" || rType == "body";
-        case Picture:
+        case PlaceholderType::Picture:
             return rType == "pic";
-        case Media:
+        case PlaceholderType::Media:
             return rType == "media";
         default:
             return false;
@@ -3046,6 +3046,8 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
 
     // Leave the shape without a placeholder reference where the master would not take one, rather
     // than writing a type that makes the whole file unopenable.
+    OUString aPhType, aPhOrient, aPhSize;
+    sal_Int32 nPhIdx = -1;
     if (bUsePlaceholderIndex)
     {
         mpFS->singleElementNS(
@@ -3054,8 +3056,7 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
                 static_cast<PowerPointExport*>(GetFB())->GetOrCreatePlaceholderIndex(xShape)),
                     XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
     }
-    else if (OUString aPhType, aPhOrient, aPhSize; sal_Int32 nPhIdx = -1;
-             !mbSlideMasterPart && (mePageType == PageType::NORMAL || mePageType == PageType::MASTER)
+    else if (!mbSlideMasterPart && (mePageType == PageType::NORMAL || mePageType == PageType::MASTER)
              && getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))
     {
         // ZETA: as PowerPoint wrote it (a slide, or a layout - a master page that is not the
