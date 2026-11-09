@@ -939,6 +939,9 @@ bool OutlinerView::IsBulletOrNumbering(bool& bBullets, bool& bNumbering)
     // sets bBullets/bNumbering if the related list type is found
     bool bBulletFound = false;
     bool bNumberingFound = false;
+    // ZETA: a paragraph whose list level is "none" (a PowerPoint placeholder level with buNone)
+    // shows neither, so it leaves both buttons off
+    bool bOtherFound = false;
 
     ESelection aSel( pEditView->GetSelection() );
     aSel.Adjust();
@@ -955,11 +958,15 @@ bool OutlinerView::IsBulletOrNumbering(bool& bBullets, bool& bNumbering)
             if (pFmt)
             {
                 sal_Int16 nNumType = pFmt->GetNumberingType();
+                if (nNumType == SVX_NUM_NUMBER_NONE)
+                    continue;
                 if (nNumType != SVX_NUM_BITMAP && nNumType != SVX_NUM_CHAR_SPECIAL)
                     bNumberingFound = true;
                 else
                     bBulletFound = true;
             }
+            else
+                bOtherFound = true;
         }
     }
     if (bNumberingFound)
@@ -968,7 +975,7 @@ bool OutlinerView::IsBulletOrNumbering(bool& bBullets, bool& bNumbering)
             return false;
         bNumbering = true;
     }
-    else
+    else if (bBulletFound || bOtherFound)
         bBullets = true;
     return true;
 }
