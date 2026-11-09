@@ -183,7 +183,8 @@ void SheetDataContext::onEndElement()
                       && mbCellMetadata
                       && maCellValue == u"#VALUE!";
                 setCellArrayFormula(maFmlaData.maFormulaRef, maCellData.maCellAddr, maFormulaStr,
-                                    bCachedSpill, mbCellMetadata);
+                                    bCachedSpill, mbCellMetadata, maCellValue,
+                                    maCellData.mnCellType);
             }
             // set cell formatting, but do not set result as cell value
             mrSheetData.setBlankCell( maCellData );

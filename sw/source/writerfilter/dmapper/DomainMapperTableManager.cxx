@@ -25,6 +25,7 @@
 #include <com/sun/star/text/SizeType.hpp>
 #include <com/sun/star/text/TableColumnSeparator.hpp>
 #include <com/sun/star/text/WritingMode2.hpp>
+#include <comphelper/propertyvalue.hxx>
 #include <o3tl/numeric.hxx>
 #include <o3tl/safeint.hxx>
 #include <ooxml/resourceids.hxx>
@@ -427,10 +428,36 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                 }
                 break;
             case NS_ooxml::LN_CT_TrPrBase_tblCellSpacing:
-                // To-Do: Not yet preserved
-                break;
             case NS_ooxml::LN_CT_TblPrBase_tblCellSpacing:
-                // To-Do: Not yet preserved
+                // No Writer equivalent: preserved in the table / row grab bag
+                if (writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps())
+                {
+                    MeasureHandlerPtr pMeasureHandler(new MeasureHandler());
+                    pProperties->resolve(*pMeasureHandler);
+                    OUString sType(u"dxa"_ustr);
+                    switch (sal::static_int_cast<Id>(pMeasureHandler->getUnit()))
+                    {
+                        case NS_ooxml::LN_Value_ST_TblWidth_nil: sType = u"nil"_ustr; break;
+                        case NS_ooxml::LN_Value_ST_TblWidth_pct: sType = u"pct"_ustr; break;
+                        case NS_ooxml::LN_Value_ST_TblWidth_auto: sType = u"auto"_ustr; break;
+                        default: break;
+                    }
+                    uno::Sequence<beans::PropertyValue> aSpacing{
+                        comphelper::makePropertyValue(u"w"_ustr, pMeasureHandler->getValue()),
+                        comphelper::makePropertyValue(u"type"_ustr, sType)
+                    };
+                    TablePropertyMapPtr pPropMap(new TablePropertyMap);
+                    if (nSprmId == NS_ooxml::LN_CT_TblPrBase_tblCellSpacing)
+                    {
+                        pPropMap->Insert(META_PROP_TABLE_CELL_SPACING, uno::Any(aSpacing));
+                        insertTableProps(pPropMap);
+                    }
+                    else
+                    {
+                        pPropMap->Insert(PROP_ROW_CELL_SPACING, uno::Any(aSpacing), true, ROW_GRAB_BAG);
+                        insertRowProps(pPropMap);
+                    }
+                }
                 break;
             case NS_ooxml::LN_CT_TblPrBase_bidiVisual:
             {

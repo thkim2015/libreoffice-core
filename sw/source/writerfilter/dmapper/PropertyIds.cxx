@@ -392,6 +392,8 @@ const OUString & getPropertyName( PropertyIds eId )
         { META_PROP_TABLE_LOOK, u"TableStyleLook"_ustr},
         { META_PROP_TABLE_CAPTION, u"TableCaption"_ustr},
         { META_PROP_TABLE_DESCRIPTION, u"TableDescription"_ustr},
+        { META_PROP_TABLE_CELL_SPACING, u"TableCellSpacing"_ustr},
+        { PROP_ROW_CELL_SPACING, u"RowCellSpacing"_ustr},
         { PROP_PARA_CNF_STYLE, u"ParaCnfStyle"_ustr},
         { PROP_CELL_CNF_STYLE, u"CellCnfStyle"_ustr},
         { PROP_ROW_CNF_STYLE, u"RowCnfStyle"_ustr},
