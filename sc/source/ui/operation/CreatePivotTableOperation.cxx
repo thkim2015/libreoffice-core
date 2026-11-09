@@ -17,6 +17,7 @@
 #include <vcl/weld/Window.hxx>
 
 #include <dpsave.hxx>
+#include <dpdimsave.hxx>
 #include <undodat.hxx>
 #include <scresid.hxx>
 #include <hints.hxx>
@@ -67,6 +68,13 @@ bool CreatePivotTableOperation::runImplementation()
     {
         const ScDPDimensionSaveData* pGroups = nullptr;
         bool bRefFound = rDoc.GetDPCollection()->GetReferenceGroups(rDestObject, &pGroups);
+        // ZetaOffice: an imported table keeps its own groups (Excel has a cache per group
+        // set, so a table of the same source range may have no or other groups)
+        const ScDPDimensionSaveData* pOwnGroups = rDestObject.GetSaveData()
+            ? rDestObject.GetSaveData()->GetExistingDimensionData() : nullptr;
+        if (bRefFound && rDoc.IsImportingXML() && pOwnGroups
+            && (pOwnGroups->HasGroupDimensions() || pOwnGroups->ZetaHasCalcItems()))
+            bRefFound = false;
         if (bRefFound)
         {
             ScDPSaveData* pSaveData = rDestObject.GetSaveData();
