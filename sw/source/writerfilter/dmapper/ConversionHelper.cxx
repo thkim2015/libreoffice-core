@@ -255,8 +255,9 @@ void MakeBorderLine( sal_Int32 nLineThickness,   sal_Int32 nLineToken,
     };
     if(!bIsOOXML && sal::static_int_cast<sal_uInt32>(nLineColor) < SAL_N_ELEMENTS(aBorderDefColor))
         nLineColor = sal_Int32(aBorderDefColor[nLineColor]);
-    //no auto color for borders
-    if (nLineColor == sal_Int32(COL_AUTO))
+    // No auto color for borders, except in OOXML: keep w:color="auto" so that
+    // export writes it back; SvxBorderLine paints COL_AUTO as black.
+    if (!bIsOOXML && nLineColor == sal_Int32(COL_AUTO))
         nLineColor = sal_Int32(COL_BLACK);
 
     sal_Int32 nLineType = lcl_convertBorderStyleFromToken(nLineToken);
