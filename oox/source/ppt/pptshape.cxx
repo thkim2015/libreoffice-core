@@ -139,6 +139,14 @@ oox::drawingml::TextListStylePtr PPTShape::getSubTypeTextListStyle( const SlideP
     return pTextListStyle;
 }
 
+bool PPTShape::isEmptySlidePlaceholder() const
+{
+    if (meShapeLocation != Slide)
+        return false;
+    auto pTextBody = getTextBody();
+    return !pTextBody || pTextBody->isEmpty();
+}
+
 bool PPTShape::IsPlaceHolderCandidate(const SlidePersist& rSlidePersist) const
 {
     if (meShapeLocation != Slide)
@@ -368,16 +376,24 @@ void PPTShape::addShape(
                     sServiceName = "com.sun.star.presentation.PageShape";
                 break;
                 case XML_chart :
-                    if (meShapeLocation == Layout)
+                    // ZETA: an empty one on a slide too - Impress has no empty chart or table
+                    // placeholder that goes back out, so it is an outline with the mso-ph type
+                    if (meShapeLocation == Layout || isEmptySlidePlaceholder())
                         sServiceName = sOutlinerShapeService;
                     else
                         sServiceName = "com.sun.star.presentation.ChartShape";
                 break;
                 case XML_tbl :
-                    if (meShapeLocation == Layout)
+                    if (meShapeLocation == Layout || isEmptySlidePlaceholder())
                         sServiceName = sOutlinerShapeService;
                     else
                         sServiceName = "com.sun.star.presentation.TableShape";
+                break;
+                case XML_dgm :
+                case XML_clipArt :
+                    // ZETA: as chart and tbl
+                    if (meShapeLocation == Layout || isEmptySlidePlaceholder())
+                        sServiceName = sOutlinerShapeService;
                 break;
                 case XML_pic :
                     // <p:ph type="pic"/> is a real picture placeholder on both
@@ -393,7 +409,7 @@ void PPTShape::addShape(
 #else
                     // ZETA: no media shape without avmedia - a layout keeps it as an outline
                     // (the mso-ph type goes back out), as with chart and tbl
-                    if (meShapeLocation == Layout)
+                    if (meShapeLocation == Layout || isEmptySlidePlaceholder())
                         sServiceName = sOutlinerShapeService;
 #endif
                 break;
