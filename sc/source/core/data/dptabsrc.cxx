@@ -1568,6 +1568,7 @@ uno::Reference<beans::XPropertySetInfo> SAL_CALL ScDPDimension::getPropertySetIn
         { SC_UNO_DP_REFVALUE, 0,  cppu::UnoType<sheet::DataPilotFieldReference>::get(), 0, 0 },
         { SC_UNO_DP_USEDHIERARCHY, 0,  cppu::UnoType<sal_Int32>::get(),                0, 0 },
         { SC_UNO_DP_LAYOUTNAME, 0, cppu::UnoType<OUString>::get(), 0, 0 },
+        { u"ZetaNumberFormat"_ustr, 0, cppu::UnoType<sal_Int32>::get(), 0, 0 },
         { SC_UNO_DP_FIELD_SUBTOTALNAME, 0, cppu::UnoType<OUString>::get(), 0, 0 },
         { SC_UNO_DP_HAS_HIDDEN_MEMBER, 0, cppu::UnoType<bool>::get(), 0, 0 },
         { SC_UNO_DP_CALCULATEDFIELD, 0, cppu::UnoType<bool>::get(), beans::PropertyAttribute::READONLY, 0 },
@@ -1641,6 +1642,8 @@ void SAL_CALL ScDPDimension::setPropertyValue( const OUString& aPropertyName, co
         if (aValue >>= aTmpName)
             mpLayoutName = aTmpName;
     }
+    else if (aPropertyName == "ZetaNumberFormat")
+        aValue >>= mnZetaNumFmt;
     else if (aPropertyName == SC_UNO_DP_FIELD_SUBTOTALNAME)
     {
         OUString aTmpName;
@@ -1712,6 +1715,9 @@ uno::Any SAL_CALL ScDPDimension::getPropertyValue( const OUString& aPropertyName
             nFormat = pSource->GetData()->GetNumberFormatByIdx( NF_NUMBER_SYSTEM );
             break;
         default:
+            // ZetaOffice: the data field's own number format (Excel dataField numFmtId)
+            if (mnZetaNumFmt >= 0)
+                nFormat = mnZetaNumFmt;
             break;
         }
 

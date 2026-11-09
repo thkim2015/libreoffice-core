@@ -280,6 +280,7 @@ class ScDPDimension final : public cppu::WeakImplHelper<
     std::unique_ptr<ScDPItemData>
                         pSelectedData;      // internal, temporary, created from aSelectedPage
     bool                mbHasHiddenMember;
+    sal_Int32           mnZetaNumFmt = -1;  // ZetaOffice: data field number format, -1 = source
 
 public:
                             ScDPDimension( ScDPSource* pSrc, tools::Long nD );
