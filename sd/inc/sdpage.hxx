@@ -177,6 +177,10 @@ public:
     SD_DLLPUBLIC SdrObject* GetPresObj(PresObjKind eObjKind, int nIndex = 1, bool bFuzzySearch = false );
     PresObjKind     GetPresObjKind(SdrObject* pObj) const;
     OUString        GetPresObjText(PresObjKind eObjKind) const;
+    /// ZETA: the prompt for this object - a PowerPoint placeholder type (mso-ph) picks its own
+    SD_DLLPUBLIC OUString GetPresObjText(PresObjKind eObjKind, const SdrObject* pObj) const;
+    /// ZETA: the PowerPoint placeholder type oox kept for the object (mso-ph), or empty
+    SD_DLLPUBLIC static OUString GetMsoPlaceholderType(const SdrObject* pObj);
     SfxStyleSheet* GetStyleSheetForMasterPageBackground() const;
     SfxStyleSheet*  GetStyleSheetForPresObj(PresObjKind eObjKind) const;
     void            GetPageInfo(::tools::JsonWriter& jsonWriter);

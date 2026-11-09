@@ -303,6 +303,13 @@
 #define STR_PRESOBJ_CHART                               NC_("STR_PRESOBJ_CHART", "Double-click to add a Chart" )
 #define STR_PRESOBJ_ORGCHART                            NC_("STR_PRESOBJ_ORGCHART", "Double-click to add an Organization Chart" )
 #define STR_PRESOBJ_TABLE                               NC_("STR_PRESOBJ_TABLE", "Double-click to add a Spreadsheet" )
+// ZETA: PowerPoint's prompts for its chart, table, SmartArt, online-image, media and picture placeholders
+#define STR_PRESOBJ_PPT_CHART                           NC_("STR_PRESOBJ_PPT_CHART", "Click icon to add chart" )
+#define STR_PRESOBJ_PPT_TABLE                           NC_("STR_PRESOBJ_PPT_TABLE", "Click icon to add table" )
+#define STR_PRESOBJ_PPT_SMARTART                        NC_("STR_PRESOBJ_PPT_SMARTART", "Click icon to add SmartArt graphic" )
+#define STR_PRESOBJ_PPT_ONLINEIMAGE                     NC_("STR_PRESOBJ_PPT_ONLINEIMAGE", "Click icon to add online image" )
+#define STR_PRESOBJ_PPT_MEDIA                           NC_("STR_PRESOBJ_PPT_MEDIA", "Click icon to add media" )
+#define STR_PRESOBJ_PPT_PICTURE                         NC_("STR_PRESOBJ_PPT_PICTURE", "Click icon to add picture" )
 #define STR_LAYOUT_DEFAULT_NAME                         NC_("STR_LAYOUT_DEFAULT_NAME", "Default" )
 #define STR_LAYOUT_DEFAULT_TITLE_NAME                   NC_("STR_LAYOUT_DEFAULT_TITLE_NAME", "Title" )
 #define STR_STANDARD_STYLESHEET_NAME                    NC_("STR_STANDARD_STYLESHEET_NAME", "Default Drawing Style" )

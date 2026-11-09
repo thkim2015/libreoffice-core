@@ -62,6 +62,7 @@
 #include <com/sun/star/xml/dom/XNode.hpp>
 #include <com/sun/star/xml/dom/XNodeList.hpp>
 #include <com/sun/star/xml/dom/XNamedNodeMap.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <rtl/ustring.hxx>
 #include <sal/log.hxx>
 #include <tools/debug.hxx>
@@ -2692,18 +2693,22 @@ void SdPage::SetObjText(SdrTextObj* pObj, SdrOutliner* pOutliner, PresObjKind eO
             if (mbMaster)
             {
                 pOutl->SetStyleSheet( 0, GetStyleSheetForPresObj(eObjKind) );
-                aString += "\n\t\t" +
-                    SdResId(STR_PRESOBJ_MPOUTLLAYER2) +
-                    "\n\t\t\t" +
-                    SdResId(STR_PRESOBJ_MPOUTLLAYER3) +
-                    "\n\t\t\t\t" +
-                    SdResId(STR_PRESOBJ_MPOUTLLAYER4) +
-                    "\n\t\t\t\t\t" +
-                    SdResId(STR_PRESOBJ_MPOUTLLAYER5) +
-                    "\n\t\t\t\t\t\t" +
-                    SdResId(STR_PRESOBJ_MPOUTLLAYER6) +
-                    "\n\t\t\t\t\t\t\t" +
-                    SdResId(STR_PRESOBJ_MPOUTLLAYER7);
+                // ZETA: PowerPoint shows five levels in a master or layout text placeholder, and
+                // none below the prompt of one that is for a chart, table, SmartArt, online image
+                // or media
+                const OUString aMsoType = GetMsoPlaceholderType(pObj);
+                const bool bContentOnly = aMsoType == "chart" || aMsoType == "tbl"
+                                          || aMsoType == "dgm" || aMsoType == "clipArt"
+                                          || aMsoType == "media";
+                if (!bContentOnly)
+                    aString += "\n\t\t" +
+                        SdResId(STR_PRESOBJ_MPOUTLLAYER2) +
+                        "\n\t\t\t" +
+                        SdResId(STR_PRESOBJ_MPOUTLLAYER3) +
+                        "\n\t\t\t\t" +
+                        SdResId(STR_PRESOBJ_MPOUTLLAYER4) +
+                        "\n\t\t\t\t\t" +
+                        SdResId(STR_PRESOBJ_MPOUTLLAYER5);
 
             }
         }
@@ -2873,6 +2878,55 @@ Orientation SdPage::GetOrientation() const
 |* returns the default text of a PresObjektes
 |*
 \************************************************************************/
+
+OUString SdPage::GetMsoPlaceholderType(const SdrObject* pObj)
+{
+    if (!pObj)
+        return OUString();
+    uno::Any aAny;
+    pObj->GetGrabBagItem(aAny);
+    uno::Sequence<beans::PropertyValue> aBag;
+    if (!(aAny >>= aBag))
+        return OUString();
+    for (auto const& rEntry : aBag)
+    {
+        if (rEntry.Name != "mso-ph")
+            continue;
+        uno::Sequence<beans::PropertyValue> aPh;
+        rEntry.Value >>= aPh;
+        for (auto const& rProp : aPh)
+        {
+            OUString aType;
+            if (rProp.Name == "type" && (rProp.Value >>= aType))
+                return aType;
+        }
+    }
+    return OUString();
+}
+
+// ZETA: PowerPoint has a placeholder for each kind of content; Impress keeps the chart, table,
+// SmartArt, online-image and media ones as outlines and the picture one as a graphic, and each
+// shows PowerPoint's prompt. A slide's picture placeholder shows none - its button says it.
+OUString SdPage::GetPresObjText(PresObjKind eObjKind, const SdrObject* pObj) const
+{
+    const OUString aType = GetMsoPlaceholderType(pObj);
+    if (eObjKind == PresObjKind::Outline)
+    {
+        if (aType == "chart")
+            return SdResId(STR_PRESOBJ_PPT_CHART);
+        if (aType == "tbl")
+            return SdResId(STR_PRESOBJ_PPT_TABLE);
+        if (aType == "dgm")
+            return SdResId(STR_PRESOBJ_PPT_SMARTART);
+        if (aType == "clipArt")
+            return SdResId(STR_PRESOBJ_PPT_ONLINEIMAGE);
+        if (aType == "media")
+            return SdResId(STR_PRESOBJ_PPT_MEDIA);
+    }
+    else if (eObjKind == PresObjKind::Graphic && aType == "pic")
+        return mbMaster ? SdResId(STR_PRESOBJ_PPT_PICTURE) : OUString();
+    return GetPresObjText(eObjKind);
+}
 
 OUString SdPage::GetPresObjText(PresObjKind eObjKind) const
 {
@@ -3184,7 +3238,7 @@ bool SdPage::RestoreDefaultText( SdrObject* pObj, const OUString& rStr )
         {
             sd::ModifyGuard aGuard(static_cast<SdDrawDocument*>(&getSdrModelFromSdrPage()));
 
-            OUString aString = rStr.isEmpty() ? GetPresObjText(ePresObjKind) : rStr;
+            OUString aString = rStr.isEmpty() ? GetPresObjText(ePresObjKind, pTextObj) : rStr;
 
             if (!aString.isEmpty())
             {
