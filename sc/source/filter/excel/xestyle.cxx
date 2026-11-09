@@ -2379,17 +2379,46 @@ void XclExpStyle::WriteBody( XclExpStream& rStrm )
     }
 }
 
+// ZETA: OOX cellStyle builtinId 0..53 and their names. The xlsx import names these styles
+// "Excel Built-in <name>" (sc/source/filter/oox/stylesbuffer.cxx); the BIFF names in XclTools
+// only cover the ids up to 9, so "Good" or "Heading 1" went back as user styles without builtinId.
+const char* const spcXmlBuiltInStyleNames[] =
+{
+    "Normal", nullptr, nullptr, "Comma", "Currency", "Percent", "Comma [0]", "Currency [0]",
+    "Hyperlink", "Followed Hyperlink", "Note", "Warning Text", nullptr, nullptr, nullptr,
+    "Title", "Heading 1", "Heading 2", "Heading 3", "Heading 4", "Input", "Output",
+    "Calculation", "Check Cell", "Linked Cell", "Total", "Good", "Bad", "Neutral",
+    "Accent1", "20% - Accent1", "40% - Accent1", "60% - Accent1",
+    "Accent2", "20% - Accent2", "40% - Accent2", "60% - Accent2",
+    "Accent3", "20% - Accent3", "40% - Accent3", "60% - Accent3",
+    "Accent4", "20% - Accent4", "40% - Accent4", "60% - Accent4",
+    "Accent5", "20% - Accent5", "40% - Accent5", "60% - Accent5",
+    "Accent6", "20% - Accent6", "40% - Accent6", "60% - Accent6",
+    "Explanatory Text"
+};
+
+static bool lcl_GetXmlBuiltInStyleId( const OUString& rStyleName, sal_uInt8& rnStyleId )
+{
+    static constexpr OUString aPrefix = u"Excel Built-in "_ustr;
+    if( !rStyleName.startsWith( aPrefix ) )
+        return false;
+    const OUString aName = rStyleName.copy( aPrefix.getLength() );
+    for( size_t nId = 3; nId < std::size( spcXmlBuiltInStyleNames ); ++nId )
+    {
+        if( spcXmlBuiltInStyleNames[ nId ] && aName.equalsAscii( spcXmlBuiltInStyleNames[ nId ] ) )
+        {
+            rnStyleId = static_cast< sal_uInt8 >( nId );
+            return true;
+        }
+    }
+    return false;
+}
+
 static const char* lcl_StyleNameFromId( sal_Int32 nStyleId )
 {
-    switch( nStyleId )
-    {
-        case 0:     return "Normal";
-        case 3:     return "Comma";
-        case 4:     return "Currency";
-        case 5:     return "Percent";
-        case 6:     return "Comma [0]";
-        case 7:     return "Currency [0]";
-    }
+    if( nStyleId >= 0 && o3tl::make_unsigned( nStyleId ) < std::size( spcXmlBuiltInStyleNames )
+        && spcXmlBuiltInStyleNames[ nStyleId ] )
+        return spcXmlBuiltInStyleNames[ nStyleId ];
     return "*unknown*";
 }
 
@@ -2913,7 +2942,15 @@ sal_uInt32 XclExpXFBuffer::InsertStyleXF( const SfxStyleSheetBase& rStyleSheet )
     // *** try, if it is a built-in style - create new XF or replace existing predefined XF ***
 
     sal_uInt8 nStyleId, nLevel;
-    if( XclTools::GetBuiltInStyleId( nStyleId, nLevel, rStyleSheet.GetName() ) )
+    bool bBuiltIn = XclTools::GetBuiltInStyleId( nStyleId, nLevel, rStyleSheet.GetName() );
+    // ZETA: xlsx also knows the Excel 2007 built-in styles (Good, Heading 1, ...) by their builtinId
+    if( !bBuiltIn && GetOutput() == EXC_OUTPUT_XML_2007
+        && lcl_GetXmlBuiltInStyleId( rStyleSheet.GetName(), nStyleId ) )
+    {
+        nLevel = EXC_STYLE_NOLEVEL;
+        bBuiltIn = true;
+    }
+    if( bBuiltIn )
     {
         // try to find the built-in XF record (if already created in InsertDefaultRecords())
         sal_uInt32 nXFId = FindBuiltInXF( nStyleId, nLevel );
