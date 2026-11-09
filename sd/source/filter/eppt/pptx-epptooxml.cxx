@@ -3884,12 +3884,11 @@ sal_Int32 PowerPointExport::GetImportedPlaceholderIndexMax() const
             }
         }
     };
-    Reference<XDrawPagesSupplier> xDraw(mXModel, UNO_QUERY);
-    if (xDraw.is())
-        scan(Reference<XIndexAccess>(xDraw->getDrawPages(), UNO_QUERY));
-    Reference<XMasterPagesSupplier> xMaster(mXModel, UNO_QUERY);
-    if (xMaster.is())
-        scan(Reference<XIndexAccess>(xMaster->getMasterPages(), UNO_QUERY));
+    if (mXModel.is())
+    {
+        scan(Reference<XIndexAccess>(mXModel->getDrawPages(), UNO_QUERY));
+        scan(Reference<XIndexAccess>(mXModel->getMasterPages(), UNO_QUERY));
+    }
     return nMax;
 }
 
