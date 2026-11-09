@@ -175,19 +175,28 @@ sal_Int32 lclRgbComponentsToRgb( sal_Int32 nR, sal_Int32 nG, sal_Int32 nB )
     return static_cast< sal_Int32 >( (nR << 16) | (nG << 8) | nB );
 }
 
-sal_Int32 lclRgbCompToCrgbComp( sal_Int32 nRgbComp )
-{
-    return static_cast< sal_Int32 >( nRgbComp * MAX_PERCENT / 255 );
-}
-
-sal_Int32 lclCrgbCompToRgbComp( sal_Int32 nCrgbComp )
-{
-    return static_cast< sal_Int32 >( nCrgbComp * 255 / MAX_PERCENT );
-}
-
 sal_Int32 lclGamma( sal_Int32 nComp, double fGamma )
 {
     return static_cast< sal_Int32 >( pow( static_cast< double >( nComp ) / MAX_PERCENT, fGamma ) * MAX_PERCENT + 0.5 );
+}
+
+/** Converts an sRGB component (0..255) to a linear (scRGB) component in 1/1000 percent,
+    using the sRGB transfer curve. MS Office computes tint, shade and the other
+    linear RGB transformations this way (e.g. accent1 4472C4 shade 15% gives 172C51),
+    the former plain 2.3 gamma gave a visibly lighter 1D3155. */
+sal_Int32 lclRgbCompToLinear( sal_Int32 nRgbComp )
+{
+    double f = static_cast< double >( nRgbComp ) / 255.0;
+    f = (f <= 0.04045) ? f / 12.92 : pow( (f + 0.055) / 1.055, 2.4 );
+    return static_cast< sal_Int32 >( f * MAX_PERCENT + 0.5 );
+}
+
+/** Converts a linear (scRGB) component in 1/1000 percent back to sRGB (0..255). */
+sal_Int32 lclLinearToRgbComp( sal_Int32 nCrgbComp )
+{
+    double f = std::clamp( static_cast< double >( nCrgbComp ) / MAX_PERCENT, 0.0, 1.0 );
+    f = (f <= 0.0031308) ? f * 12.92 : 1.055 * pow( f, 1.0 / 2.4 ) - 0.055;
+    return static_cast< sal_Int32 >( f * 255.0 + 0.5 );
 }
 
 void lclSetValue( sal_Int32& ornValue, sal_Int32 nNew, sal_Int32 nMax = MAX_PERCENT )
@@ -984,9 +993,9 @@ void Color::toRgb() const
         break;
         case model::ColorType::CRGB:
             meMode = model::ColorType::RGB;
-            mnC1 = lclCrgbCompToRgbComp( lclGamma( mnC1, INC_GAMMA ) );
-            mnC2 = lclCrgbCompToRgbComp( lclGamma( mnC2, INC_GAMMA ) );
-            mnC3 = lclCrgbCompToRgbComp( lclGamma( mnC3, INC_GAMMA ) );
+            mnC1 = lclLinearToRgbComp( mnC1 );
+            mnC2 = lclLinearToRgbComp( mnC2 );
+            mnC3 = lclLinearToRgbComp( mnC3 );
         break;
         case model::ColorType::HSL:
         {
@@ -1049,9 +1058,9 @@ void Color::toCrgb() const
             [[fallthrough]];
         case model::ColorType::RGB:
             meMode = model::ColorType::CRGB;
-            mnC1 = lclGamma( lclRgbCompToCrgbComp( mnC1 ), DEC_GAMMA );
-            mnC2 = lclGamma( lclRgbCompToCrgbComp( mnC2 ), DEC_GAMMA );
-            mnC3 = lclGamma( lclRgbCompToCrgbComp( mnC3 ), DEC_GAMMA );
+            mnC1 = lclRgbCompToLinear( mnC1 );
+            mnC2 = lclRgbCompToLinear( mnC2 );
+            mnC3 = lclRgbCompToLinear( mnC3 );
         break;
         case model::ColorType::CRGB:
             // nothing to do
