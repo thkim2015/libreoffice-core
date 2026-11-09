@@ -1201,19 +1201,11 @@ void Alignment::importAlignment( const AttributeList& rAttribs )
     maModel.mnVerAlign     = rAttribs.getToken( XML_vertical, XML_bottom );
     maModel.mnTextDir      = rAttribs.getInteger( XML_readingOrder, OOX_XF_TEXTDIR_CONTEXT );
     maModel.mnRotation     = rAttribs.getInteger( XML_textRotation, OOX_XF_ROTATION_NONE );
-    sal_Int32 nDefaultHorAlign = XML_general;
-    if (maModel.mnRotation != OOX_XF_ROTATION_NONE)
-    {
-        if (maModel.mnRotation < 90 || maModel.mnRotation == 180)
-        {
-            nDefaultHorAlign = XML_left;
-        }
-        else
-        {
-            nDefaultHorAlign = XML_right;
-        }
-    }
-    maModel.mnHorAlign     = rAttribs.getToken( XML_horizontal, nDefaultHorAlign );
+    // ZETA: keep 'general' for rotated text. Mapping it to left/right here made
+    // the alignment UI show left/right and the export write horizontal="left"
+    // or "right"; the Excel look of rotated general text is now produced at
+    // drawing time (output2.cxx lcl_GetExcelRotatedGeneralJustify).
+    maModel.mnHorAlign     = rAttribs.getToken( XML_horizontal, XML_general );
     maModel.mnIndent       = rAttribs.getInteger( XML_indent, OOX_XF_INDENT_NONE );
     maModel.mbWrapText     = rAttribs.getBool( XML_wrapText, false );
     maModel.mbShrink       = rAttribs.getBool( XML_shrinkToFit, false );
