@@ -1299,6 +1299,13 @@ void WorksheetGlobals::convertRows(OutlineLevelVec& orRowLevels, const ValueRang
         rDoc.SetRowHeightOnly(nStartRow, nEndRow, nTab, nHeight);
         if(rModel.mbCustomHeight)
             rDoc.SetManualHeight( nStartRow, nEndRow, nTab, true );
+        else if (rModel.mfHeight >= 0.0)
+        {
+            // ZETA: keep the file's ht through the load-time optimal height pass (Excel does);
+            // WorkbookGlobals::finalize() makes these rows automatic again afterwards
+            rDoc.SetManualHeight( nStartRow, nEndRow, nTab, true );
+            addFileHeightRows( nTab, nStartRow, nEndRow );
+        }
     }
 
     // hidden rows: TODO: #108683# hide rows later?
