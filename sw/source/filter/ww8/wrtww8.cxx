@@ -4587,6 +4587,9 @@ const NfKeywordTable & MSWordExportBase::GetNfKeywordTable()
         rKeywordTable[NF_KEY_NN] = "ddd";
         rKeywordTable[NF_KEY_NNN] = "dddd";
         rKeywordTable[NF_KEY_NNNN] = "dddd";
+        // East Asian day names (Word: aaa = 화, aaaa = 화요일 in Korean)
+        rKeywordTable[NF_KEY_AAA] = "aaa";
+        rKeywordTable[NF_KEY_AAAA] = "aaaa";
         rKeywordTable[NF_KEY_YY] = "yy";
         rKeywordTable[NF_KEY_YYYY] = "yyyy";
         rKeywordTable[NF_KEY_H] = "H";

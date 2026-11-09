@@ -6164,7 +6164,12 @@ void DomainMapper_Impl::SetNumberFormat( const OUString& rCommand,
             }
         }
     }
-    OUString sFormat = ConversionHelper::ConvertMSFormatStringToSO( sFormatString, aCurrentLocale, bHijri);
+    lang::Locale aAsianLocale;
+    if (std::optional<PropertyMap::Property> oAsian = rFieldProps->getProperty(PROP_CHAR_LOCALE_ASIAN))
+        oAsian->second >>= aAsianLocale;
+    if (aAsianLocale.Language.isEmpty())
+        GetAnyProperty(PROP_CHAR_LOCALE_ASIAN, GetTopContext()) >>= aAsianLocale;
+    OUString sFormat = ConversionHelper::ConvertMSFormatStringToSO( sFormatString, aCurrentLocale, bHijri, &aAsianLocale);
     //get the number formatter and convert the string to a format value
     try
     {
