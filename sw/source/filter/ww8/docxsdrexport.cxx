@@ -88,6 +88,24 @@ OUString lclGetAnchorIdFromGrabBag(const SdrObject* pObj)
     return aResult;
 }
 
+bool lclGetBoolFromGrabBag(const SdrObject* pObj, const OUString& rName)
+{
+    bool bResult = false;
+    uno::Reference<drawing::XShape> xShape(const_cast<SdrObject*>(pObj)->getUnoShape(),
+                                           uno::UNO_QUERY);
+    uno::Reference<lang::XServiceInfo> xServiceInfo(xShape, uno::UNO_QUERY);
+    if (!xServiceInfo.is())
+        return bResult;
+    const OUString aGrabBagName = xServiceInfo->supportsService(u"com.sun.star.text.TextFrame"_ustr)
+                                      ? u"FrameInteropGrabBag"_ustr
+                                      : u"InteropGrabBag"_ustr;
+    const uno::Sequence<beans::PropertyValue> propList = lclGetProperty(xShape, aGrabBagName);
+    for (const beans::PropertyValue& rProp : propList)
+        if (rProp.Name == rName)
+            rProp.Value >>= bResult;
+    return bResult;
+}
+
 void lclMovePositionWithRotation(awt::Point& aPos, const Size& rSize, Degree100 nRotation100)
 {
     // code from ImplEESdrWriter::ImplFlipBoundingBox (filter/source/msfilter/eschesdo.cxx)
@@ -847,6 +865,9 @@ void DocxSdrExport::startDMLAnchorInline(const SwFrameFormat* pFrameFormat, cons
             bOpaque = pObj->GetLayer() != iDocumentDrawModelAccess.GetHellId()
                       && pObj->GetLayer() != iDocumentDrawModelAccess.GetHeaderFooterHellId()
                       && pObj->GetLayer() != iDocumentDrawModelAccess.GetInvisibleHellId();
+            // DOCX import puts header/footer objects behind the text; keep "in front of text"
+            if (!bOpaque && lclGetBoolFromGrabBag(pObj, u"AnchorInFrontOfText"_ustr))
+                bOpaque = true;
         }
 
         attrList->add(XML_distT, OString::number(TwipsToEMU(nDistT)));
