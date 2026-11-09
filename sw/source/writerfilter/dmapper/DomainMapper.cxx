@@ -3726,6 +3726,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
             // Saving a ComplexColor (w14:solidFill) in context
             auto xComplexColor = model::color::createXComplexColor(aComplexColor);
             rContext->Insert(PROP_CHAR_COMPLEX_COLOR, uno::Any(xComplexColor));
+            // An RGB text fill wins over w:color (which comes before it in w:rPr)
+            if (aComplexColor.getType() == model::ColorType::RGB)
+                rContext->Insert(PROP_CHAR_COLOR, uno::Any(sal_Int32(aComplexColor.getRGBColor())));
             beans::PropertyValue aGrabBag = pHandlerPtr->getInteropGrabBag();
 
             for (auto const& transform : aComplexColor.getTransformations())
