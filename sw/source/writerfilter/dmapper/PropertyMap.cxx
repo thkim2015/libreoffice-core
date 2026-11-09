@@ -1113,6 +1113,54 @@ void copyHeaderFooter(const DomainMapper_Impl& rDM_Impl,
     }
 }
 
+// Word links a first page header/footer to the previous section's one even
+// when that section had no title page (its first page header is defined but
+// unused). Writer only stashes such content, so copyHeaderFooter() cannot
+// reach it from a later section with a title page. Remember the page style
+// that holds the linked content and copy from it, un-sharing it for the read.
+void lcl_CopyFirstFromChain(rtl::Reference<SwXPageStyle>& rChain,
+                            const rtl::Reference<SwXPageStyle>& xStyle, bool bOwn,
+                            bool bLinked, bool bHeader)
+{
+    if (!xStyle.is())
+        return;
+    if (bOwn)
+    {
+        rChain = xStyle;
+        return;
+    }
+    if (!bLinked || !rChain.is() || rChain == xStyle)
+        return;
+    try
+    {
+        const OUString& sIsOn = getPropertyName(bHeader ? PROP_HEADER_IS_ON : PROP_FOOTER_IS_ON);
+        bool bChainOn = false;
+        rChain->getPropertyValue(sIsOn) >>= bChainOn;
+        if (bChainOn)
+        {
+            const OUString& sFirstShared = getPropertyName(PROP_FIRST_IS_SHARED);
+            bool bShared = false;
+            rChain->getPropertyValue(sFirstShared) >>= bShared;
+            if (bShared)
+                rChain->setPropertyValue(sFirstShared, uno::Any(false));
+            xStyle->setPropertyValue(sIsOn, uno::Any(true));
+            xStyle->setPropertyValue(sFirstShared, uno::Any(false));
+            xStyle->setPropertyValue(
+                getPropertyName(bHeader ? PROP_HEADER_NO_FIRST : PROP_FOOTER_NO_FIRST),
+                uno::Any(false));
+            copyHeaderFooterTextProperty(rChain, xStyle,
+                                         bHeader ? PROP_HEADER_TEXT_FIRST : PROP_FOOTER_TEXT_FIRST);
+            if (bShared)
+                rChain->setPropertyValue(sFirstShared, uno::Any(true));
+        }
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_INFO_EXCEPTION("writerfilter", "lcl_CopyFirstFromChain failed");
+    }
+    rChain = xStyle;
+}
+
 } // end anonymous namespace
 
 
@@ -1141,6 +1189,14 @@ void SectionPropertyMap::CopyLastHeaderFooter(DomainMapper_Impl& rDM_Impl )
                          m_bEvenPageFooterLinkToPrevious,
                          m_bFirstPageFooterLinkToPrevious,
                          bEvenAndOdd, m_bTitlePage);
+    }
+    if (rDM_Impl.IsNewDoc())
+    {
+        rtl::Reference<SwXPageStyle> xStyle = GetPageStyle(rDM_Impl);
+        lcl_CopyFirstFromChain(rDM_Impl.m_xFirstHeaderChainStyle, xStyle, m_bHadFirstHeader,
+                               m_bTitlePage && m_bFirstPageHeaderLinkToPrevious, true);
+        lcl_CopyFirstFromChain(rDM_Impl.m_xFirstFooterChainStyle, xStyle, m_bHadFirstFooter,
+                               m_bTitlePage && m_bFirstPageFooterLinkToPrevious, false);
     }
     SAL_INFO( "writerfilter", "END>>> SectionPropertyMap::CopyLastHeaderFooter()" );
 }

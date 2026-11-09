@@ -754,6 +754,12 @@ public:
         return m_pLastSectionContext.get( );
     }
 
+    /// Page styles holding the first page header/footer that later sections
+    /// link to. Word keeps that chain even through sections without a title
+    /// page, where Writer only stashes the first page header/footer.
+    rtl::Reference<SwXPageStyle> m_xFirstHeaderChainStyle;
+    rtl::Reference<SwXPageStyle> m_xFirstFooterChainStyle;
+
     rtl::Reference<SwXStyleFamily> const & GetPageStyles();
     OUString GetUnusedPageStyleName();
     rtl::Reference<SwXStyleFamily> const & GetCharacterStyles();
