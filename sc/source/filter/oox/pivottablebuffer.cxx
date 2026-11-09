@@ -497,6 +497,15 @@ void PivotTableField::finalizeImport(const rtl::Reference<ScDataPilotDescriptorB
                 // create all nested group fields (if any)
                 mrPivotTable.finalizeDateGroupingImport( xDPField, mnFieldIndex );
             }
+            else if( const PivotCacheField* pParent = pCacheField->hasParentGrouping()
+                         ? mrPivotTable.getCacheField( pCacheField->getParentGroupField() ) : nullptr;
+                     pParent && pParent->hasDateGrouping() && pParent->getGroupBaseField() == mnFieldIndex )
+            {
+                // ZETA: Excel keeps the dates and writes a date grouping (e.g. months only) as a
+                // separate group field (fieldGroup base= + rangePr) with only par= on the date
+                // field. That parent is a date group, not a named one: create it from the base.
+                mrPivotTable.finalizeDateGroupingImport( xDPField, mnFieldIndex );
+            }
             else if( pCacheField->hasParentGrouping() )
             {
 
