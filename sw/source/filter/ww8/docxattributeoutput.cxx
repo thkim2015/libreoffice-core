@@ -9715,6 +9715,9 @@ void DocxAttributeOutput::ParaScriptSpace( const SfxBoolItem& rScriptSpace )
 {
     m_pSerializer->singleElementNS( XML_w, XML_autoSpaceDE,
            FSNS( XML_w, XML_val ), OString::boolean( rScriptSpace.GetValue() ) );
+    // Writer's single flag covers both Asian/Latin and Asian/number spacing (see the import)
+    m_pSerializer->singleElementNS( XML_w, XML_autoSpaceDN,
+           FSNS( XML_w, XML_val ), OString::boolean( rScriptSpace.GetValue() ) );
 }
 
 void DocxAttributeOutput::ParaHangingPunctuation( const SfxBoolItem& rItem )

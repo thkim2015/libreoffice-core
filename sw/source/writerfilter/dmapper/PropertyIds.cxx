@@ -111,6 +111,7 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_PARA_HYPHENATION_KEEP_LINE, u"ParaHyphenationKeepLine"_ustr},
         { PROP_PARA_LINE_NUMBER_COUNT, u"ParaLineNumberCount"_ustr},
         { PROP_PARA_IS_HANGING_PUNCTUATION, u"ParaIsHangingPunctuation"_ustr},
+        { PROP_PARA_IS_CHARACTER_DISTANCE, u"ParaIsCharacterDistance"_ustr},
         { PROP_PARA_LINE_SPACING, u"ParaLineSpacing"_ustr},
         { PROP_PARA_TAB_STOPS, u"ParaTabStops"_ustr},
         { PROP_PARA_TOP_BORDER, u"ParaTopBorder"_ustr},

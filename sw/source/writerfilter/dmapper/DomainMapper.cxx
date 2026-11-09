@@ -2067,13 +2067,20 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     }
     break;  // sprmPFWidowControl
     case NS_ooxml::LN_CT_PPrBase_overflowPunct:
-        rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, uno::Any( nIntValue == 0 ));
+        // overflowPunct = "allow punctuation to extend past text extents", i.e. hanging punctuation;
+        // the export (DocxAttributeOutput::ParaHangingPunctuation) writes the value as is.
+        rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, uno::Any( nIntValue != 0 ));
         break;
     case NS_ooxml::LN_CT_PPrBase_topLinePunct:
         break;
     case NS_ooxml::LN_CT_PPrBase_autoSpaceDE:
+        // Writer has a single "space between Asian and Western text" flag (ParaIsCharacterDistance)
+        rContext->Insert(PROP_PARA_IS_CHARACTER_DISTANCE, uno::Any( nIntValue != 0 ));
         break;
     case NS_ooxml::LN_CT_PPrBase_autoSpaceDN:
+        // Asian/number spacing: only switching it off can be represented without overriding autoSpaceDE
+        if (!nIntValue)
+            rContext->Insert(PROP_PARA_IS_CHARACTER_DISTANCE, uno::Any(false));
         break;
     case NS_ooxml::LN_CT_PPrBase_textAlignment:
         {
