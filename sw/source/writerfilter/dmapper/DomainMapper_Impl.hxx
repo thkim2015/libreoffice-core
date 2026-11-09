@@ -1105,6 +1105,9 @@ public:
     bool IsLineNumberingSet() const {return m_bLineNumberingSet;}
 
     DeletableTabStop                m_aCurrentTabStop;
+    bool                            m_bCurrentTabBar = false;
+    sal_Int32                       m_nCurrentTabPosTwip = 0;
+    std::vector<sal_Int32>          m_aCurrentBarTabs;
 
     bool IsOOXMLImport() const { return m_eDocumentType == SourceDocumentType::OOXML; }
 

@@ -9691,10 +9691,41 @@ static void impl_WriteTabElement( FSHelperPtr const & pSerializer,
         pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "middleDot" );
     else if ( '_' == cFillChar )
         pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "underscore" );
+    else if ( u'\x2501' == cFillChar ) // heavy line, see writerfilter getFillCharFromValue()
+        pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "heavy" );
     else
         pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "none" );
 
     pSerializer->singleElementNS(XML_w, XML_tab, pTabElementAttrList);
+}
+
+// Bar tabs (twips) kept by the DOCX import in the paragraph grab bag of the item set
+// being written.
+static uno::Sequence<sal_Int32> lcl_GetBarTabs(const SfxItemSet* pSet)
+{
+    uno::Sequence<sal_Int32> aBarTabs;
+    if (!pSet)
+        return aBarTabs;
+    if (const SfxGrabBagItem* pBag = pSet->GetItemIfSet(RES_PARATR_GRABBAG, false))
+    {
+        auto it = pBag->GetGrabBag().find(u"ParaBarTabs"_ustr);
+        if (it != pBag->GetGrabBag().end())
+            it->second >>= aBarTabs;
+    }
+    return aBarTabs;
+}
+
+static void lcl_WriteBarTabs(FSHelperPtr const& pSerializer, const uno::Sequence<sal_Int32>& rBarTabs,
+                             sal_uInt32& rWrittenTabs)
+{
+    for (sal_Int32 nPos : rBarTabs)
+    {
+        if (rWrittenTabs >= 64)
+            break;
+        pSerializer->singleElementNS(XML_w, XML_tab, FSNS(XML_w, XML_val), "bar",
+                                     FSNS(XML_w, XML_pos), OString::number(nPos));
+        ++rWrittenTabs;
+    }
 }
 
 void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
@@ -9706,13 +9737,29 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
         pInheritedTabs = GetExport().m_pCurrentStyle->DerivedFrom()->GetAttrSet().GetItem<SvxTabStopItem>(RES_PARATR_TABSTOP);
     const sal_uInt16 nInheritedTabCount = pInheritedTabs ? pInheritedTabs->Count() : 0;
     const sal_uInt16 nCount = rTabStop.Count();
+    const uno::Sequence<sal_Int32> aBarTabs = lcl_GetBarTabs(GetExport().GetCurItemSet());
+
+    // <w:tabs> may contain 64 <w:tab> entries at most, or else MS Word reports the file as corrupt
+    sal_uInt32 nWrittenTabs = 0;
+    auto lcl_OnlyBarTabs = [&]()
+    {
+        if (!aBarTabs.hasElements())
+            return;
+        m_pSerializer->startElementNS(XML_w, XML_tabs);
+        lcl_WriteBarTabs(m_pSerializer, aBarTabs, nWrittenTabs);
+        m_pSerializer->endElementNS(XML_w, XML_tabs);
+    };
 
     // <w:tabs> must contain at least one <w:tab>, so don't write it empty
     if ( !nCount && !nInheritedTabCount )
+    {
+        lcl_OnlyBarTabs();
         return;
+    }
     if( nCount == 1 && rTabStop[ 0 ].GetAdjustment() == SvxTabAdjust::Default )
     {
         GetExport().setDefaultTabStop( rTabStop[ 0 ].GetTabPos());
+        lcl_OnlyBarTabs();
         return;
     }
 
@@ -9720,13 +9767,14 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
     if (nCount == nInheritedTabCount)
     {
         if ( *pInheritedTabs == rTabStop )
+        {
+            lcl_OnlyBarTabs();
             return; // <w:tabs> must contain at least one <w:tab>, so don't write it empty
+        }
     }
 
     m_pSerializer->startElementNS(XML_w, XML_tabs);
-
-    // <w:tabs> may contain 64 <w:tab> entries at most, or else MS Word reports the file as corrupt
-    sal_uInt32 nWrittenTabs = 0;
+    lcl_WriteBarTabs(m_pSerializer, aBarTabs, nWrittenTabs);
     // do not output inherited tabs multiple times (inside styles and inside inline properties)
     std::vector<bool> vInherited(nCount, false);
 
@@ -10923,6 +10971,23 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
             bool bWordWrap = true;
             if (rGrabBagElement.second >>= bWordWrap)
                 m_pSerializer->singleElementNS(XML_w, XML_wordWrap, FSNS(XML_w, XML_val), OString::boolean(bWordWrap));
+        }
+        else if (rGrabBagElement.first == "ParaBarTabs")
+        {
+            // with own tab stops ParaTabStop() writes the bar tabs inside the same <w:tabs>
+            const SfxItemSet* pSet = GetExport().GetCurItemSet();
+            if (pSet && pSet->GetItemState(RES_PARATR_TABSTOP, false) != SfxItemState::SET)
+            {
+                uno::Sequence<sal_Int32> aBarTabs;
+                rGrabBagElement.second >>= aBarTabs;
+                if (aBarTabs.hasElements())
+                {
+                    sal_uInt32 nWrittenTabs = 0;
+                    m_pSerializer->startElementNS(XML_w, XML_tabs);
+                    lcl_WriteBarTabs(m_pSerializer, aBarTabs, nWrittenTabs);
+                    m_pSerializer->endElementNS(XML_w, XML_tabs);
+                }
+            }
         }
         else if (rGrabBagElement.first == "ParaAdjustRightInd")
         {

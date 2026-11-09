@@ -433,12 +433,15 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                 m_pImpl->m_aCurrentTabStop.bDeleted = false;
                 m_pImpl->m_aCurrentTabStop.Alignment = getTabAlignFromValue(nIntValue);
             }
+            // Bar tabs only draw a vertical line, they are not tab stops: keep them aside.
+            m_pImpl->m_bCurrentTabBar = sal::static_int_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_TabJc_bar;
             break;
         case NS_ooxml::LN_CT_TabStop_leader:
             m_pImpl->m_aCurrentTabStop.FillChar = getFillCharFromValue(nIntValue);
             break;
         case NS_ooxml::LN_CT_TabStop_pos:
             m_pImpl->m_aCurrentTabStop.Position = ConversionHelper::convertTwipToMm100_Limited(nIntValue);
+            m_pImpl->m_nCurrentTabPosTwip = nIntValue;
             break;
 
         case NS_ooxml::LN_CT_Fonts_ascii:
@@ -2623,8 +2626,13 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         // the following are not part of the official documentation
     case NS_ooxml::LN_CT_Tabs_tab:
         resolveSprmProps(*this, rSprm);
-        m_pImpl->IncorporateTabStop(m_pImpl->m_aCurrentTabStop);
+        if (m_pImpl->m_bCurrentTabBar)
+            m_pImpl->m_aCurrentBarTabs.push_back(m_pImpl->m_nCurrentTabPosTwip);
+        else
+            m_pImpl->IncorporateTabStop(m_pImpl->m_aCurrentTabStop);
         m_pImpl->m_aCurrentTabStop = DeletableTabStop();
+        m_pImpl->m_bCurrentTabBar = false;
+        m_pImpl->m_nCurrentTabPosTwip = 0;
     break;
     case NS_ooxml::LN_CT_PPrBase_tabs:
     {
@@ -2643,6 +2651,14 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         }
         resolveSprmProps(*this, rSprm);
         rContext->Insert(PROP_PARA_TAB_STOPS, uno::Any( m_pImpl->GetCurrentTabStopAndClear()));
+        // bar tabs (positions in twips) are kept in the paragraph grab bag for DOCX export
+        if (!m_pImpl->m_aCurrentBarTabs.empty())
+        {
+            rContext->Insert(PROP_PARA_BAR_TABS,
+                             uno::Any(comphelper::containerToSequence(m_pImpl->m_aCurrentBarTabs)),
+                             true, PARA_GRAB_BAG);
+            m_pImpl->m_aCurrentBarTabs.clear();
+        }
     }
     break;
 
@@ -5340,8 +5356,10 @@ sal_Unicode DomainMapper::getFillCharFromValue(const sal_Int32 nIntValue)
     case NS_ooxml::LN_Value_ST_TabTlc_hyphen:
         return u'-';
     case NS_ooxml::LN_Value_ST_TabTlc_underscore:
-    case NS_ooxml::LN_Value_ST_TabTlc_heavy: // FIXME ???
         return u'_';
+    case NS_ooxml::LN_Value_ST_TabTlc_heavy:
+        // heavy line: a heavy box drawing line as fill, written back as "heavy" on DOCX export
+        return u'\x2501';
     case NS_ooxml::LN_Value_ST_TabTlc_middleDot: // middleDot
         return u'\x00b7';
     case NS_ooxml::LN_Value_ST_TabTlc_none:
