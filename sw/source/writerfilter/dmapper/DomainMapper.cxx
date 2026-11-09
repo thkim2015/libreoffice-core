@@ -795,11 +795,11 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
             break;
         case NS_ooxml::LN_CT_FitText_val:
             if (m_pImpl->GetTopContext())
-                m_pImpl->GetTopContext()->Insert(PROP_CHAR_FIT_TEXT, uno::Any(sal_Int32(nIntValue)), true, CHAR_GRAB_BAG);
+                m_pImpl->GetTopContext()->Insert(PROP_CHAR_FIT_TEXT, uno::Any(sStringValue.toInt32()), true, CHAR_GRAB_BAG);
             break;
         case NS_ooxml::LN_CT_FitText_id:
             if (m_pImpl->GetTopContext())
-                m_pImpl->GetTopContext()->Insert(PROP_CHAR_FIT_TEXT_ID, uno::Any(sal_Int32(nIntValue)), true, CHAR_GRAB_BAG);
+                m_pImpl->GetTopContext()->Insert(PROP_CHAR_FIT_TEXT_ID, uno::Any(sStringValue.toInt32()), true, CHAR_GRAB_BAG);
             break;
         case NS_ooxml::LN_CT_EastAsianLayout_combine:
             if (m_pImpl->GetTopContext())
