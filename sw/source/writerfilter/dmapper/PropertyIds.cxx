@@ -345,6 +345,7 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_MIRROR_INDENTS, u"MirrorIndents"_ustr},
         { PROP_PARA_WORD_WRAP, u"ParaWordWrap"_ustr},
         { PROP_PARA_ADJUST_RIGHT_IND, u"ParaAdjustRightInd"_ustr},
+        { PROP_PARA_BAR_TABS, u"ParaBarTabs"_ustr},
         { PROP_SURROUND_TEXT_WRAP_SMALL, u"SurroundTextWrapSmall"_ustr},
         { PROP_PARA_SHADOW_FORMAT, u"ParaShadowFormat"_ustr},
         { PROP_FOOTNOTE_LINE_RELATIVE_WIDTH, u"FootnoteLineRelativeWidth"_ustr},
