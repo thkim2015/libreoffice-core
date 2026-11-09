@@ -2067,13 +2067,20 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     }
     break;  // sprmPFWidowControl
     case NS_ooxml::LN_CT_PPrBase_overflowPunct:
-        rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, uno::Any( nIntValue == 0 ));
+        // overflowPunct = "allow punctuation to extend past text extents", i.e. hanging punctuation;
+        // the export (DocxAttributeOutput::ParaHangingPunctuation) writes the value as is.
+        rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, uno::Any( nIntValue != 0 ));
         break;
     case NS_ooxml::LN_CT_PPrBase_topLinePunct:
         break;
     case NS_ooxml::LN_CT_PPrBase_autoSpaceDE:
+        // Writer has a single "space between Asian and Western text" flag (ParaIsCharacterDistance)
+        rContext->Insert(PROP_PARA_IS_CHARACTER_DISTANCE, uno::Any( nIntValue != 0 ));
         break;
     case NS_ooxml::LN_CT_PPrBase_autoSpaceDN:
+        // Asian/number spacing: only switching it off can be represented without overriding autoSpaceDE
+        if (!nIntValue)
+            rContext->Insert(PROP_PARA_IS_CHARACTER_DISTANCE, uno::Any(false));
         break;
     case NS_ooxml::LN_CT_PPrBase_textAlignment:
         {
@@ -2478,6 +2485,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         break;
     case NS_ooxml::LN_EG_RPrBase_kern: // auto kerning is bound to a minimum font size in Word - but not in Writer :-(
         rContext->Insert(PROP_CHAR_AUTO_KERNING, uno::Any( nIntValue != 0 ) );
+        // keep Word's minimum font size (half-points) for the export
+        if (nIntValue > 0)
+            rContext->Insert(PROP_CHAR_KERN_MIN_SIZE, uno::Any(sal_Int32(nIntValue)), true, CHAR_GRAB_BAG);
         break;
     case NS_ooxml::LN_EG_RPrBase_w:
         // ST_TextScale must fall between 1% and 600% according to spec, otherwise resets to 100% according to experience
@@ -2783,6 +2793,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     break;
     case NS_ooxml::LN_CT_PPrBase_wordWrap:
         m_pImpl->appendGrabBag(m_pImpl->m_aInteropGrabBag, u"wordWrap"_ustr, u""_ustr);
+        // Writer has no "allow Latin text to wrap in the middle of a word" (East Asian word wrap) setting:
+        // keep it for the export, the default Normal style of Korean Word has wordWrap=0
+        rContext->Insert(PROP_PARA_WORD_WRAP, uno::Any(nIntValue != 0), true, PARA_GRAB_BAG);
     break;
     case NS_ooxml::LN_EG_SectPrContents_footnotePr:
     case NS_ooxml::LN_EG_SectPrContents_endnotePr:
@@ -3089,7 +3102,8 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         }
     }
     break;
-    case NS_ooxml::LN_EG_RPrBase_noProof: // no grammar and spell checking, unsupported
+    case NS_ooxml::LN_EG_RPrBase_noProof: // no grammar and spell checking, unsupported: keep it for the export
+        rContext->Insert(PROP_CHAR_NO_PROOF, uno::Any(nIntValue != 0), true, CHAR_GRAB_BAG);
     break;
     case NS_ooxml::LN_anchor_anchor: // at_character drawing
     case NS_ooxml::LN_inline_inline: // as_character drawing
