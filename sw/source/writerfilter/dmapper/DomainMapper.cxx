@@ -2793,6 +2793,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     break;
     case NS_ooxml::LN_CT_PPrBase_wordWrap:
         m_pImpl->appendGrabBag(m_pImpl->m_aInteropGrabBag, u"wordWrap"_ustr, u""_ustr);
+        // Writer has no "allow Latin text to wrap in the middle of a word" (East Asian word wrap) setting:
+        // keep it for the export, the default Normal style of Korean Word has wordWrap=0
+        rContext->Insert(PROP_PARA_WORD_WRAP, uno::Any(nIntValue != 0), true, PARA_GRAB_BAG);
     break;
     case NS_ooxml::LN_EG_SectPrContents_footnotePr:
     case NS_ooxml::LN_EG_SectPrContents_endnotePr:

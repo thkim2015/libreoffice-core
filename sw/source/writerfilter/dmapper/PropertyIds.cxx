@@ -343,6 +343,7 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_CHAR_SHADING_MARKER, u"CharShadingMarker"_ustr},
         { PROP_LABEL_CATEGORY, u"LabelCategory"_ustr},
         { PROP_MIRROR_INDENTS, u"MirrorIndents"_ustr},
+        { PROP_PARA_WORD_WRAP, u"ParaWordWrap"_ustr},
         { PROP_SURROUND_TEXT_WRAP_SMALL, u"SurroundTextWrapSmall"_ustr},
         { PROP_PARA_SHADOW_FORMAT, u"ParaShadowFormat"_ustr},
         { PROP_FOOTNOTE_LINE_RELATIVE_WIDTH, u"FootnoteLineRelativeWidth"_ustr},
