@@ -1677,10 +1677,11 @@ void WorksheetHelper::setCellFormula(
 
 void WorksheetHelper::setCellArrayFormula(const ScRange& rRangeAddress, const ScAddress& rTokenAddress,
                                           const OUString& rTokenStr, bool bCachedSpill,
-                                          bool bDynamicArrayMaster)
+                                          bool bDynamicArrayMaster,
+                                          const OUString& rCachedValue, sal_Int32 nCachedType)
 {
     getFormulaBuffer().setCellArrayFormula(rRangeAddress, rTokenAddress, rTokenStr, bCachedSpill,
-                                           bDynamicArrayMaster);
+                                           bDynamicArrayMaster, rCachedValue, nCachedType);
 }
 
 void WorksheetHelper::createSharedFormulaMapEntry(

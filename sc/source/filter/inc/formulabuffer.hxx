@@ -100,6 +100,11 @@ public:
         /// True when the XLSX cell carried cm="1", marking it as a dynamic-array
         /// master.
         bool mbDynamicArrayMaster = false;
+        /// ZETA: cached result of the master cell (<v>) and its cell type
+        /// (XML_n, XML_b, XML_str...); used to fill the matrix result so a
+        /// manual-calc document shows the saved values instead of 0.
+        OUString maCachedValue;
+        sal_Int32 mnCachedType = 0;
 
         TokenRangeAddressItem(TokenAddressItem aTokenAndAddress, const ScRange& rRange,
                               bool bCachedSpill = false,
@@ -161,7 +166,9 @@ public:
                              const ScAddress& rTokenAddress,
                              const OUString&,
                              bool bCachedSpill = false,
-                             bool bDynamicArrayMaster = false);
+                             bool bDynamicArrayMaster = false,
+                             const OUString& rCachedValue = OUString(),
+                             sal_Int32 nCachedType = 0);
 
     void                createSharedFormulaMapEntry( const ScAddress& rAddress,
                                                      sal_Int32 nSharedId, const OUString& rTokens );
