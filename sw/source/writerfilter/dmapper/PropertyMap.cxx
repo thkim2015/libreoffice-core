@@ -1113,6 +1113,88 @@ void copyHeaderFooter(const DomainMapper_Impl& rDM_Impl,
     }
 }
 
+// Word links a first page header/footer to the previous section's one even
+// when that section had no title page (its first page header is defined but
+// unused). Writer only stashes such content, so copyHeaderFooter() cannot
+// reach it from a later section with a title page. Remember the page style
+// that holds the linked content and copy from it, un-sharing it for the read.
+// Header and footer are copied under one un-share: re-sharing the source
+// replaces its first page footer with the master one.
+void lcl_CopyFirstParts(const rtl::Reference<SwXPageStyle>& xSource,
+                        const rtl::Reference<SwXPageStyle>& xStyle, bool bHeader, bool bFooter)
+{
+    try
+    {
+        const OUString& sFirstShared = getPropertyName(PROP_FIRST_IS_SHARED);
+        bool bShared = false;
+        xSource->getPropertyValue(sFirstShared) >>= bShared;
+        if (bShared)
+            xSource->setPropertyValue(sFirstShared, uno::Any(false));
+        xStyle->setPropertyValue(sFirstShared, uno::Any(false));
+        if (bHeader)
+        {
+            xStyle->setPropertyValue(getPropertyName(PROP_HEADER_IS_ON), uno::Any(true));
+            xStyle->setPropertyValue(getPropertyName(PROP_HEADER_NO_FIRST), uno::Any(false));
+            copyHeaderFooterTextProperty(xSource, xStyle, PROP_HEADER_TEXT_FIRST);
+        }
+        if (bFooter)
+        {
+            xStyle->setPropertyValue(getPropertyName(PROP_FOOTER_IS_ON), uno::Any(true));
+            xStyle->setPropertyValue(getPropertyName(PROP_FOOTER_NO_FIRST), uno::Any(false));
+            copyHeaderFooterTextProperty(xSource, xStyle, PROP_FOOTER_TEXT_FIRST);
+        }
+        if (bShared)
+            xSource->setPropertyValue(sFirstShared, uno::Any(true));
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_INFO_EXCEPTION("writerfilter", "lcl_CopyFirstParts failed");
+    }
+}
+
+bool lcl_ChainHas(const rtl::Reference<SwXPageStyle>& xChain,
+                  const rtl::Reference<SwXPageStyle>& xStyle, PropertyIds eIsOn)
+{
+    if (!xChain.is() || xChain == xStyle)
+        return false;
+    bool bOn = false;
+    try
+    {
+        xChain->getPropertyValue(getPropertyName(eIsOn)) >>= bOn;
+    }
+    catch (const uno::Exception&)
+    {
+    }
+    return bOn;
+}
+
+void lcl_CopyFirstFromChains(DomainMapper_Impl& rDM_Impl,
+                             const rtl::Reference<SwXPageStyle>& xStyle, bool bOwnHeader,
+                             bool bLinkedHeader, bool bOwnFooter, bool bLinkedFooter)
+{
+    if (!xStyle.is())
+        return;
+    rtl::Reference<SwXPageStyle>& rHeaderChain = rDM_Impl.m_xFirstHeaderChainStyle;
+    rtl::Reference<SwXPageStyle>& rFooterChain = rDM_Impl.m_xFirstFooterChainStyle;
+    const bool bHeader = !bOwnHeader && bLinkedHeader
+                         && lcl_ChainHas(rHeaderChain, xStyle, PROP_HEADER_IS_ON);
+    const bool bFooter = !bOwnFooter && bLinkedFooter
+                         && lcl_ChainHas(rFooterChain, xStyle, PROP_FOOTER_IS_ON);
+    if (bHeader && bFooter && rHeaderChain == rFooterChain)
+        lcl_CopyFirstParts(rHeaderChain, xStyle, true, true);
+    else
+    {
+        if (bHeader)
+            lcl_CopyFirstParts(rHeaderChain, xStyle, true, false);
+        if (bFooter)
+            lcl_CopyFirstParts(rFooterChain, xStyle, false, true);
+    }
+    if (bOwnHeader || (bLinkedHeader && rHeaderChain.is()))
+        rHeaderChain = xStyle;
+    if (bOwnFooter || (bLinkedFooter && rFooterChain.is()))
+        rFooterChain = xStyle;
+}
+
 } // end anonymous namespace
 
 
@@ -1141,6 +1223,13 @@ void SectionPropertyMap::CopyLastHeaderFooter(DomainMapper_Impl& rDM_Impl )
                          m_bEvenPageFooterLinkToPrevious,
                          m_bFirstPageFooterLinkToPrevious,
                          bEvenAndOdd, m_bTitlePage);
+    }
+    if (rDM_Impl.IsNewDoc())
+    {
+        lcl_CopyFirstFromChains(rDM_Impl, GetPageStyle(rDM_Impl), m_bHadFirstHeader,
+                                m_bTitlePage && m_bFirstPageHeaderLinkToPrevious,
+                                m_bHadFirstFooter,
+                                m_bTitlePage && m_bFirstPageFooterLinkToPrevious);
     }
     SAL_INFO( "writerfilter", "END>>> SectionPropertyMap::CopyLastHeaderFooter()" );
 }

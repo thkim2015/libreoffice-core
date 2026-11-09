@@ -1911,6 +1911,18 @@ void MSWordExportBase::SectionProperties( const WW8_SepInfo& rSepInfo, WW8_PdAtt
                 nBreakCode = 4;
         }
     }
+    else if (bOutputStyleItemSet && GetExportFormat() == ExportFormat::DOCX)
+    {
+        // A continuous section still carries the page borders and page number
+        // format of its page style: Word applies them to every page that
+        // starts inside this section, so leaving them out drops the border
+        // and switches e.g. lowerRoman page numbers back to decimal there.
+        const SfxItemSet* pOldI = m_pISet;
+        m_pISet = &pPdFormat->GetAttrSet();
+        AttrOutput().SectionPageBorders( pPdFormat, pPdFirstPgFormat );
+        m_pISet = pOldI;
+        AttrOutput().SectionPageNumbering( pPd->GetNumType().GetNumberingType(), rSepInfo.oPgRestartNo );
+    }
 
     if (titlePage)
         AttrOutput().SectionTitlePage();
