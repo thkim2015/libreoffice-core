@@ -164,11 +164,13 @@ namespace oox::ppt {
         case XML_d:
             nOdpDirection = TransitionSubType::FROMTOP;
             break;
+        // ZETA: dir is the direction the slide moves (like the corners lu = FROMBOTTOMRIGHT),
+        // so l comes from the right; export writes FROMLEFT as r
         case XML_l:
-            nOdpDirection = TransitionSubType::FROMLEFT;
+            nOdpDirection = TransitionSubType::FROMRIGHT;
             break;
         case XML_r:
-            nOdpDirection = TransitionSubType::FROMRIGHT;
+            nOdpDirection = TransitionSubType::FROMLEFT;
             break;
         case XML_u:
             nOdpDirection = TransitionSubType::FROMBOTTOM;
@@ -439,8 +441,12 @@ namespace oox::ppt {
             mnTransitionFadeColor = static_cast<sal_Int32>(COL_WHITE);
             break;
         case PPT_TOKEN(strips):
-            mnTransitionType = TransitionType::SLIDEWIPE;
-            mnTransitionSubType = ooxToOdpCornerDirections( param1 );
+            // ZETA: strips are the diagonal-squares presets (waterfallWipe) that export writes back
+            // as strips; a corner slidewipe was written as cover
+            mnTransitionType = TransitionType::WATERFALLWIPE;
+            mnTransitionSubType = (param1 == XML_lu || param1 == XML_rd) ? TransitionSubType::HORIZONTALLEFT
+                                                                         : TransitionSubType::HORIZONTALRIGHT;
+            mbTransitionDirectionNormal = (param1 == XML_ld || param1 == XML_rd);
             break;
         default:
             mnTransitionType = 0;

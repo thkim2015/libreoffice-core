@@ -162,7 +162,7 @@ SlideTransitionContext::~SlideTransitionContext() noexcept
         if (!mbHasTransition)
         {
             mbHasTransition = true;
-            maTransition.setOoxTransitionType( aElementToken, rAttribs.getToken( XML_dir, XML_ld ), 0 );
+            maTransition.setOoxTransitionType( aElementToken, rAttribs.getToken( XML_dir, XML_lu ), 0 ); // ZETA: default lu
         }
         return this;
 
