@@ -2986,6 +2986,12 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
     }
     switch (ePlaceholder)
     {
+        case PlaceholderType::Footer:
+            return rType == "ftr";
+        case PlaceholderType::DateAndTime:
+            return rType == "dt";
+        case PlaceholderType::SlideNumber:
+            return rType == "sldNum";
         case PlaceholderType::Title:
             return rType == "title" || rType == "ctrTitle" || rType == "vertTitle";
         case PlaceholderType::Subtitle:
@@ -3080,8 +3086,15 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
     sal_Int32 nPhIdx = -1;
     if (bUsePlaceholderIndex)
     {
+        // ZETA: the size PowerPoint gave it (half, quarter); the idx stays the shared one
+        if (mbSlideMasterPart || mePageType == PageType::NOTICE
+            || !getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))
+            aPhOrient = aPhSize = OUString();
         mpFS->singleElementNS(
-            XML_p, XML_ph, XML_type, pType, XML_idx,
+            XML_p, XML_ph, XML_type, pType,
+            XML_orient, sax_fastparser::UseIf(aPhOrient, !aPhOrient.isEmpty()),
+            XML_sz, sax_fastparser::UseIf(aPhSize, !aPhSize.isEmpty()),
+            XML_idx,
             OString::number(
                 static_cast<PowerPointExport*>(GetFB())->GetOrCreatePlaceholderIndex(xShape)),
                     XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
