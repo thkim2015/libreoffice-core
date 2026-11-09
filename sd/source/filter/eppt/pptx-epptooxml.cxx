@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <stdio.h>
 #include <oox/drawingml/clrscheme.hxx>
 #include <oox/token/namespaces.hxx>
@@ -2998,9 +3000,11 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
             return rType == "subTitle";
         case PlaceholderType::Outliner:
             // ZETA: a layout's chart, table, SmartArt and online-image placeholders are outlines
-            // in Impress (oox imports them so); keep the type PowerPoint gave them
+            // in Impress (oox imports them so), and so is a media one without avmedia; keep the type
+            // PowerPoint gave them
             return rType.isEmpty() || rType == "obj" || rType == "body" || rType == "chart"
-                   || rType == "tbl" || rType == "dgm" || rType == "clipArt";
+                   || rType == "tbl" || rType == "dgm" || rType == "clipArt"
+                   || (rType == "media" && !HAVE_FEATURE_AVMEDIA);
         case PlaceholderType::Picture:
             return rType == "pic";
         case PlaceholderType::Media:

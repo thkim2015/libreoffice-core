@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
 #include <oox/ppt/pptshape.hxx>
 #include <oox/core/xmlfilterbase.hxx>
 #include <drawingml/customshapeproperties.hxx>
@@ -387,7 +388,14 @@ void PPTShape::addShape(
                 case XML_media :
                     // As with XML_pic, a real media placeholder on both slides and layouts, so
                     // the layout's type survives the round-trip and a slide can resolve it.
+#if HAVE_FEATURE_AVMEDIA
                     sServiceName = "com.sun.star.presentation.MediaShape";
+#else
+                    // ZETA: no media shape without avmedia - a layout keeps it as an outline
+                    // (the mso-ph type goes back out), as with chart and tbl
+                    if (meShapeLocation == Layout)
+                        sServiceName = sOutlinerShapeService;
+#endif
                 break;
                 default:
                     if (mnSubType && meShapeLocation == Layout)
