@@ -368,6 +368,8 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_CHAR_THEME_COLOR_TINT, u"CharThemeColorTint"_ustr},
         { PROP_CHAR_KERN_MIN_SIZE, u"CharKernMinSize"_ustr},
         { PROP_CHAR_NO_PROOF, u"CharNoProof"_ustr},
+        { PROP_CHAR_FIT_TEXT, u"CharFitText"_ustr},
+        { PROP_CHAR_FIT_TEXT_ID, u"CharFitTextId"_ustr},
         { PROP_CHAR_GLOW_TEXT_EFFECT, u"CharGlowTextEffect"_ustr},
         { PROP_CHAR_SHADOW_TEXT_EFFECT, u"CharShadowTextEffect"_ustr},
         { PROP_CHAR_REFLECTION_TEXT_EFFECT, u"CharReflectionTextEffect"_ustr},

@@ -10980,6 +10980,22 @@ void DocxAttributeOutput::CharGrabBag( const SfxGrabBagItem& rItem )
             rGrabBagElement.second >>= str;
             AddToAttrList( m_pFontsAttrList, FSNS( XML_w, XML_hAnsiTheme ), str );
         }
+        else if (rGrabBagElement.first == "CharFitText")
+        {
+            sal_Int32 nWidth = 0;
+            if ((rGrabBagElement.second >>= nWidth) && nWidth > 0)
+            {
+                sal_Int32 nId = 0;
+                auto itId = rMap.find(u"CharFitTextId"_ustr);
+                if (itId != rMap.end() && (itId->second >>= nId))
+                    m_pSerializer->singleElementNS(XML_w, XML_fitText, FSNS(XML_w, XML_val),
+                                                   OString::number(nWidth), FSNS(XML_w, XML_id),
+                                                   OString::number(nId));
+                else
+                    m_pSerializer->singleElementNS(XML_w, XML_fitText, FSNS(XML_w, XML_val),
+                                                   OString::number(nWidth));
+            }
+        }
         else if (rGrabBagElement.first == "CharNoProof")
         {
             bool bNoProof = false;
@@ -10990,7 +11006,8 @@ void DocxAttributeOutput::CharGrabBag( const SfxGrabBagItem& rItem )
                 rGrabBagElement.first == "CharThemeFontNameAscii" ||
                 rGrabBagElement.first == "CharThemeFontNameEastAsia" ||
                 rGrabBagElement.first == "CharThemeOriginalColor" ||
-                rGrabBagElement.first == "CharKernMinSize" )
+                rGrabBagElement.first == "CharKernMinSize" ||
+                rGrabBagElement.first == "CharFitTextId" )
         {
             // just skip these, they were processed before
         }
