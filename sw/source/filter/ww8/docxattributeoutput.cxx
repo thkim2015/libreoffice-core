@@ -5665,24 +5665,14 @@ static rtl::Reference<::sax_fastparser::FastAttributeList> CreateDocPrAttrList(
     rtl::Reference<::sax_fastparser::FastAttributeList> const pAttrs(FastSerializerHelper::createAttrList());
     pAttrs->add(XML_id, OString::number(rExport.GetFilter().GetUniqueId()));
     pAttrs->add(XML_name, rName);
-    if (rExport.GetFilter().getVersion() != oox::core::ECMA_376_1ST_EDITION)
-    {
-        if (!rDescription.empty())
-            pAttrs->add(XML_descr, rDescription);
-        if (!rTitle.empty())
-            pAttrs->add(XML_title, rTitle);
-    }
-    else
-    {   // tdf#148952 no title attribute, merge it into descr
-        if (!rTitle.empty() || !rDescription.empty())
-        {
-            OUString const value(rTitle.empty() ? OUString(rDescription)
-                                 : rDescription.empty()
-                                     ? OUString(rTitle)
-                                     : OUString::Concat(rTitle) + "\n" + rDescription);
-            pAttrs->add(XML_descr, value);
-        }
-    }
+    // Keep the picture title separate for the ECMA-376 1st edition filter too:
+    // drawing shapes already write it, the export claims Word 2013
+    // compatibility, and merging it into descr (tdf#148952) lost the title on
+    // a round trip.
+    if (!rDescription.empty())
+        pAttrs->add(XML_descr, rDescription);
+    if (!rTitle.empty())
+        pAttrs->add(XML_title, rTitle);
     return pAttrs;
 }
 
