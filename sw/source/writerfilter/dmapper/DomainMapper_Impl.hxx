@@ -1194,6 +1194,10 @@ public:
     /// Get a property of the current numbering style's current level.
     sal_Int32 getCurrentNumberingProperty(const OUString& aProp);
 
+    /// UI names of built-in paragraph styles that STYLEREF fields and TOC \t referred to by Word's
+    /// localized name (Korean Word: "제목 1" for "heading 1"); the export writes them back unchanged.
+    o3tl::sorted_vector<OUString> m_aStyleRefUINames;
+
     /// If we're importing into a new document, or just pasting to an existing one.
     bool IsNewDoc() const { return m_bIsNewDoc;}
 

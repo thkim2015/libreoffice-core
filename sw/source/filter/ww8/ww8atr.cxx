@@ -146,6 +146,9 @@
 #include <i18nlangtag/mslangid.hxx>
 #include <i18nlangtag/languagetag.hxx>
 #include <officecfg/Office/Common.hxx>
+#include <comphelper/sequence.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <unotxdoc.hxx>
 
 
 using ::editeng::SvxBorderLine;
@@ -1069,6 +1072,28 @@ OUString MSWordExportBase::GetBookmarkName( ReferencesSubtype nTyp, const OUStri
     return BookmarkToWord( sRet ); // #i43956# - encode bookmark accordingly
 }
 
+/// Name of a paragraph style in STYLEREF and TOC \t: if the imported document referred to this
+/// built-in style by Word's localized name (Korean Word finds "제목 1", but not "heading 1"), keep
+/// that name, see DomainMapper_Impl::ConvertTOCStyleName().
+static OUString lcl_FieldStyleName(const SwDoc& rDoc, const MSWordStyles& rStyles,
+                                   const SwTextFormatColl& rColl)
+{
+    if (const SwDocShell* pDocShell = rDoc.GetDocShell())
+    {
+        rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
+        uno::Sequence<beans::PropertyValue> aGrabBag;
+        if (xProps.is() && (xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag))
+        {
+            uno::Sequence<OUString> aUINames;
+            const OUString sUIName = rColl.GetName().toString();
+            if ((comphelper::SequenceAsHashMap(aGrabBag).getValue(u"StyleRefUINames"_ustr) >>= aUINames)
+                && comphelper::findValue(aUINames, sUIName) != -1)
+                return sUIName;
+        }
+    }
+    return rStyles.GetStyleWWName(&rColl);
+}
+
 OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
 {
     SwTextFormatColls* pTextFormatColls = m_rDoc.GetTextFormatColls();
@@ -1078,7 +1103,7 @@ OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
         return "\"" + rName + "\"";
     // Didn't find the style, just keep the original name
 
-    return "\"" + m_pStyles->GetStyleWWName(pTextFormat) + "\"";
+    return "\"" + lcl_FieldStyleName(m_rDoc, *m_pStyles, *pTextFormat) + "\"";
 }
 
 /* File CHRATR.HXX: */
@@ -2468,7 +2493,7 @@ void AttributeOutputBase::StartTOX( const SwSection& rSect )
                     SwTextFormatColl const*const pColl = GetExport().m_rDoc.FindTextFormatCollByName(rStyle);
                     if (pColl)
                     {
-                        OUString const converted(GetExport().m_pStyles->GetStyleWWName(pColl));
+                        OUString const converted(lcl_FieldStyleName(GetExport().m_rDoc, *GetExport().m_pStyles, *pColl));
                         if (!converted.isEmpty())
                         {
                             sStr += "\\t \"" + converted + sEntryEnd;
@@ -2629,7 +2654,7 @@ void AttributeOutputBase::StartTOX( const SwSection& rSect )
                                         SwTextFormatColl* pColl = GetExport().m_rDoc.FindTextFormatCollByName(UIName(sStyle));
                                         if (pColl)
                                         {
-                                            OUString const converted(GetExport().m_pStyles->GetStyleWWName(pColl));
+                                            OUString const converted(lcl_FieldStyleName(GetExport().m_rDoc, *GetExport().m_pStyles, *pColl));
                                             if (!converted.isEmpty() &&
                                                 (!pColl->IsAssignedToListLevelOfOutlineStyle()
                                                  || pColl->GetAssignedOutlineStyleLevel() < nTOXLvl))

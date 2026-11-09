@@ -279,6 +279,15 @@ DomainMapper::~DomainMapper()
         // Add the saved w:doNotHyphenateCaps setting
         aProperties[u"NoHyphenateCaps"_ustr] <<= m_pImpl->GetSettingsTable()->GetNoHyphenateCaps();
 
+        // STYLEREF and TOC \t style names written in Word's UI language, see
+        // DomainMapper_Impl::ConvertTOCStyleName()
+        if (!m_pImpl->m_aStyleRefUINames.empty())
+        {
+            uno::Sequence<OUString> aNames(m_pImpl->m_aStyleRefUINames.size());
+            std::copy(m_pImpl->m_aStyleRefUINames.begin(), m_pImpl->m_aStyleRefUINames.end(), aNames.getArray());
+            aProperties[u"StyleRefUINames"_ustr] <<= aNames;
+        }
+
         if (m_pImpl->GetTextDocument())
         {
             comphelper::SequenceAsHashMap aGrabBag(m_pImpl->GetTextDocument()->getPropertyValue(u"InteropGrabBag"_ustr));
@@ -2804,6 +2813,11 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         // Writer has no "allow Latin text to wrap in the middle of a word" (East Asian word wrap) setting:
         // keep it for the export, the default Normal style of Korean Word has wordWrap=0
         rContext->Insert(PROP_PARA_WORD_WRAP, uno::Any(nIntValue != 0), true, PARA_GRAB_BAG);
+    break;
+    case NS_ooxml::LN_CT_PPrBase_adjustRightInd:
+        // Writer has no "automatically adjust right indent when grid is defined" setting:
+        // keep it for the export
+        rContext->Insert(PROP_PARA_ADJUST_RIGHT_IND, uno::Any(nIntValue != 0), true, PARA_GRAB_BAG);
     break;
     case NS_ooxml::LN_EG_SectPrContents_footnotePr:
     case NS_ooxml::LN_EG_SectPrContents_endnotePr:
