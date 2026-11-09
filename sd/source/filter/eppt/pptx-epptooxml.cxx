@@ -2958,6 +2958,55 @@ bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, 
     return false;
 }
 
+namespace
+{
+// ZETA: the <p:ph> the shape was imported with (oox keeps it as mso-ph), when it still stands for
+// the placeholder being written - PowerPoint tells ctrTitle from title, body from obj, a vertical
+// body and the idx a slide placeholder shares with its layout, which the presentation object
+// kind does not.
+bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderType ePlaceholder,
+                            OUString& rType, sal_Int32& rIdx, OUString& rOrient, OUString& rSize)
+{
+    if (!xProps.is() || !xProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return false;
+    uno::Sequence<beans::PropertyValue> aGrabBag;
+    xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+    uno::Sequence<beans::PropertyValue> aPh;
+    for (auto const& it : aGrabBag)
+        if (it.Name == "mso-ph")
+            it.Value >>= aPh;
+    if (!aPh.hasElements())
+        return false;
+    rIdx = -1;
+    for (auto const& it : aPh)
+    {
+        if (it.Name == "type")
+            it.Value >>= rType;
+        else if (it.Name == "idx")
+            it.Value >>= rIdx;
+        else if (it.Name == "orient")
+            it.Value >>= rOrient;
+        else if (it.Name == "sz")
+            it.Value >>= rSize;
+    }
+    switch (ePlaceholder)
+    {
+        case Title:
+            return rType == "title" || rType == "ctrTitle" || rType == "vertTitle";
+        case Subtitle:
+            return rType == "subTitle";
+        case Outliner:
+            return rType.isEmpty() || rType == "obj" || rType == "body";
+        case Picture:
+            return rType == "pic";
+        case Media:
+            return rType == "media";
+        default:
+            return false;
+    }
+}
+}
+
 ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShape >& xShape, PlaceholderType ePlaceholder)
 {
     Reference<XPropertySet> xProps(xShape, UNO_QUERY);
@@ -3004,6 +3053,18 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
             OString::number(
                 static_cast<PowerPointExport*>(GetFB())->GetOrCreatePlaceholderIndex(xShape)),
                     XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
+    }
+    else if (OUString aPhType, aPhOrient, aPhSize; sal_Int32 nPhIdx = -1;
+             !mbSlideMasterPart && (mePageType == PageType::NORMAL || mePageType == PageType::MASTER)
+             && getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))
+    {
+        // ZETA: as PowerPoint wrote it (a slide, or a layout - a master page that is not the
+        // slide master); no type is obj
+        mpFS->singleElementNS(XML_p, XML_ph, XML_type, sax_fastparser::UseIf(aPhType, !aPhType.isEmpty()),
+                              XML_orient, sax_fastparser::UseIf(aPhOrient, !aPhOrient.isEmpty()),
+                              XML_sz, sax_fastparser::UseIf(aPhSize, !aPhSize.isEmpty()),
+                              XML_idx, sax_fastparser::UseIf(OString(OString::number(nPhIdx)), nPhIdx >= 0),
+                              XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
     }
     else
     {

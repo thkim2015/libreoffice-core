@@ -1585,6 +1585,17 @@ Reference< XShape > const & Shape::createAndInsert(
         // A picture with a non-rectangular preset geometry (PowerPoint "Crop to Shape") is
         // imported as a custom shape with bitmap fill; remember it so that PPTX export can
         // write it back as <p:pic> instead of <p:sp>.
+        // ZETA: the placeholder kind PowerPoint wrote (ctrTitle, body, idx...) is richer than the
+        // presentation object kind, so PPTX export writes it back from here while it still fits.
+        if (mbHasPhAttrs)
+        {
+            putPropertyToGrabBag(u"mso-ph"_ustr,
+                Any(comphelper::InitPropertySequence({
+                    { "type", Any(msPhType) },
+                    { "idx", Any(moSubTypeIndex.value_or(-1)) },
+                    { "orient", Any(msPhOrient) },
+                    { "sz", Any(msPhSize) } })));
+        }
         if (bIsCroppedGraphic)
         {
             putPropertyToGrabBag(u"mso-pic-crop-to-shape"_ustr, Any(true));
