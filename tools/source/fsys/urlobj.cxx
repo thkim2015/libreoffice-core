@@ -2063,11 +2063,13 @@ bool INetURLObject::convertAbsToRel(OUString const & rTheAbsURIRef,
 
     // If the two URLs are DOS file URLs starting with different volumes
     // (e.g., file:///a:/... and file:///b:/...), the subject is not made
-    // relative (it could be, but some people do not like that):
+    // relative (it could be, but some people do not like that).  The same
+    // holds when only one of them starts with a DOS volume (e.g., a Unix base
+    // file:///tmp/a.docx and a subject file:///C:/b.docx): "../../C:/b.docx"
+    // would not point to the volume any more:
     if (m_eScheme == INetProtocol::File
         && nMatch <= 1
-        && hasDosVolume(eStyle)
-        && aSubject.hasDosVolume(eStyle)) //TODO! ok to use eStyle for these?
+        && (hasDosVolume(eStyle) || aSubject.hasDosVolume(eStyle))) //TODO! ok to use eStyle for these?
     {
         rTheRelURIRef = aSubject.GetMainURL(eDecodeMechanism, eCharset);
         return false;
