@@ -413,6 +413,10 @@ void DocxAttributeOutput::TableDefinition(
                 m_pSerializer->singleElementNS(XML_w, XML_tblpPr, attrListTablePos);
             }
         }
+        else if (rGrabBagElement.first == "TableCellSpacing")
+        {
+            WriteTableCellSpacing(rGrabBagElement.second);
+        }
         else if (rGrabBagElement.first == "TableCaption" || rGrabBagElement.first == "TableDescription")
         {
             OUString sValue;
@@ -817,6 +821,24 @@ void DocxAttributeOutput::TableCanSplit(
     // as default row prop is allow row to break across page.
     if (!rSplittable.GetValue())
         m_pSerializer->singleElementNS(XML_w, XML_cantSplit);
+}
+
+void DocxAttributeOutput::WriteTableCellSpacing(const css::uno::Any& rSpacing)
+{
+    css::uno::Sequence<css::beans::PropertyValue> aProps;
+    if (!(rSpacing >>= aProps))
+        return;
+    sal_Int32 nWidth = 0;
+    OUString sType(u"dxa"_ustr);
+    for (const auto& rProp : aProps)
+    {
+        if (rProp.Name == "w")
+            rProp.Value >>= nWidth;
+        else if (rProp.Name == "type")
+            rProp.Value >>= sType;
+    }
+    m_pSerializer->singleElementNS(XML_w, XML_tblCellSpacing, FSNS(XML_w, XML_w),
+                                   OString::number(nWidth), FSNS(XML_w, XML_type), sType);
 }
 
 void DocxAttributeOutput::TableBidi(

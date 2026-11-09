@@ -5020,6 +5020,9 @@ void DocxAttributeOutput::TableCellProperties( ww8::WW8TableNodeInfoInner::Point
             uno::Sequence<beans::PropertyValue> aAttributes = it->second.get< uno::Sequence<beans::PropertyValue> >();
             m_pTableStyleExport->CnfStyle(aAttributes);
         }
+        it = rGrabBag.find(u"RowCellSpacing"_ustr);
+        if (it != rGrabBag.end())
+            WriteTableCellSpacing(it->second);
     }
 
     // Cell preferred width

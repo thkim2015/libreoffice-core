@@ -313,6 +313,8 @@ public:
     virtual void TableCellRedline( const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner ) override;
     virtual void TableHeight( const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner ) override;
     virtual void TableCanSplit( const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner ) override;
+    /// Writes w:tblCellSpacing preserved in a table / row grab bag (w, type).
+    void WriteTableCellSpacing(const css::uno::Any& rSpacing);
     virtual void TableBidi( const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner ) override;
     virtual void TableVerticalCell( const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner ) override;
     virtual void TableNodeInfoInner( const ww8::WW8TableNodeInfoInner::Pointer_t& pNodeInfoInner ) override;
