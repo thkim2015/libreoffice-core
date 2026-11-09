@@ -2090,6 +2090,107 @@ bool checkForAll0s(const T& rString, sal_Int32 nIdx=0)
     return true;
 }
 
+// ZETA: Excel's Korean [DBNum1]..[DBNum4] (measured with Excel 2021,
+// weboffice tests/tmp/numfmt/03-grid.ps1 -name dbnum). LibreOffice's NatNum
+// differs: it writes the Korean units for DBNum3, 佰 and 零 fill-ins for
+// DBNum2, 점/點/． for the decimal point, spells out digit codes like 0 and
+// #,##0 and leaves DBNum4 dates in ASCII. Excel:
+//  - General: units, zeros inside omitted (一百一), a lone zero is the digit
+//    zero, decimals digit by digit after an ASCII '.', ASCII '-'
+//  - digit codes (0, #,##0) and the year of a date: digit by digit
+//  - month and day of a date: units without the leading one before 十 (十一)
+// DBNum3 drops the one before 十/百/千 also in General (十, 百１, 十万, １万).
+enum class ZetaDBNumMode { General, Digits, DateField };
+
+// The Excel DBNum (1..4) of a Korean NatNum, else 0.
+int lcl_ZetaKoreanDBNum(const SvNumberNatNum& rNum)
+{
+    if (!rNum.IsComplete() || !rNum.GetParams().isEmpty())
+        return 0;
+    if (primary(MsLangId::getRealLanguage(rNum.GetLang())) != primary(LANGUAGE_KOREAN))
+        return 0;
+    const int nDB = rNum.GetDBNum();
+    return (1 <= nDB && nDB <= 4) ? nDB : 0;
+}
+
+OUString lcl_ZetaDBNumDigits(std::u16string_view aStr, int nDB)
+{
+    static const char16_t* const aDigits[4] = {
+        // Excel uses the CJK compatibility ideographs for 六 零 參 拾 (U+F9D1
+        // U+F9B2 U+F96B U+F973), the Korean hanja code points
+        u"０一二三四五六七八九", u"零壹貳參四伍六七八九",
+        u"０１２３４５６７８９", u"영일이삼사오육칠팔구" };
+    OUStringBuffer aBuf(static_cast<sal_Int32>(aStr.size()));
+    for (char16_t c : aStr)
+        aBuf.append((c >= '0' && c <= '9') ? aDigits[nDB - 1][c - '0'] : c);
+    return aBuf.makeStringAndClear();
+}
+
+// Units for an integer written in ASCII digits.
+OUString lcl_ZetaDBNumUnits(std::u16string_view aInt, int nDB, bool bDropOne)
+{
+    static const char16_t* const aSmall[4] = { u"十百千", u"拾百阡", u"十百千", u"십백천" };
+    static const char16_t* const aLarge[4] = { u"万億兆", u"萬億兆", u"万億兆", u"만억조" };
+    size_t nStart = 0;
+    while (nStart + 1 < aInt.size() && aInt[nStart] == '0')
+        ++nStart;
+    aInt = aInt.substr(nStart);
+    if (aInt.empty() || aInt == u"0")
+        return lcl_ZetaDBNumDigits(u"0", nDB);
+    const sal_Int32 nLen = static_cast<sal_Int32>(aInt.size());
+    if (nLen > 16)
+        return lcl_ZetaDBNumDigits(aInt, nDB);
+    OUStringBuffer aBuf;
+    const sal_Int32 nGroups = (nLen + 3) / 4;
+    for (sal_Int32 g = nGroups - 1; g >= 0; --g)
+    {
+        bool bAny = false;
+        for (sal_Int32 p = 3; p >= 0; --p) // p = power of ten inside the group
+        {
+            const sal_Int32 nPos = nLen - 1 - (g * 4 + p);
+            if (nPos < 0)
+                continue;
+            const char16_t c = aInt[nPos];
+            if (c == '0')
+                continue;
+            bAny = true;
+            if (!(p > 0 && c == '1' && bDropOne))
+                aBuf.append(lcl_ZetaDBNumDigits(std::u16string_view(&c, 1), nDB));
+            if (p > 0)
+                aBuf.append(aSmall[nDB - 1][p - 1]);
+        }
+        if (bAny && g > 0)
+            aBuf.append(aLarge[nDB - 1][g - 1]);
+    }
+    return aBuf.makeStringAndClear();
+}
+
+// Rewrites rStr (a number in ASCII digits, maybe with '-', '.', ',' and
+// literal text) the Excel way.
+OUString lcl_ZetaDBNum(const OUString& rStr, int nDB, ZetaDBNumMode eMode)
+{
+    if (eMode == ZetaDBNumMode::Digits)
+        return lcl_ZetaDBNumDigits(rStr, nDB);
+    // General / date field: the first run of digits gets units, the rest
+    // (decimals) digit by digit
+    sal_Int32 nBegin = 0;
+    while (nBegin < rStr.getLength() && !(rStr[nBegin] >= '0' && rStr[nBegin] <= '9'))
+        ++nBegin;
+    if (nBegin == rStr.getLength())
+        return rStr;
+    sal_Int32 nEnd = nBegin;
+    while (nEnd < rStr.getLength() && rStr[nEnd] >= '0' && rStr[nEnd] <= '9')
+        ++nEnd;
+    std::u16string_view aInt = rStr.subView(nBegin, nEnd - nBegin);
+    if (eMode == ZetaDBNumMode::DateField && aInt.size() > 1 && aInt[0] == '0')
+        return lcl_ZetaDBNumDigits(rStr, nDB); // MM, DD with a leading zero
+    const bool bDropOne = nDB == 3 || eMode == ZetaDBNumMode::DateField;
+    OUStringBuffer aBuf(rStr.subView(0, nBegin));
+    aBuf.append(lcl_ZetaDBNumUnits(aInt, nDB, bDropOne));
+    aBuf.append(lcl_ZetaDBNumDigits(rStr.subView(nEnd), nDB));
+    return aBuf.makeStringAndClear();
+}
+
 OUString impTransliterateImpl(const OUString& rStr,
                               const SvNumberNatNum& rNum,
                               const NativeNumberWrapper& rNatNum)
@@ -2142,7 +2243,10 @@ void SvNumberformat::ImpGetOutputStdToPrecision(double& rNumber, OUString& rOutS
     {
         rOutString = comphelper::string::stripStart(rOutString, '-'); // not -0
     }
-    rOutString = ::impTransliterate(rOutString, NumFor[0].GetNatNum(), rNatNum);
+    if (const int nDB = lcl_ZetaKoreanDBNum(NumFor[0].GetNatNum()))
+        rOutString = lcl_ZetaDBNum(rOutString, nDB, ZetaDBNumMode::General);
+    else
+        rOutString = ::impTransliterate(rOutString, NumFor[0].GetNatNum(), rNatNum);
 }
 
 void SvNumberformat::ImpGetOutputInputLine(double fNumber, OUString& OutString,
@@ -3855,6 +3959,10 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
     const ImpSvNumberformatInfo& rInfo = NumFor[nIx].Info();
     const sal_uInt16 nCnt = NumFor[nIx].GetCount();
     sal_Int16 nNatNum = NumFor[nIx].GetNatNum().GetNatNum();
+    // ZETA: Excel Korean DBNum dates — fields in ASCII here, rewritten below
+    const int nZetaDB = lcl_ZetaKoreanDBNum(NumFor[nIx].GetNatNum());
+    if (nZetaDB)
+        nNatNum = 0;
     OUString aStr;
 
     // NatNum12: if the date format contains more than a date
@@ -3877,6 +3985,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
 
     for (sal_uInt16 i = 0; i < nCnt; i++)
     {
+        const sal_Int32 nZetaFieldStart = sBuff.getLength();
         switch (rInfo.nTypeArray[i])
         {
         case NF_SYMBOLTYPE_CALENDAR :
@@ -4092,6 +4201,21 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
         case NF_KEY_RR:                 // RR => GGGEE
             sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_YEAR_AND_ERA, nNatNum ));
             break;
+        }
+        if (nZetaDB && sBuff.getLength() > nZetaFieldStart)
+        {
+            const short nType = rInfo.nTypeArray[i];
+            const bool bYear = nType == NF_KEY_YY || nType == NF_KEY_YYYY || nType == NF_KEY_EC
+                || nType == NF_KEY_EEC || nType == NF_KEY_R;
+            const bool bField = nType == NF_KEY_M || nType == NF_KEY_MM || nType == NF_KEY_D
+                || nType == NF_KEY_DD;
+            if (bYear || bField)
+            {
+                const OUString aField(sBuff.subView(nZetaFieldStart));
+                sBuff.truncate(nZetaFieldStart);
+                sBuff.append(lcl_ZetaDBNum(aField, nZetaDB,
+                    bYear ? ZetaDBNumMode::Digits : ZetaDBNumMode::DateField));
+            }
         }
     }
     if ( aOrgCalendar.getLength() )
@@ -4631,7 +4755,10 @@ bool SvNumberformat::ImpGetNumberOutput(double fNumber,
     {
         sStr.insert(0, '-');
     }
-    ::impTransliterate(sStr, NumFor[nIx].GetNatNum(), rNatNum);
+    if (const int nDB = lcl_ZetaKoreanDBNum(NumFor[nIx].GetNatNum()))
+        sStr = lcl_ZetaDBNum(sStr.makeStringAndClear(), nDB, ZetaDBNumMode::Digits);
+    else
+        ::impTransliterate(sStr, NumFor[nIx].GetNatNum(), rNatNum);
     return bRes;
 }
 
