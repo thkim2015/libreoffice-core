@@ -45,6 +45,7 @@
 #include <comphelper/string.hxx>
 #include <comphelper/flagguard.hxx>
 #include <comphelper/sequence.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <oox/token/namespaces.hxx>
 #include <oox/token/tokens.hxx>
 #include <oox/export/utils.hxx>
@@ -5094,10 +5095,15 @@ void DocxAttributeOutput::TableCellProperties( ww8::WW8TableNodeInfoInner::Point
             {
                 if (!rAttrs.hasElements())
                     continue;
+                // Write the attributes in the usual order (val, sz, space, color, themeColor)
                 rtl::Reference<FastAttributeList> pAttrList = FastSerializerHelper::createAttrList();
-                for (const beans::PropertyValue& rAttr : rAttrs)
-                    if (sal_Int32 nToken = DocxStringGetToken(aBorderTokens, rAttr.Name))
-                        pAttrList->add(FSNS(XML_w, nToken), OUStringToOString(rAttr.Value.get<OUString>(), RTL_TEXTENCODING_UTF8));
+                comphelper::SequenceAsHashMap aAttrMap(rAttrs);
+                for (const DocxStringTokenMap* pToken = aBorderTokens; pToken->pToken; ++pToken)
+                {
+                    OUString sValue;
+                    if (aAttrMap.getValue(OUString::createFromAscii(pToken->pToken)) >>= sValue)
+                        pAttrList->add(FSNS(XML_w, pToken->nToken), OUStringToOString(sValue, RTL_TEXTENCODING_UTF8));
+                }
                 m_pSerializer->singleElementNS(XML_w, nElement, pAttrList);
             }
             m_pSerializer->endElementNS(XML_w, XML_tcBorders);
