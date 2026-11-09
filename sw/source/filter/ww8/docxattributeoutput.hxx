@@ -1015,6 +1015,8 @@ private:
 
     // If the exported numbering rule defines the outlines
     bool m_bExportingOutline;
+    // The numbering rule of the abstract numbering being exported
+    const SwNumRule* m_pExportingNumRule = nullptr;
 
     struct PostponedGraphic
     {

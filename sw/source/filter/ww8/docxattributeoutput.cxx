@@ -132,6 +132,7 @@
 #include <ndtxt.hxx>
 #include <pagedesc.hxx>
 #include <paratr.hxx>
+#include <fmtcol.hxx>
 #include <swmodule.hxx>
 #include <swtable.hxx>
 #include <txtftn.hxx>
@@ -8158,6 +8159,7 @@ void DocxAttributeOutput::StartAbstractNumbering( sal_uInt16 nId )
 {
     const SwNumRule* pRule = (*m_rExport.m_pUsedNumTable)[nId - 1];
     m_bExportingOutline = pRule && pRule->IsOutlineRule();
+    m_pExportingNumRule = pRule;
     m_pSerializer->startElementNS( XML_w, XML_abstractNum,
             FSNS( XML_w, XML_abstractNumId ), OString::number(nId) );
 }
@@ -8208,6 +8210,36 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
         if ( nId != SAL_MAX_UINT16 )
             m_pSerializer->singleElementNS( XML_w, XML_pStyle ,
                 FSNS( XML_w, XML_val ), m_rExport.m_pStyles->GetStyleId(nId) );
+    }
+    else if (m_pExportingNumRule)
+    {
+        // Link the level to the paragraph style (w:pStyle) if exactly one paragraph style
+        // uses this list at this level directly: Word numbers a style through its own numPr
+        // only when the level is not linked to another style.
+        const SwTextFormatColl* pLinked = nullptr;
+        int nFound = 0;
+        for (const SwTextFormatColl* pColl : *m_rExport.m_rDoc.GetTextFormatColls())
+        {
+            const SwNumRuleItem* pRuleItem
+                = pColl->GetAttrSet().GetItemIfSet(RES_PARATR_NUMRULE, false);
+            if (!pRuleItem || pRuleItem->GetValue() != m_pExportingNumRule->GetName().toString())
+                continue;
+            sal_Int16 nCollLevel = 0;
+            if (const SfxInt16Item* pLevelItem
+                = pColl->GetAttrSet().GetItemIfSet(RES_PARATR_LIST_LEVEL, false))
+                nCollLevel = pLevelItem->GetValue();
+            if (nCollLevel != nLevel)
+                continue;
+            pLinked = pColl;
+            ++nFound;
+        }
+        if (nFound == 1)
+        {
+            const sal_uInt16 nSlot = m_rExport.m_pStyles->GetSlot(pLinked);
+            if (nSlot != 0xfff)
+                m_pSerializer->singleElementNS(XML_w, XML_pStyle, FSNS(XML_w, XML_val),
+                                               m_rExport.m_pStyles->GetStyleId(nSlot));
+        }
     }
 
     if (isLegal)
