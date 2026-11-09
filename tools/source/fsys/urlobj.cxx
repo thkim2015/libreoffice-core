@@ -2066,10 +2066,13 @@ bool INetURLObject::convertAbsToRel(OUString const & rTheAbsURIRef,
     // relative (it could be, but some people do not like that).  The same
     // holds when only one of them starts with a DOS volume (e.g., a Unix base
     // file:///tmp/a.docx and a subject file:///C:/b.docx): "../../C:/b.docx"
-    // would not point to the volume any more:
+    // would not point to the volume any more.  Nor is a UNC path written into
+    // the path of a file URL (file:////server/share/b.docx) made relative:
+    const bool bSubjectUNCPath = pSubjectPathEnd - pSubjectPathBegin >= 2
+                                 && pSubjectPathBegin[0] == '/' && pSubjectPathBegin[1] == '/';
     if (m_eScheme == INetProtocol::File
         && nMatch <= 1
-        && (hasDosVolume(eStyle) || aSubject.hasDosVolume(eStyle))) //TODO! ok to use eStyle for these?
+        && (hasDosVolume(eStyle) || aSubject.hasDosVolume(eStyle) || bSubjectUNCPath)) //TODO! ok to use eStyle for these?
     {
         rTheRelURIRef = aSubject.GetMainURL(eDecodeMechanism, eCharset);
         return false;
