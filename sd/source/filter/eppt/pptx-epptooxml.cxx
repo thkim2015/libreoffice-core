@@ -2930,6 +2930,84 @@ ShapeExport& PowerPointShapeExport::WritePageShape(const Reference< XShape >& xS
     return WriteTextShape(xShape);
 }
 
+namespace
+{
+// ZETA: the <p:ph> the shape was imported with (oox keeps it as mso-ph), when it still stands for
+// the placeholder being written - PowerPoint tells ctrTitle from title, body from obj, a vertical
+// body and the idx a slide placeholder shares with its layout, which the presentation object
+// kind does not.
+bool hasImportedPlaceholder(const Reference<XPropertySet>& xProps)
+{
+    if (!xProps.is() || !xProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return false;
+    uno::Sequence<beans::PropertyValue> aGrabBag;
+    xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+    return std::any_of(aGrabBag.begin(), aGrabBag.end(),
+                       [](const beans::PropertyValue& r) { return r.Name == "mso-ph"; });
+}
+
+// ZETA: the page holds placeholders imported from a PowerPoint layout
+bool pageHasImportedPlaceholder(const Reference<XShape>& xShape)
+{
+    SdrObject* pObj = SdrObject::getSdrObjectFromXShape(xShape);
+    SdrPage* pPage = pObj ? pObj->getSdrPageFromSdrObject() : nullptr;
+    if (!pPage)
+        return false;
+    for (size_t n = 0; n < pPage->GetObjCount(); ++n)
+        if (hasImportedPlaceholder(Reference<XPropertySet>(pPage->GetObj(n)->getUnoShape(), UNO_QUERY)))
+            return true;
+    return false;
+}
+
+bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderType ePlaceholder,
+                            OUString& rType, sal_Int32& rIdx, OUString& rOrient, OUString& rSize)
+{
+    if (!xProps.is() || !xProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return false;
+    uno::Sequence<beans::PropertyValue> aGrabBag;
+    xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+    uno::Sequence<beans::PropertyValue> aPh;
+    for (auto const& it : aGrabBag)
+        if (it.Name == "mso-ph")
+            it.Value >>= aPh;
+    if (!aPh.hasElements())
+        return false;
+    rIdx = -1;
+    for (auto const& it : aPh)
+    {
+        if (it.Name == "type")
+            it.Value >>= rType;
+        else if (it.Name == "idx")
+            it.Value >>= rIdx;
+        else if (it.Name == "orient")
+            it.Value >>= rOrient;
+        else if (it.Name == "sz")
+            it.Value >>= rSize;
+    }
+    switch (ePlaceholder)
+    {
+        case PlaceholderType::Footer:
+            return rType == "ftr";
+        case PlaceholderType::DateAndTime:
+            return rType == "dt";
+        case PlaceholderType::SlideNumber:
+            return rType == "sldNum";
+        case PlaceholderType::Title:
+            return rType == "title" || rType == "ctrTitle" || rType == "vertTitle";
+        case PlaceholderType::Subtitle:
+            return rType == "subTitle";
+        case PlaceholderType::Outliner:
+            return rType.isEmpty() || rType == "obj" || rType == "body";
+        case PlaceholderType::Picture:
+            return rType == "pic";
+        case PlaceholderType::Media:
+            return rType == "media";
+        default:
+            return false;
+    }
+}
+}
+
 bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, PlaceholderType ePlaceholder, bool bMaster)
 {
     SAL_INFO("sd.eppt", "WritePlaceholder " << bMaster << " " << ShapeExport::NonEmptyText(xShape));
@@ -2944,6 +3022,13 @@ bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, 
             // carry belongs only there. Report it as handled, so that no plain shape is written
             // here in its place.
             if (mbSlideMasterPart && !isPlaceholderAllowedOnSlideMaster(ePlaceholder))
+                return true;
+
+            // ZETA: Impress gives every master page a title and an outline; a layout imported from
+            // PowerPoint that had none (blank, title only, the body of the title slide) stays without.
+            if (!mbSlideMasterPart && mePageType == MASTER
+                && (ePlaceholder == Title || ePlaceholder == Subtitle || ePlaceholder == Outliner)
+                && !hasImportedPlaceholder(xShapeProps) && pageHasImportedPlaceholder(xShape))
                 return true;
 
             WritePlaceholderShape(xShape, ePlaceholder);
@@ -2997,13 +3082,33 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
 
     // Leave the shape without a placeholder reference where the master would not take one, rather
     // than writing a type that makes the whole file unopenable.
+    OUString aPhType, aPhOrient, aPhSize;
+    sal_Int32 nPhIdx = -1;
     if (bUsePlaceholderIndex)
     {
+        // ZETA: the size PowerPoint gave it (half, quarter); the idx stays the shared one
+        if (mbSlideMasterPart || mePageType == PageType::NOTICE
+            || !getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))
+            aPhOrient = aPhSize = OUString();
         mpFS->singleElementNS(
-            XML_p, XML_ph, XML_type, pType, XML_idx,
+            XML_p, XML_ph, XML_type, pType,
+            XML_orient, sax_fastparser::UseIf(aPhOrient, !aPhOrient.isEmpty()),
+            XML_sz, sax_fastparser::UseIf(aPhSize, !aPhSize.isEmpty()),
+            XML_idx,
             OString::number(
                 static_cast<PowerPointExport*>(GetFB())->GetOrCreatePlaceholderIndex(xShape)),
                     XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
+    }
+    else if (!mbSlideMasterPart && (mePageType == PageType::NORMAL || mePageType == PageType::MASTER)
+             && getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))
+    {
+        // ZETA: as PowerPoint wrote it (a slide, or a layout - a master page that is not the
+        // slide master); no type is obj
+        mpFS->singleElementNS(XML_p, XML_ph, XML_type, sax_fastparser::UseIf(aPhType, !aPhType.isEmpty()),
+                              XML_orient, sax_fastparser::UseIf(aPhOrient, !aPhOrient.isEmpty()),
+                              XML_sz, sax_fastparser::UseIf(aPhSize, !aPhSize.isEmpty()),
+                              XML_idx, sax_fastparser::UseIf(OString(OString::number(nPhIdx)), nPhIdx >= 0),
+                              XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
     }
     else
     {

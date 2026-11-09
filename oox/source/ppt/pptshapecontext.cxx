@@ -71,6 +71,7 @@ ContextHandlerRef PPTShapeContext::onCreateContext( sal_Int32 aElementToken, con
             oox::drawingml::ShapePtr pTmpPlaceholder;
 
             mpShapePtr->setSubType( nSubType );
+            mpShapePtr->setPlaceholderAttrs( rAttribs.getStringDefaulted( XML_type ), rAttribs.getStringDefaulted( XML_orient ), rAttribs.getStringDefaulted( XML_sz ) ); // ZETA
 
             bool bSkipPlaceholderLookup = false;
             if( rAttribs.hasAttribute( XML_idx ) )

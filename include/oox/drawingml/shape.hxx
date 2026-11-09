@@ -260,6 +260,9 @@ public:
     const LinkedTxbxAttr&     getLinkedTxbxAttributes() const { return maLinkedTxbxAttr; };
     bool                isLinkedTxbx() const { return mbHasLinkedTxbx; };
     void                setCustomPrompt( bool bValue ) { mbHasCustomPrompt = bValue; }
+    // ZETA: the <p:ph> attributes as written, kept for PPTX export (type, orient, sz)
+    void                setPlaceholderAttrs( const OUString& rType, const OUString& rOrient, const OUString& rSize )
+                        { msPhType = rType; msPhOrient = rOrient; msPhSize = rSize; mbHasPhAttrs = true; }
     bool                getCustomPrompt() const { return mbHasCustomPrompt; }
     /** Whether the text this shape carries is a placeholder's prompt rather than content the
         author typed. Only a presentation knows the difference, so it answers for itself. */
@@ -410,6 +413,10 @@ protected:
     /* indicates whether to allow text editing within this drawing object when the parent worksheet is protected.
       "fLocksText" attribute for <sp> element */
     bool                        mbFLocksText = true; // default="true"
+    OUString                    msPhType;
+    OUString                    msPhOrient;
+    OUString                    msPhSize;
+    bool                        mbHasPhAttrs = false;
     /* indicates whether the shape shall be published with the worksheet when sent to the server.
        "fPublished" attribute for <sp> element */
     bool                        mbFPublished = false;

@@ -97,6 +97,8 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxTextShapePropertyMap()
         FONTWORK_PROPERTIES
         { u"UserDefinedAttributes"_ustr, SDRATTR_XMLATTRIBUTES, cppu::UnoType<css::container::XNameContainer>::get(),        0,     0},
         { u"ParaUserDefinedAttributes"_ustr, EE_PARA_XMLATTRIBS, cppu::UnoType<css::container::XNameContainer>::get(),        0,     0},
+        // ZETA: text shapes (presentation placeholders among them) keep what an import could not map
+        { UNO_NAME_MISC_OBJ_INTEROPGRABBAG,   OWN_ATTR_INTEROPGRABBAG,    cppu::UnoType<css::uno::Sequence< css::beans::PropertyValue >>::get(),  0,  0},
     };
 
     return aTextShapePropertyMap_Impl;
