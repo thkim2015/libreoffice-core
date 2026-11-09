@@ -2930,41 +2930,6 @@ ShapeExport& PowerPointShapeExport::WritePageShape(const Reference< XShape >& xS
     return WriteTextShape(xShape);
 }
 
-bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, PlaceholderType ePlaceholder, bool bMaster)
-{
-    SAL_INFO("sd.eppt", "WritePlaceholder " << bMaster << " " << ShapeExport::NonEmptyText(xShape));
-    if (!xShape)
-        return false;
-    try
-    {
-        Reference<XPropertySet> xShapeProps(xShape, UNO_QUERY);
-        if (xShapeProps->getPropertyValue(u"IsPresentationObject"_ustr).get<bool>())
-        {
-            // The layouts of this master write the same shapes, and a type the master may not
-            // carry belongs only there. Report it as handled, so that no plain shape is written
-            // here in its place.
-            if (mbSlideMasterPart && !isPlaceholderAllowedOnSlideMaster(ePlaceholder))
-                return true;
-
-            // ZETA: Impress gives every master page a title and an outline; a layout imported from
-            // PowerPoint that had none (blank, title only, the body of the title slide) stays without.
-            if (!mbSlideMasterPart && mePageType == MASTER
-                && (ePlaceholder == Title || ePlaceholder == Subtitle || ePlaceholder == Outliner)
-                && !hasImportedPlaceholder(xShapeProps) && pageHasImportedPlaceholder(xShape))
-                return true;
-
-            WritePlaceholderShape(xShape, ePlaceholder);
-
-            return true;
-        }
-    }
-    catch (Exception&)
-    {
-        return false;
-    }
-    return false;
-}
-
 namespace
 {
 // ZETA: the <p:ph> the shape was imported with (oox keeps it as mso-ph), when it still stands for
@@ -3035,6 +3000,41 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
             return false;
     }
 }
+}
+
+bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, PlaceholderType ePlaceholder, bool bMaster)
+{
+    SAL_INFO("sd.eppt", "WritePlaceholder " << bMaster << " " << ShapeExport::NonEmptyText(xShape));
+    if (!xShape)
+        return false;
+    try
+    {
+        Reference<XPropertySet> xShapeProps(xShape, UNO_QUERY);
+        if (xShapeProps->getPropertyValue(u"IsPresentationObject"_ustr).get<bool>())
+        {
+            // The layouts of this master write the same shapes, and a type the master may not
+            // carry belongs only there. Report it as handled, so that no plain shape is written
+            // here in its place.
+            if (mbSlideMasterPart && !isPlaceholderAllowedOnSlideMaster(ePlaceholder))
+                return true;
+
+            // ZETA: Impress gives every master page a title and an outline; a layout imported from
+            // PowerPoint that had none (blank, title only, the body of the title slide) stays without.
+            if (!mbSlideMasterPart && mePageType == MASTER
+                && (ePlaceholder == Title || ePlaceholder == Subtitle || ePlaceholder == Outliner)
+                && !hasImportedPlaceholder(xShapeProps) && pageHasImportedPlaceholder(xShape))
+                return true;
+
+            WritePlaceholderShape(xShape, ePlaceholder);
+
+            return true;
+        }
+    }
+    catch (Exception&)
+    {
+        return false;
+    }
+    return false;
 }
 
 ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShape >& xShape, PlaceholderType ePlaceholder)
