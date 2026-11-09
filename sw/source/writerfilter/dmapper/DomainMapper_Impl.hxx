@@ -977,6 +977,7 @@ public:
 
     void StartCustomFootnote(const PropertyMapPtr pContext);
     void EndCustomFootnote();
+    void RemoveCustomNoteMarkText(const rtl::Reference<SwXFootnote>& xNote, const OUString& rLabel);
     bool IsInCustomFootnote() const { return m_StreamStateStack.top().bHasFootnoteStyle; }
     bool CheckFootnoteStyle() const { return m_StreamStateStack.top().bCheckFootnoteStyle; }
     void SetHasFootnoteStyle(bool const bVal) { m_StreamStateStack.top().bHasFootnoteStyle = bVal; }

@@ -4441,6 +4441,7 @@ void DomainMapper::lcl_text(const sal_uInt8 * data_, size_t len)
         if (pContext && pContext->GetFootnote().is() && m_pImpl->IsInCustomFootnote())
         {
             pContext->GetFootnote()->setLabel(sText);
+            m_pImpl->RemoveCustomNoteMarkText(pContext->GetFootnote(), sText);
             m_pImpl->EndCustomFootnote();
             //otherwise ignore sText
         }
@@ -4680,6 +4681,7 @@ void DomainMapper::lcl_utext(const sal_Unicode *const data_, size_t len)
                     {
                         auto xFootnote = pFootnoteContext->GetFootnote();
                         xFootnote->setLabel(xFootnote->getLabel() + sText);
+                        m_pImpl->RemoveCustomNoteMarkText(xFootnote, xFootnote->getLabel());
                     }
                 }
                 return;

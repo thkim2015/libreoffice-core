@@ -4702,6 +4702,54 @@ static void lcl_PasteRedlines(
     }
 }
 
+// DOCX repeats a custom footnote/endnote mark at the start of the note text, in a
+// character style (the reference style). Only the first note is parsed with the
+// reference context, which skips that text; the others are preloaded and copied in
+// PopFootOrEndnote() and keep it. Called when the mark after the reference sets the
+// label: remove leading styled text that is exactly the label.
+void DomainMapper_Impl::RemoveCustomNoteMarkText(const rtl::Reference<SwXFootnote>& xNote,
+                                                 const OUString& rLabel)
+{
+    if (!xNote.is() || rLabel.isEmpty())
+        return;
+    OUString sWantStyle;
+    if (m_pFootnoteContext)
+        sWantStyle = m_pFootnoteContext->GetFootnoteStyle();
+    try
+    {
+        uno::Reference<text::XTextCursor> xCursor = xNote->createTextCursorByRange(xNote->getStart());
+        uno::Reference<container::XEnumeration> xParaEnum = xNote->createEnumeration();
+        if (!xParaEnum.is() || !xParaEnum->hasMoreElements())
+            return;
+        uno::Reference<container::XEnumerationAccess> xRunEnumAccess(xParaEnum->nextElement(),
+                                                                     uno::UNO_QUERY_THROW);
+        uno::Reference<container::XEnumeration> xRunEnum = xRunEnumAccess->createEnumeration();
+        OUStringBuffer aLead;
+        while (xRunEnum->hasMoreElements() && aLead.getLength() < rLabel.getLength())
+        {
+            uno::Reference<text::XTextRange> xRun(xRunEnum->nextElement(), uno::UNO_QUERY_THROW);
+            uno::Reference<beans::XPropertySet> xProps(xRun, uno::UNO_QUERY_THROW);
+            OUString sType, sStyle;
+            xProps->getPropertyValue(u"TextPortionType"_ustr) >>= sType;
+            xProps->getPropertyValue(u"CharStyleName"_ustr) >>= sStyle;
+            if (sType != "Text" || sStyle.isEmpty())
+                break;
+            if (sWantStyle.isEmpty())
+                sWantStyle = sStyle;
+            if (sStyle != sWantStyle)
+                break;
+            aLead.append(xRun->getString());
+        }
+        if (aLead.toString() == rLabel && rLabel.getLength() < SAL_MAX_INT16
+            && xCursor->goRight(sal_Int16(rLabel.getLength()), true))
+            xCursor->setString(OUString());
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("writerfilter.dmapper", "RemoveCustomNoteMarkText");
+    }
+}
+
 bool DomainMapper_Impl::CopyTemporaryNotes(
         const rtl::Reference< SwXFootnote > & xNoteSrc,
         const rtl::Reference< SwXFootnote > & xNoteDest )
