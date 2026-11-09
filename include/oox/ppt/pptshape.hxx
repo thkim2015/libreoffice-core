@@ -53,6 +53,9 @@ class PPTShape final : public oox::drawingml::Shape
     bool mbHasNoninheritedShapeProperties;
 
     bool IsPlaceHolderCandidate(const SlidePersist& rSlidePersist) const;
+    // ZETA: a slide placeholder with no text (PowerPoint writes a new slide's chart, table, SmartArt,
+    // online-image and media placeholders so)
+    bool isEmptySlidePlaceholder() const;
 
     void setTextMasterStyles(const SlidePersist& rSlidePersist, const oox::core::XmlFilterBase& rFilterBase,
         const std::u16string_view& sType);

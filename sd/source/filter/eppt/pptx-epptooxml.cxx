@@ -17,6 +17,8 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <config_features.h>
+
 #include <stdio.h>
 #include <oox/drawingml/clrscheme.hxx>
 #include <oox/token/namespaces.hxx>
@@ -2997,7 +2999,12 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
         case PlaceholderType::Subtitle:
             return rType == "subTitle";
         case PlaceholderType::Outliner:
-            return rType.isEmpty() || rType == "obj" || rType == "body";
+            // ZETA: a layout's chart, table, SmartArt and online-image placeholders are outlines
+            // in Impress (oox imports them so), and so is a media one without avmedia; keep the type
+            // PowerPoint gave them
+            return rType.isEmpty() || rType == "obj" || rType == "body" || rType == "chart"
+                   || rType == "tbl" || rType == "dgm" || rType == "clipArt"
+                   || (rType == "media" && !HAVE_FEATURE_AVMEDIA);
         case PlaceholderType::Picture:
             return rType == "pic";
         case PlaceholderType::Media:
@@ -3339,8 +3346,19 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
     // and the autofit.
     const bool bInheritsItsPrompt = isGraphicPlaceholder(ePlaceholder) && !mbMaster
                                     && bIsEmptyPresObj;
+    // ZETA: a layout's chart, table, SmartArt, online-image or media placeholder is an outline in
+    // Impress, which fills it with its outline levels; PowerPoint writes it without text
+    bool bContentOnlyOutline = false;
+    if (ePlaceholder == Outliner && mePageType == PageType::MASTER && !mbSlideMasterPart)
+    {
+        OUString aType, aOrient, aSize;
+        sal_Int32 nIdx = -1;
+        if (getImportedPlaceholder(xProps, ePlaceholder, aType, nIdx, aOrient, aSize))
+            bContentOnlyOutline = aType == "chart" || aType == "tbl" || aType == "dgm"
+                                  || aType == "clipArt" || aType == "media";
+    }
     WriteTextBox(xShape, XML_p, bUsePlaceholderIndex || bWritePropertiesAsLstStyles,
-                 /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt);
+                 /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt && !bContentOnlyOutline);
 
     mpFS->endElementNS(XML_p, XML_sp);
 
