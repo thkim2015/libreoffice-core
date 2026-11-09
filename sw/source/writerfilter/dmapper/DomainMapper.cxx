@@ -793,6 +793,14 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
 
         case NS_ooxml::LN_CT_EastAsianLayout_id:
             break;
+        case NS_ooxml::LN_CT_FitText_val:
+            if (m_pImpl->GetTopContext())
+                m_pImpl->GetTopContext()->Insert(PROP_CHAR_FIT_TEXT, uno::Any(sStringValue.toInt32()), true, CHAR_GRAB_BAG);
+            break;
+        case NS_ooxml::LN_CT_FitText_id:
+            if (m_pImpl->GetTopContext())
+                m_pImpl->GetTopContext()->Insert(PROP_CHAR_FIT_TEXT_ID, uno::Any(sStringValue.toInt32()), true, CHAR_GRAB_BAG);
+            break;
         case NS_ooxml::LN_CT_EastAsianLayout_combine:
             if (m_pImpl->GetTopContext())
                 m_pImpl->GetTopContext()->Insert(PROP_CHAR_COMBINE_IS_ON, uno::Any ( nIntValue != 0 ));
@@ -3363,6 +3371,12 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     }
     break;
     case NS_ooxml::LN_EG_RPrBase_fitText:
+    {
+        // No layout support: keep w:fitText in the character grab bag for export
+        writerfilter::Reference<Properties>::Pointer_t pProperties = rSprm.getProps();
+        if (pProperties)
+            pProperties->resolve(*this);
+    }
     break;
     case NS_ooxml::LN_ffdata:
     {
@@ -3726,6 +3740,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
             // Saving a ComplexColor (w14:solidFill) in context
             auto xComplexColor = model::color::createXComplexColor(aComplexColor);
             rContext->Insert(PROP_CHAR_COMPLEX_COLOR, uno::Any(xComplexColor));
+            // An RGB text fill wins over w:color (which comes before it in w:rPr)
+            if (aComplexColor.getType() == model::ColorType::RGB)
+                rContext->Insert(PROP_CHAR_COLOR, uno::Any(sal_Int32(aComplexColor.getRGBColor())));
             beans::PropertyValue aGrabBag = pHandlerPtr->getInteropGrabBag();
 
             for (auto const& transform : aComplexColor.getTransformations())

@@ -1253,15 +1253,14 @@ CPPUNIT_TEST_FIXTURE(Test, testTdf148952_2007)
 
     uno::Reference<beans::XPropertySet> xImage(getShape(1), uno::UNO_QUERY);
 
-    // Check if alt title value is appended to description
+    // The alt title is kept separate from the description (no longer merged)
     OUString descr;
     xImage->getPropertyValue(u"Description"_ustr) >>= descr;
-    CPPUNIT_ASSERT_EQUAL(u"Black\nShapes"_ustr, descr);
+    CPPUNIT_ASSERT_EQUAL(u"Shapes"_ustr, descr);
 
-    // Check if alt title field is empty
     OUString title;
     xImage->getPropertyValue(u"Title"_ustr) >>= title;
-    CPPUNIT_ASSERT_EQUAL(u""_ustr, title);
+    CPPUNIT_ASSERT_EQUAL(u"Black"_ustr, title);
 }
 
 //Tests for support of title attribute for ECMA-376 2nd ed and above
