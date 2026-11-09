@@ -194,6 +194,8 @@ private:
     ::oox::drawingml::ShapeExport::ShapeHashMap maShapeMap;
 
     sal_Int32 mnPlaceholderIndexMax; ///< Last used placeholder index
+    bool mbPlaceholderIndexBaseSet = false; ///< ZETA: started above the imported idx
+    sal_Int32 GetImportedPlaceholderIndexMax() const;
     /// Map of placeholder indexes for Master placeholders
     std::unordered_map< css::uno::Reference<css::drawing::XShape>, sal_Int32 > maPlaceholderShapeToIndexMap;
 

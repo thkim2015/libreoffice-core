@@ -3008,6 +3008,168 @@ bool getImportedPlaceholder(const Reference<XPropertySet>& xProps, PlaceholderTy
 }
 }
 
+namespace
+{
+// ZETA: what a placeholder can pair with on its layout - a title with title/ctrTitle, text (a
+// subtitle or an outline) with subTitle/body/obj, a picture with pic.
+enum class PhClass
+{
+    None,
+    Title,
+    Text,
+    Picture,
+    Media
+};
+
+PhClass phClassOf(PlaceholderType ePlaceholder)
+{
+    switch (ePlaceholder)
+    {
+        case PlaceholderType::Title:
+            return PhClass::Title;
+        case PlaceholderType::Subtitle:
+        case PlaceholderType::Outliner:
+            return PhClass::Text;
+        case PlaceholderType::Picture:
+            return PhClass::Picture;
+        case PlaceholderType::Media:
+            return PhClass::Media;
+        default:
+            return PhClass::None;
+    }
+}
+
+PhClass phClassOfKind(PresObjKind eKind)
+{
+    switch (eKind)
+    {
+        case PresObjKind::Title:
+            return PhClass::Title;
+        case PresObjKind::Outline:
+        case PresObjKind::Text:
+            return PhClass::Text;
+        case PresObjKind::Graphic:
+            return PhClass::Picture;
+        case PresObjKind::Media:
+            return PhClass::Media;
+        default:
+            return PhClass::None;
+    }
+}
+
+PhClass phClassOfType(std::u16string_view aType)
+{
+    if (aType == u"title" || aType == u"ctrTitle" || aType == u"vertTitle")
+        return PhClass::Title;
+    if (aType.empty() || aType == u"obj" || aType == u"body" || aType == u"subTitle")
+        return PhClass::Text;
+    if (aType == u"pic")
+        return PhClass::Picture;
+    if (aType == u"media")
+        return PhClass::Media;
+    return PhClass::None;
+}
+
+struct ImportedPh
+{
+    OUString aType, aOrient, aSize;
+    sal_Int32 nIdx = -1;
+};
+
+bool readImportedPlaceholder(SdrObject* pObj, ImportedPh& rPh)
+{
+    Reference<XPropertySet> xProps(pObj->getUnoShape(), UNO_QUERY);
+    if (!hasImportedPlaceholder(xProps))
+        return false;
+    // the type check does not matter here, only the values
+    getImportedPlaceholder(xProps, PlaceholderType::Title, rPh.aType, rPh.nIdx, rPh.aOrient, rPh.aSize);
+    return true;
+}
+
+// ZETA: a slide placeholder Impress made (a new slide, or one whose layout changed) pairs with the
+// layout placeholder of its class nearest to it, the way PowerPoint writes a new slide: same type,
+// idx, orient and sz as on its layout. Placeholders the slide imported keep their own.
+bool getLayoutPlaceholderFor(const Reference<XShape>& xShape, PlaceholderType ePlaceholder,
+                             OUString& rType, sal_Int32& rIdx, OUString& rOrient, OUString& rSize)
+{
+    const PhClass eClass = phClassOf(ePlaceholder);
+    SdrObject* pTarget = SdrObject::getSdrObjectFromXShape(xShape);
+    SdPage* pPage = pTarget ? dynamic_cast<SdPage*>(pTarget->getSdrPageFromSdrObject()) : nullptr;
+    if (eClass == PhClass::None || !pPage || pPage->IsMasterPage() || !pPage->TRG_HasMasterPage())
+        return false;
+    SdrPage& rMaster = pPage->TRG_GetMasterPage();
+
+    struct Candidate
+    {
+        SdrObject* pObj;
+        ImportedPh aPh;
+        bool bUsed = false;
+    };
+    std::vector<Candidate> aCandidates;
+    for (size_t n = 0; n < rMaster.GetObjCount(); ++n)
+    {
+        ImportedPh aPh;
+        SdrObject* pObj = rMaster.GetObj(n);
+        if (readImportedPlaceholder(pObj, aPh) && phClassOfType(aPh.aType) == eClass)
+            aCandidates.push_back({ pObj, aPh });
+    }
+    if (aCandidates.empty())
+        return false;
+
+    std::vector<SdrObject*> aOpen;
+    for (size_t n = 0; n < pPage->GetObjCount(); ++n)
+    {
+        SdrObject* pObj = pPage->GetObj(n);
+        if (phClassOfKind(pPage->GetPresObjKind(pObj)) != eClass)
+            continue;
+        ImportedPh aPh;
+        if (pObj != pTarget && readImportedPlaceholder(pObj, aPh))
+        {
+            // an imported placeholder keeps its pair
+            for (Candidate& rCand : aCandidates)
+                if (!rCand.bUsed && rCand.aPh.nIdx == aPh.nIdx && rCand.aPh.aType == aPh.aType)
+                {
+                    rCand.bUsed = true;
+                    break;
+                }
+            continue;
+        }
+        aOpen.push_back(pObj);
+    }
+    for (SdrObject* pObj : aOpen)
+    {
+        const Point aCenter = pObj->GetLogicRect().Center();
+        Candidate* pBest = nullptr;
+        sal_Int64 nBest = 0;
+        for (Candidate& rCand : aCandidates)
+        {
+            if (rCand.bUsed)
+                continue;
+            const Point aOther = rCand.pObj->GetLogicRect().Center();
+            const sal_Int64 nDist = std::abs(sal_Int64(aCenter.X()) - aOther.X())
+                                    + std::abs(sal_Int64(aCenter.Y()) - aOther.Y());
+            if (!pBest || nDist < nBest)
+            {
+                pBest = &rCand;
+                nBest = nDist;
+            }
+        }
+        if (!pBest)
+            return false;
+        pBest->bUsed = true;
+        if (pObj == pTarget)
+        {
+            rType = pBest->aPh.aType;
+            rIdx = pBest->aPh.nIdx;
+            rOrient = pBest->aPh.aOrient;
+            rSize = pBest->aPh.aSize;
+            return true;
+        }
+    }
+    return false;
+}
+}
+
 bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, PlaceholderType ePlaceholder, bool bMaster)
 {
     SAL_INFO("sd.eppt", "WritePlaceholder " << bMaster << " " << ShapeExport::NonEmptyText(xShape));
@@ -3100,7 +3262,9 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
                     XML_hasCustomPrompt, sax_fastparser::UseIf("1", bUseCustomPrompt));
     }
     else if (!mbSlideMasterPart && (mePageType == PageType::NORMAL || mePageType == PageType::MASTER)
-             && getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))
+             && (getImportedPlaceholder(xProps, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize)
+                 || (mePageType == PageType::NORMAL
+                     && getLayoutPlaceholderFor(xShape, ePlaceholder, aPhType, nPhIdx, aPhOrient, aPhSize))))
     {
         // ZETA: as PowerPoint wrote it (a slide, or a layout - a master page that is not the
         // slide master); no type is obj
@@ -3693,10 +3857,53 @@ void PowerPointExport::WriteMasterOwnPlaceholders(PowerPointShapeExport& rDML,
     }
 }
 
+sal_Int32 PowerPointExport::GetImportedPlaceholderIndexMax() const
+{
+    sal_Int32 nMax = 0;
+    auto scan = [&nMax](const Reference<XIndexAccess>& xPages)
+    {
+        if (!xPages.is())
+            return;
+        for (sal_Int32 nPage = 0; nPage < xPages->getCount(); ++nPage)
+        {
+            Reference<XShapes> xShapes(xPages->getByIndex(nPage), UNO_QUERY);
+            if (!xShapes.is())
+                continue;
+            for (sal_Int32 n = 0; n < xShapes->getCount(); ++n)
+            {
+                Reference<XPropertySet> xProps(xShapes->getByIndex(n), UNO_QUERY);
+                OUString aType, aOrient, aSize;
+                sal_Int32 nIdx = -1;
+                if (hasImportedPlaceholder(xProps))
+                {
+                    getImportedPlaceholder(xProps, PlaceholderType::Title, aType, nIdx, aOrient, aSize);
+                    // field placeholders get the shared numbers anyway; a huge idx is left alone
+                    if (aType != "dt" && aType != "ftr" && aType != "sldNum" && nIdx < 100000)
+                        nMax = std::max(nMax, nIdx);
+                }
+            }
+        }
+    };
+    Reference<XDrawPagesSupplier> xDraw(mXModel, UNO_QUERY);
+    if (xDraw.is())
+        scan(Reference<XIndexAccess>(xDraw->getDrawPages(), UNO_QUERY));
+    Reference<XMasterPagesSupplier> xMaster(mXModel, UNO_QUERY);
+    if (xMaster.is())
+        scan(Reference<XIndexAccess>(xMaster->getMasterPages(), UNO_QUERY));
+    return nMax;
+}
+
 sal_Int32 PowerPointExport::GetOrCreatePlaceholderIndex(const css::uno::Reference<XShape> &rXShape)
 {
     // One index per shape, however many parts write it: a slide's placeholder pairs with the
     // layout's by type and index, so handing the second writer a fresh number breaks that pair.
+    // ZETA: start above the idx the imported placeholders keep, so that no layout holds two
+    // placeholders with one idx (a title slide's subTitle idx 1 next to a date idx 1)
+    if (!mbPlaceholderIndexBaseSet)
+    {
+        mbPlaceholderIndexBaseSet = true;
+        mnPlaceholderIndexMax = std::max(mnPlaceholderIndexMax, GetImportedPlaceholderIndexMax() + 1);
+    }
     const auto [aIter, bInserted]
         = maPlaceholderShapeToIndexMap.try_emplace(rXShape, mnPlaceholderIndexMax);
     if (bInserted)
