@@ -2220,13 +2220,17 @@ void DomainMapper_Impl::ValidateListLevel(const OUString& sStyleIdentifierD)
     if (!pMyStyle)
         return;
 
-    sal_Int8 nListLevel = GetListLevel(pMyStyle);
-    if (nListLevel < 0 || nListLevel >= WW_OUTLINE_MAX)
+    bool bFromBaseStyle = false;
+    sal_Int16 nListId = lcl_getListId(pMyStyle, GetStyleSheetTable(), bFromBaseStyle);
+    if (nListId < 1)
         return;
 
-    bool bDummy = false;
-    sal_Int16 nListId = lcl_getListId(pMyStyle, GetStyleSheetTable(), bDummy);
-    if (nListId < 1)
+    sal_Int8 nListLevel = GetListLevel(pMyStyle);
+    // A style's own numPr without w:ilvl means the first level (as in finishParagraph), and
+    // that level may already belong to another style through its w:lvl/w:pStyle.
+    if (nListLevel == -1 && !bFromBaseStyle && IsOOXMLImport())
+        nListLevel = 0;
+    if (nListLevel < 0 || nListLevel >= WW_OUTLINE_MAX)
         return;
 
     auto const pList(GetListTable()->GetList(nListId));
