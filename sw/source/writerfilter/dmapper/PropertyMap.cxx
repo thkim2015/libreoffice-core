@@ -1612,6 +1612,12 @@ void SectionPropertyMap::CreateEvenOddPageStyleCopy(DomainMapper_Impl& rDM_Impl,
                 && (!bEvenAndOdd || !rDM_Impl.SeenHeaderFooter(PagePartType::Header, PageType::LEFT)),
             !rDM_Impl.SeenHeaderFooter(PagePartType::Footer, PageType::RIGHT)
                 && (!bEvenAndOdd || !rDM_Impl.SeenHeaderFooter(PagePartType::Footer, PageType::LEFT)));
+        // The first page header/footer now lives in the copy only (the source
+        // was made first-shared above), so later sections must link to it.
+        if (rDM_Impl.m_xFirstHeaderChainStyle == pageProperties)
+            rDM_Impl.m_xFirstHeaderChainStyle = evenOddStyle;
+        if (rDM_Impl.m_xFirstFooterChainStyle == pageProperties)
+            rDM_Impl.m_xFirstFooterChainStyle = evenOddStyle;
     }
 
     // Ignore write-only properties.
