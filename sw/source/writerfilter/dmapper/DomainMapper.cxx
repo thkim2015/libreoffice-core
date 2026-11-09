@@ -2805,6 +2805,11 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         // keep it for the export, the default Normal style of Korean Word has wordWrap=0
         rContext->Insert(PROP_PARA_WORD_WRAP, uno::Any(nIntValue != 0), true, PARA_GRAB_BAG);
     break;
+    case NS_ooxml::LN_CT_PPrBase_adjustRightInd:
+        // Writer has no "automatically adjust right indent when grid is defined" setting:
+        // keep it for the export
+        rContext->Insert(PROP_PARA_ADJUST_RIGHT_IND, uno::Any(nIntValue != 0), true, PARA_GRAB_BAG);
+    break;
     case NS_ooxml::LN_EG_SectPrContents_footnotePr:
     case NS_ooxml::LN_EG_SectPrContents_endnotePr:
         m_pImpl->SetInFootnoteProperties( NS_ooxml::LN_EG_SectPrContents_footnotePr == nSprmId );

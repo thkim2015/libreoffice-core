@@ -10924,6 +10924,12 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
             if (rGrabBagElement.second >>= bWordWrap)
                 m_pSerializer->singleElementNS(XML_w, XML_wordWrap, FSNS(XML_w, XML_val), OString::boolean(bWordWrap));
         }
+        else if (rGrabBagElement.first == "ParaAdjustRightInd")
+        {
+            bool bAdjust = true;
+            if (rGrabBagElement.second >>= bAdjust)
+                m_pSerializer->singleElementNS(XML_w, XML_adjustRightInd, FSNS(XML_w, XML_val), OString::boolean(bAdjust));
+        }
         else if (rGrabBagElement.first == "ParaTopMarginBeforeAutoSpacing")
         {
             m_bParaBeforeAutoSpacing = true;
