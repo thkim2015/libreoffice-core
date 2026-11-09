@@ -377,6 +377,7 @@ void TDefTableHandler::localResolve(Id rName, const writerfilter::Reference<Prop
         return;
 
     m_nLineWidth = m_nLineType = m_nLineColor = 0;
+    const size_t nAttrStart = m_aInteropGrabBag.size();
     std::vector<beans::PropertyValue> aSavedGrabBag;
     if (!m_aInteropGrabBagName.isEmpty())
     {
@@ -438,10 +439,14 @@ void TDefTableHandler::localResolve(Id rName, const writerfilter::Reference<Prop
         case NS_ooxml::LN_CT_TcBorders_tl2br:
             if (!m_aInteropGrabBagName.isEmpty())
                 aSavedGrabBag.push_back(getInteropGrabBag(u"tl2br"_ustr));
+            else
+                m_aTl2brBorder.assign(m_aInteropGrabBag.begin() + nAttrStart, m_aInteropGrabBag.end());
         break;
         case NS_ooxml::LN_CT_TcBorders_tr2bl:
             if (!m_aInteropGrabBagName.isEmpty())
                 aSavedGrabBag.push_back(getInteropGrabBag(u"tr2bl"_ustr));
+            else
+                m_aTr2blBorder.assign(m_aInteropGrabBag.begin() + nAttrStart, m_aInteropGrabBag.end());
         break;
         default:;
     }
@@ -487,6 +492,10 @@ void TDefTableHandler::fillCellProperties( const ::tools::SvRef< TablePropertyMa
         pCellProperties->Insert( META_PROP_HORIZONTAL_BORDER, uno::Any( m_aInsideHBorderLines[0] ) );
     if( !m_aInsideVBorderLines.empty() )
         pCellProperties->Insert( META_PROP_VERTICAL_BORDER, uno::Any( m_aInsideVBorderLines[0] ) );
+    if (!m_aTl2brBorder.empty())
+        pCellProperties->Insert(PROP_CELL_TL2BR, uno::Any(comphelper::containerToSequence(m_aTl2brBorder)), true, CELL_GRAB_BAG);
+    if (!m_aTr2blBorder.empty())
+        pCellProperties->Insert(PROP_CELL_TR2BL, uno::Any(comphelper::containerToSequence(m_aTr2blBorder)), true, CELL_GRAB_BAG);
 
     if (m_eThemeColorType != model::ThemeColorType::Unknown)
     {

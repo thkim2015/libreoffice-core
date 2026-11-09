@@ -378,6 +378,15 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
             aGrabBag[u"TableStyleLook"_ustr] = oTableLook->second;
             m_aTableProperties->Erase(oTableLook->first);
         }
+        for (PropertyIds eId : { META_PROP_TABLE_CAPTION, META_PROP_TABLE_DESCRIPTION })
+        {
+            const std::optional<PropertyMap::Property> oProp = m_aTableProperties->getProperty(eId);
+            if (oProp)
+            {
+                aGrabBag[getPropertyName(eId)] = oProp->second;
+                m_aTableProperties->Erase(oProp->first);
+            }
+        }
 
         // The "val" attribute's numeric value: a bit flag indicating applied style elements.
         const std::optional<PropertyMap::Property> aTblLook

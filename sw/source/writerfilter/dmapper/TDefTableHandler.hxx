@@ -44,6 +44,9 @@ class TDefTableHandler : public LoggedProperties
     std::vector<css::table::BorderLine2> m_aBottomBorderLines;
     std::vector<css::table::BorderLine2> m_aInsideHBorderLines;
     std::vector<css::table::BorderLine2> m_aInsideVBorderLines;
+    /// Attributes of the diagonal cell borders (no Writer equivalent, kept for export)
+    std::vector<css::beans::PropertyValue> m_aTl2brBorder;
+    std::vector<css::beans::PropertyValue> m_aTr2blBorder;
 
     //values of the current border
     sal_Int32 m_nLineWidth;

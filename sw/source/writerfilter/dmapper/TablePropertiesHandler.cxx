@@ -361,6 +361,17 @@ namespace writerfilter::dmapper {
                }
            }
             break;
+            case NS_ooxml::LN_CT_TcPrBase_tcFitText:
+            case NS_ooxml::LN_CT_TcPrBase_noWrap:
+            if (nIntValue)
+            {
+                // No Writer layout support: preserved in the cell grab bag
+                TablePropertyMapPtr pPropMap(new TablePropertyMap());
+                pPropMap->Insert(nSprmId == NS_ooxml::LN_CT_TcPrBase_tcFitText ? PROP_CELL_FIT_TEXT : PROP_CELL_NO_WRAP,
+                                 uno::Any(true), true, CELL_GRAB_BAG);
+                cellProps(pPropMap);
+            }
+            break;
             case NS_ooxml::LN_CT_TcPrBase_hideMark:
             if (nIntValue)
             {

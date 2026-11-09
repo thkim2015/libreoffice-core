@@ -175,6 +175,8 @@ void DocxAttributeOutput::TableDefinition(
                                         FSNS(XML_w, XML_tblLayout),
                                         FSNS(XML_w, XML_tblCellMar),
                                         FSNS(XML_w, XML_tblLook),
+                                        FSNS(XML_w, XML_tblCaption),
+                                        FSNS(XML_w, XML_tblDescription),
                                         FSNS(XML_w, XML_tblPrChange) };
 
     // postpone the output so that we can later []
@@ -410,6 +412,14 @@ void DocxAttributeOutput::TableDefinition(
             {
                 m_pSerializer->singleElementNS(XML_w, XML_tblpPr, attrListTablePos);
             }
+        }
+        else if (rGrabBagElement.first == "TableCaption" || rGrabBagElement.first == "TableDescription")
+        {
+            OUString sValue;
+            if ((rGrabBagElement.second >>= sValue) && !sValue.isEmpty())
+                m_pSerializer->singleElementNS(
+                    XML_w, rGrabBagElement.first == "TableCaption" ? XML_tblCaption : XML_tblDescription,
+                    FSNS(XML_w, XML_val), OUStringToOString(sValue, RTL_TEXTENCODING_UTF8));
         }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::TableDefinition: unhandled property: "
@@ -832,6 +842,15 @@ void DocxAttributeOutput::TableVerticalCell(
     else if (SvxFrameDirection::Vertical_LR_BT == m_rExport.TrueFrameDirection(*pFrameFormat))
     {
         m_pSerializer->singleElementNS(XML_w, XML_textDirection, FSNS(XML_w, XML_val), "btLr");
+    }
+
+    // w:tcFitText (no Writer layout support) comes back from the cell grab bag
+    if (const SfxGrabBagItem* pItem = pFrameFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
+    {
+        auto it = pItem->GetGrabBag().find(u"CellFitText"_ustr);
+        bool bFitText = false;
+        if (it != pItem->GetGrabBag().end() && (it->second >>= bFitText) && bFitText)
+            m_pSerializer->singleElementNS(XML_w, XML_tcFitText);
     }
 
     const SwWriteTableRows& rRows = m_xTableWrt->GetRows();

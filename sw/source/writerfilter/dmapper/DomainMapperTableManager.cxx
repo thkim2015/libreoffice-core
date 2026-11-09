@@ -404,10 +404,15 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                 setCurrentGridAfter( nIntValue );
                 break;
             case NS_ooxml::LN_CT_TblPrBase_tblCaption:
-                // To-Do: Not yet preserved
-                break;
             case NS_ooxml::LN_CT_TblPrBase_tblDescription:
-                // To-Do: Not yet preserved
+                // No Writer equivalent: preserved in the table grab bag
+                if (pValue)
+                {
+                    TablePropertyMapPtr pPropMap(new TablePropertyMap);
+                    pPropMap->Insert(nSprmId == NS_ooxml::LN_CT_TblPrBase_tblCaption ? META_PROP_TABLE_CAPTION : META_PROP_TABLE_DESCRIPTION,
+                                     uno::Any(pValue->getString()));
+                    insertTableProps(pPropMap);
+                }
                 break;
             case NS_ooxml::LN_CT_TrPrBase_tblCellSpacing:
                 // To-Do: Not yet preserved

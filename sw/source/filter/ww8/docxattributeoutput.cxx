@@ -5059,15 +5059,55 @@ void DocxAttributeOutput::TableCellProperties( ww8::WW8TableNodeInfoInner::Point
         m_pSerializer->singleElementNS(XML_w, XML_vMerge, FSNS(XML_w, XML_val), "continue");
     }
 
+    // Cell properties without a Writer equivalent, kept in the cell grab bag on import
+    uno::Sequence<beans::PropertyValue> aTl2br, aTr2bl;
+    bool bNoWrap = false;
+    if (const SfxGrabBagItem* pItem = pTableBox->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
+    {
+        const std::map<OUString, uno::Any>& rGrabBag = pItem->GetGrabBag();
+        if (auto it = rGrabBag.find(u"CellTl2br"_ustr); it != rGrabBag.end())
+            it->second >>= aTl2br;
+        if (auto it = rGrabBag.find(u"CellTr2bl"_ustr); it != rGrabBag.end())
+            it->second >>= aTr2bl;
+        if (auto it = rGrabBag.find(u"CellNoWrap"_ustr); it != rGrabBag.end())
+            it->second >>= bNoWrap;
+    }
+
     const SvxBoxItem& rBox = pTableBox->GetFrameFormat( )->GetBox( );
     const SvxBoxItem& rDefaultBox = (*m_TableFirstCells.rbegin())->getTableBox( )->GetFrameFormat( )->GetBox( );
     {
         // The cell borders
-        impl_borders(m_pSerializer, rBox, lcl_getTableCellBorderOptions(bEcma),
-                     m_aTableStyleConfs.back());
+        OutputBorderOptions aOptions = lcl_getTableCellBorderOptions(bEcma);
+        const bool bDiagonal = aTl2br.hasElements() || aTr2bl.hasElements();
+        if (bDiagonal)
+        {
+            aOptions.bWriteTag = false;
+            m_pSerializer->startElementNS(XML_w, XML_tcBorders);
+        }
+        impl_borders(m_pSerializer, rBox, aOptions, m_aTableStyleConfs.back());
+        if (bDiagonal)
+        {
+            static DocxStringTokenMap const aBorderTokens[]
+                = { { "val", XML_val }, { "sz", XML_sz }, { "space", XML_space },
+                    { "color", XML_color }, { "themeColor", XML_themeColor }, { nullptr, 0 } };
+            for (const auto& [nElement, rAttrs] : { std::pair(XML_tl2br, aTl2br), std::pair(XML_tr2bl, aTr2bl) })
+            {
+                if (!rAttrs.hasElements())
+                    continue;
+                rtl::Reference<FastAttributeList> pAttrList = FastSerializerHelper::createAttrList();
+                for (const beans::PropertyValue& rAttr : rAttrs)
+                    if (sal_Int32 nToken = DocxStringGetToken(aBorderTokens, rAttr.Name))
+                        pAttrList->add(FSNS(XML_w, nToken), OUStringToOString(rAttr.Value.get<OUString>(), RTL_TEXTENCODING_UTF8));
+                m_pSerializer->singleElementNS(XML_w, nElement, pAttrList);
+            }
+            m_pSerializer->endElementNS(XML_w, XML_tcBorders);
+        }
     }
 
     TableBackgrounds( pTableTextNodeInfoInner );
+
+    if (bNoWrap)
+        m_pSerializer->singleElementNS(XML_w, XML_noWrap);
 
     {
         // Cell margins
