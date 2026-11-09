@@ -5021,9 +5021,6 @@ void DocxAttributeOutput::TableCellProperties( ww8::WW8TableNodeInfoInner::Point
             uno::Sequence<beans::PropertyValue> aAttributes = it->second.get< uno::Sequence<beans::PropertyValue> >();
             m_pTableStyleExport->CnfStyle(aAttributes);
         }
-        it = rGrabBag.find(u"RowCellSpacing"_ustr);
-        if (it != rGrabBag.end())
-            WriteTableCellSpacing(it->second);
     }
 
     // Cell preferred width
@@ -5222,6 +5219,7 @@ void DocxAttributeOutput::StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t c
 
     const SwTableBox *pTableBox = pTableTextNodeInfoInner->getTableBox();
     const SwTableLine* pTableLine = pTableBox->GetUpper();
+    bool bRowCellSpacing = false;
     if (const SfxGrabBagItem* pItem = pTableLine->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
     {
         const std::map<OUString, uno::Any>& rGrabBag = pItem->GetGrabBag();
@@ -5230,6 +5228,23 @@ void DocxAttributeOutput::StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t c
         {
             uno::Sequence<beans::PropertyValue> aAttributes = it->second.get< uno::Sequence<beans::PropertyValue> >();
             m_pTableStyleExport->CnfStyle(aAttributes);
+        }
+        it = rGrabBag.find(u"RowCellSpacing"_ustr);
+        if (it != rGrabBag.end())
+        {
+            WriteTableCellSpacing(it->second);
+            bRowCellSpacing = true;
+        }
+    }
+    // Word repeats the table cell spacing in every row: do the same if the row has none.
+    if (!bRowCellSpacing)
+    {
+        if (const SfxGrabBagItem* pTableItem
+            = pTable->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
+        {
+            auto itTable = pTableItem->GetGrabBag().find(u"TableCellSpacing"_ustr);
+            if (itTable != pTableItem->GetGrabBag().end())
+                WriteTableCellSpacing(itTable->second);
         }
     }
 
