@@ -2246,6 +2246,17 @@ uno::Any SwXStyle::GetStyleProperty<sal_uInt16(RES_PAGEDESC)>(const SfxItemPrope
     return uno::Any(aString.toString());
 }
 template<>
+uno::Any SwXStyle::GetStyleProperty<sal_uInt16(RES_TEXT_VERT_ADJUST)>(const SfxItemPropertyMapEntry& rEntry, const SfxItemPropertySet& rPropSet, SwStyleBase_Impl& rBase)
+{
+    if(m_rEntry.family() != SfxStyleFamily::Page)
+        return GetStyleProperty<HINT_BEGIN>(rEntry, rPropSet, rBase);
+    // The setter stores this on the page descriptor, not in the item set.
+    const SwPageDesc* pDesc = rBase.GetOldPageDesc();
+    if(!pDesc)
+        return uno::Any(drawing::TextVerticalAdjust_TOP);
+    return uno::Any(pDesc->GetVerticalAdjustment());
+}
+template<>
 uno::Any SwXStyle::GetStyleProperty<FN_UNO_IS_AUTO_UPDATE>(const SfxItemPropertyMapEntry&, const SfxItemPropertySet&, SwStyleBase_Impl& rBase)
 {
     PrepareStyleBase(rBase);
@@ -2384,6 +2395,7 @@ uno::Any SwXStyle::GetStyleProperty_Impl(const SfxItemPropertyMapEntry& rEntry, 
             { FN_UNO_FOLLOW_STYLE,           std::mem_fn(&SwXStyle::GetStyleProperty<FN_UNO_FOLLOW_STYLE>)           },
             { FN_UNO_LINK_STYLE,             std::mem_fn(&SwXStyle::GetStyleProperty<FN_UNO_LINK_STYLE>)             },
             { RES_PAGEDESC,                  std::mem_fn(&SwXStyle::GetStyleProperty<sal_uInt16(RES_PAGEDESC)>)                  },
+            { RES_TEXT_VERT_ADJUST,          std::mem_fn(&SwXStyle::GetStyleProperty<sal_uInt16(RES_TEXT_VERT_ADJUST)>)          },
             { FN_UNO_IS_AUTO_UPDATE,         std::mem_fn(&SwXStyle::GetStyleProperty<FN_UNO_IS_AUTO_UPDATE>)         },
             { FN_UNO_DISPLAY_NAME,           std::mem_fn(&SwXStyle::GetStyleProperty<FN_UNO_DISPLAY_NAME>)           },
             { FN_UNO_PARA_STYLE_CONDITIONS,  std::mem_fn(&SwXStyle::GetStyleProperty<FN_UNO_PARA_STYLE_CONDITIONS>)  },
