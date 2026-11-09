@@ -55,6 +55,28 @@ using namespace com::sun::star;
 namespace writerfilter::dmapper {
 
 //---------------------------------------------------  Utility functions
+/// w:numFmt values that ConvertNumberingType() maps to NUMBER_LOWER_ZH.
+static OUString lcl_CollapsedNumFmtName(sal_Int32 nNFC)
+{
+    switch (nNFC)
+    {
+        case NS_ooxml::LN_Value_ST_NumberFormat_chineseCounting:
+            return u"chineseCounting"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_japaneseCounting:
+            return u"japaneseCounting"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_taiwaneseCounting:
+            return u"taiwaneseCounting"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_taiwaneseCountingThousand:
+            return u"taiwaneseCountingThousand"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_ideographDigital:
+            return u"ideographDigital"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_chineseCountingThousand:
+            return u"chineseCountingThousand"_ustr;
+        default:
+            return OUString();
+    }
+}
+
 template <typename T>
 static beans::PropertyValue lcl_makePropVal(PropertyIds nNameID, T const & aValue)
 {
@@ -643,6 +665,31 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
         // Create the numbering style for these rules
         const OUString sNumRulesName = getPropertyName( PROP_NUMBERING_RULES );
         xStyle->setPropertyValue( sNumRulesName, uno::Any( m_xNumRules ) );
+
+        // Several East Asian counting formats share one Writer numbering type
+        // (NUMBER_LOWER_ZH). Keep the original w:numFmt per level so that the
+        // DOCX export can write it back instead of taiwaneseCountingThousand.
+        uno::Sequence<OUString> aNumFmts(9); // WW8 list levels
+        bool bHasNumFmts = false;
+        for (sal_Int32 nLvl = 0; nLvl < nAbstLevels && nLvl < aNumFmts.getLength(); ++nLvl)
+        {
+            ListLevel::Pointer pLvl = GetLevel(nLvl);
+            ListLevel::Pointer pAbsLvl = m_pAbstractDef->GetLevel(nLvl);
+            sal_Int32 nNFC = pLvl && pLvl->GetNFC() >= 0 ? pLvl->GetNFC()
+                             : pAbsLvl ? pAbsLvl->GetNFC() : -1;
+            OUString aName = lcl_CollapsedNumFmtName(nNFC);
+            if (!aName.isEmpty())
+            {
+                aNumFmts.getArray()[nLvl] = aName;
+                bHasNumFmts = true;
+            }
+        }
+        if (bHasNumFmts)
+        {
+            uno::Sequence<beans::PropertyValue> aGrabBag{ comphelper::makePropertyValue(
+                u"OoxmlNumFmts"_ustr, aNumFmts) };
+            xStyle->setPropertyValue(u"StyleInteropGrabBag"_ustr, uno::Any(aGrabBag));
+        }
     }
     catch( const lang::IllegalArgumentException& )
     {
