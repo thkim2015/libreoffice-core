@@ -937,6 +937,21 @@ void TextFillHandler::updateComplexColor()
             }
         }
     }
+    else
+    {
+        // Keep the w14:srgbClr value itself, not only its transformations: Word shows the
+        // text fill instead of w:color (e.g. white fill with a coloured outline).
+        comphelper::SequenceAsHashMap aRgbMap(it->second);
+        auto rgbIt = aRgbMap.find("attributes");
+        if (rgbIt != aRgbMap.end())
+        {
+            comphelper::SequenceAsHashMap aAttributesMap(rgbIt->second);
+            rgbIt = aAttributesMap.find("val");
+            OUString aVal;
+            if (rgbIt != aAttributesMap.end() && (rgbIt->second >>= aVal) && aVal.getLength() == 6)
+                maComplexColor.setRGB(aVal.toInt32(16));
+        }
+    }
     comphelper::SequenceAsHashMap aSrgbClrMap(it->second);
     for (auto const& prop : aSrgbClrMap)
     {

@@ -290,6 +290,10 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
         // *** header and footer ***
 
         XclExpHFConverter aHFConv( GetRoot() );
+        // ZETA: Excel has one header/footer margin for the odd, even and first page variants;
+        // use the tallest one like the import does, not the one generated last
+        sal_Int32 nMaxHdrText = 0;
+        sal_Int32 nMaxFtrText = 0;
 
         // header
         const SfxItemSet& rHdrItemSet = rItemSet.Get( ATTR_PAGE_HEADERSET ).GetItemSet();
@@ -297,11 +301,13 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
         {
             const ScPageHFItem& rHFItem = rItemSet.Get( ATTR_PAGE_HEADERRIGHT );
             aHFConv.GenerateString( rHFItem.GetLeftArea(), rHFItem.GetCenterArea(), rHFItem.GetRightArea() );
+            nMaxHdrText = std::max( nMaxHdrText, aHFConv.GetTotalHeight() );
             maData.maHeader = aHFConv.GetHFString();
             if ( rHdrItemSet.HasItem(ATTR_PAGE_SHARED) && !rHdrItemSet.Get(ATTR_PAGE_SHARED).GetValue())
             {
                 const ScPageHFItem& rHFItemLeft = rItemSet.Get( ATTR_PAGE_HEADERLEFT );
                 aHFConv.GenerateString( rHFItemLeft.GetLeftArea(), rHFItemLeft.GetCenterArea(), rHFItemLeft.GetRightArea() );
+                nMaxHdrText = std::max( nMaxHdrText, aHFConv.GetTotalHeight() );
                 maData.maHeaderEven = aHFConv.GetHFString();
                 maData.mbUseEvenHF = true;
             }
@@ -314,6 +320,7 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
             {
                 const ScPageHFItem& rHFItemFirst = rItemSet.Get( ATTR_PAGE_HEADERFIRST );
                 aHFConv.GenerateString( rHFItemFirst.GetLeftArea(), rHFItemFirst.GetCenterArea(), rHFItemFirst.GetRightArea() );
+                nMaxHdrText = std::max( nMaxHdrText, aHFConv.GetTotalHeight() );
                 maData.maHeaderFirst = aHFConv.GetHFString();
                 maData.mbUseFirstHF = true;
             }
@@ -324,7 +331,7 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
             // header height (Excel excludes header from top margin)
             sal_Int32 nHdrHeight = rHdrItemSet.Get( ATTR_PAGE_DYNAMIC ).GetValue() ?
                 // dynamic height: calculate header height, add header <-> sheet area distance
-                (aHFConv.GetTotalHeight() + rHdrItemSet.Get( ATTR_ULSPACE ).GetLower()) :
+                (nMaxHdrText + rHdrItemSet.Get( ATTR_ULSPACE ).GetLower()) :
                 // static height: ATTR_PAGE_SIZE already includes header <-> sheet area distance
                 static_cast< sal_Int32 >( rHdrItemSet.Get( ATTR_PAGE_SIZE ).GetSize().Height() );
             maData.mfHeaderMargin = maData.mfTopMargin;
@@ -337,11 +344,13 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
         {
             const ScPageHFItem& rHFItem = rItemSet.Get( ATTR_PAGE_FOOTERRIGHT );
             aHFConv.GenerateString( rHFItem.GetLeftArea(), rHFItem.GetCenterArea(), rHFItem.GetRightArea() );
+            nMaxFtrText = std::max( nMaxFtrText, aHFConv.GetTotalHeight() );
             maData.maFooter = aHFConv.GetHFString();
             if (rFtrItemSet.HasItem(ATTR_PAGE_SHARED) && !rFtrItemSet.Get(ATTR_PAGE_SHARED).GetValue())
             {
                 const ScPageHFItem& rHFItemLeft = rItemSet.Get( ATTR_PAGE_FOOTERLEFT );
                 aHFConv.GenerateString( rHFItemLeft.GetLeftArea(), rHFItemLeft.GetCenterArea(), rHFItemLeft.GetRightArea() );
+                nMaxFtrText = std::max( nMaxFtrText, aHFConv.GetTotalHeight() );
                 maData.maFooterEven = aHFConv.GetHFString();
                 maData.mbUseEvenHF = true;
             }
@@ -353,6 +362,7 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
             {
                 const ScPageHFItem& rHFItemFirst = rItemSet.Get( ATTR_PAGE_FOOTERFIRST );
                 aHFConv.GenerateString( rHFItemFirst.GetLeftArea(), rHFItemFirst.GetCenterArea(), rHFItemFirst.GetRightArea() );
+                nMaxFtrText = std::max( nMaxFtrText, aHFConv.GetTotalHeight() );
                 maData.maFooterFirst = aHFConv.GetHFString();
                 maData.mbUseFirstHF = true;
             }
@@ -363,7 +373,7 @@ XclExpPageSettings::XclExpPageSettings( const XclExpRoot& rRoot ) :
             // footer height (Excel excludes footer from bottom margin)
             sal_Int32 nFtrHeight = rFtrItemSet.Get( ATTR_PAGE_DYNAMIC ).GetValue() ?
                 // dynamic height: calculate footer height, add sheet area <-> footer distance
-                (aHFConv.GetTotalHeight() + rFtrItemSet.Get( ATTR_ULSPACE ).GetUpper()) :
+                (nMaxFtrText + rFtrItemSet.Get( ATTR_ULSPACE ).GetUpper()) :
                 // static height: ATTR_PAGE_SIZE already includes sheet area <-> footer distance
                 static_cast< sal_Int32 >( rFtrItemSet.Get( ATTR_PAGE_SIZE ).GetSize().Height() );
             maData.mfFooterMargin = maData.mfBottomMargin;
