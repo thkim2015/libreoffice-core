@@ -53,6 +53,7 @@ static OUString lcl_AmPmCase( std::u16string_view aCode, const OUString& rName )
 #include <svl/nfsymbol.hxx>
 
 #include <cmath>
+#include <limits>
 #include <array>
 
 using namespace svt;
@@ -2479,6 +2480,40 @@ bool SvNumberformat::GetOutputString(double fNumber, sal_uInt16 nCharCount, OUSt
     return true;
 }
 
+namespace {
+
+// ZETA: Excel shows the minus sign of a negative number in any subformat
+// whose condition range also holds zero or positive numbers, e.g. the third
+// subformat of [>=1000000]0,,"M";[>=1000]0,"K";0 shows -1235, and hides it
+// only when every number reaching that subformat is negative, like [<0] or
+// the implicit negative part of 0;0 (measured with Excel 2021).
+bool lcl_IsSubformatNegativeOnly(const SvNumberformat& rFormat, sal_uInt16 nIx)
+{
+    SvNumberformatLimitOps eOp1, eOp2;
+    double fLimit1, fLimit2;
+    rFormat.GetConditions(eOp1, fLimit1, eOp2, fLimit2);
+    const double fBig = std::numeric_limits<double>::max();
+    const double aProbe[] = {
+        0.0, fBig,
+        fLimit1, std::nextafter(fLimit1, fBig), std::nextafter(fLimit1, -fBig),
+        fLimit2, std::nextafter(fLimit2, fBig), std::nextafter(fLimit2, -fBig) };
+    for (double f : aProbe)
+    {
+        if (f >= 0.0 && rFormat.GetSubformatIndex(f) == nIx)
+            return false;
+    }
+    return true;
+}
+
+// Whether a negative number that is still negative after GetOutputString
+// shows its minus sign in subformat nIx.
+bool lcl_ShowSign(const SvNumberformat& rFormat, sal_uInt16 nIx)
+{
+    return nIx == 0 || !lcl_IsSubformatNegativeOnly(rFormat, nIx);
+}
+
+}
+
 sal_uInt16 SvNumberformat::GetSubformatIndex (double fNumber ) const
 {
     sal_uInt16 nIx; // Index of the partial format
@@ -2616,7 +2651,8 @@ bool SvNumberformat::GetOutputString(double fNumber,
         sal_uInt16 nIx = GetSubformatIndex ( fNumber ); // Index of the partial format
         if (fNumber < 0.0 &&
                 ((nIx == 0 && IsFirstSubformatRealNegative()) || // 1st, usually positive subformat
-                 (nIx == 1 && IsSecondSubformatRealNegative()))) // 2nd, usually negative subformat
+                 (nIx == 1 && IsSecondSubformatRealNegative()) || // 2nd, usually negative subformat
+                 lcl_IsSubformatNegativeOnly(*this, nIx))) // ZETA: like [<-100]0 (Excel)
         {
             fNumber = -fNumber; // eliminate sign
         }
@@ -2711,7 +2747,7 @@ bool SvNumberformat::ImpGetScientificOutput(double fNumber,
 
     if (fNumber < 0)
     {
-        if (nIx == 0) // Not in the ones at the end
+        if (lcl_ShowSign(*this, nIx)) // ZETA: Excel shows it unless the subformat is negative-only
         {
             bSign = true; // Formats
         }
@@ -2874,14 +2910,9 @@ void SvNumberformat::ImpGetFractionElements ( double& fNumber, sal_uInt16 nIx,
     if( nForcedDiv > 0 )
     {   // Forced Denominator
         nDiv = nForcedDiv;
-        nFrac = static_cast<sal_Int64>(floor ( fNumber * nDiv ));
-        double fFracNew = static_cast<double>(nFrac) / static_cast<double>(nDiv);
-        double fFracNew1 = static_cast<double>(nFrac + 1) / static_cast<double>(nDiv);
-        double fDiff = fNumber - fFracNew;
-        if( fDiff > ( fFracNew1 - fNumber ) )
-        {
-            nFrac++;
-        }
+        // ZETA: Excel rounds a half up (0.375 in # ?/4 is 2/4, 0.15 in # ?/10
+        // is 2/10 although 0.15*10 is 1.4999999999999998 in binary).
+        nFrac = static_cast<sal_Int64>(rtl::math::round(fNumber * static_cast<double>(nDiv)));
     }
     else // Calculated Denominator
     {
@@ -2943,7 +2974,7 @@ bool SvNumberformat::ImpGetFractionOutput(double fNumber,
     const ImpSvNumberformatInfo& rInfo = NumFor[nIx].Info();
     const sal_uInt16 nCnt = NumFor[nIx].GetCount();
     OUStringBuffer sStr, sFrac, sDiv; // Strings, value for Integral part Numerator and denominator
-    bool bSign = ( (fNumber < 0) && (nIx == 0) ); // sign Not in the ones at the end
+    bool bSign = ( (fNumber < 0) && lcl_ShowSign(*this, nIx) ); // ZETA: sign unless negative-only subformat (Excel)
     const OUString sIntegerFormat = lcl_GetFractionIntegerString(rInfo, nCnt);
     const OUString sNumeratorFormat = lcl_GetNumeratorString(rInfo, nCnt);
     const OUString sDenominatorFormat = lcl_GetDenominatorString(rInfo, nCnt);
@@ -4495,7 +4526,7 @@ bool SvNumberformat::ImpGetNumberOutput(double fNumber,
     bool bSign;
     if (fNumber < 0.0)
     {
-        bSign = (nIx == 0); // Not in the ones at the back;
+        bSign = lcl_ShowSign(*this, nIx); // ZETA: unless negative-only subformat (Excel)
         fNumber = -fNumber;
     }
     else
