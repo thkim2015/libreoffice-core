@@ -2116,7 +2116,9 @@ int lcl_ZetaKoreanDBNum(const SvNumberNatNum& rNum)
 OUString lcl_ZetaDBNumDigits(std::u16string_view aStr, int nDB)
 {
     static const char16_t* const aDigits[4] = {
-        u"０一二三四五六七八九", u"零壹貳參四伍六七八九",
+        // Excel uses the CJK compatibility ideographs for 六 零 參 拾 (U+F9D1
+        // U+F9B2 U+F96B U+F973), the Korean hanja code points
+        u"０一二三四五六七八九", u"零壹貳參四伍六七八九",
         u"０１２３４５６７８９", u"영일이삼사오육칠팔구" };
     OUStringBuffer aBuf(static_cast<sal_Int32>(aStr.size()));
     for (char16_t c : aStr)
@@ -2127,7 +2129,7 @@ OUString lcl_ZetaDBNumDigits(std::u16string_view aStr, int nDB)
 // Units for an integer written in ASCII digits.
 OUString lcl_ZetaDBNumUnits(std::u16string_view aInt, int nDB, bool bDropOne)
 {
-    static const char16_t* const aSmall[4] = { u"十百千", u"拾百阡", u"十百千", u"십백천" };
+    static const char16_t* const aSmall[4] = { u"十百千", u"拾百阡", u"十百千", u"십백천" };
     static const char16_t* const aLarge[4] = { u"万億兆", u"萬億兆", u"万億兆", u"만억조" };
     size_t nStart = 0;
     while (nStart + 1 < aInt.size() && aInt[nStart] == '0')
