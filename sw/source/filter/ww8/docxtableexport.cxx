@@ -837,9 +837,21 @@ void DocxAttributeOutput::TableVerticalCell(
     const SwTableBox* pTabBox = pTableTextNodeInfoInner->getTableBox();
     const SwFrameFormat* pFrameFormat = pTabBox->GetFrameFormat();
 
-    if (SvxFrameDirection::Vertical_RL_TB == m_rExport.TrueFrameDirection(*pFrameFormat))
-        m_pSerializer->singleElementNS(XML_w, XML_textDirection, FSNS(XML_w, XML_val), "tbRl");
-    else if (SvxFrameDirection::Vertical_LR_BT == m_rExport.TrueFrameDirection(*pFrameFormat))
+    // Original w:textDirection without an exact Writer equivalent (tbRlV, tbLrV)
+    OUString sOrigDirection;
+    if (const SfxGrabBagItem* pItem = pFrameFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
+    {
+        auto it = pItem->GetGrabBag().find(u"CellTextDirection"_ustr);
+        if (it != pItem->GetGrabBag().end())
+            it->second >>= sOrigDirection;
+    }
+    const SvxFrameDirection eDirection = m_rExport.TrueFrameDirection(*pFrameFormat);
+    if (SvxFrameDirection::Vertical_RL_TB == eDirection)
+        m_pSerializer->singleElementNS(XML_w, XML_textDirection, FSNS(XML_w, XML_val),
+                                       sOrigDirection == "tbRlV" ? "tbRlV" : "tbRl");
+    else if (SvxFrameDirection::Horizontal_LR_TB == eDirection && sOrigDirection == "tbLrV")
+        m_pSerializer->singleElementNS(XML_w, XML_textDirection, FSNS(XML_w, XML_val), "tbLrV");
+    else if (SvxFrameDirection::Vertical_LR_BT == eDirection)
     {
         m_pSerializer->singleElementNS(XML_w, XML_textDirection, FSNS(XML_w, XML_val), "btLr");
     }

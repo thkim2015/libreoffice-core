@@ -400,6 +400,7 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_CELL_NO_WRAP, u"CellNoWrap"_ustr},
         { PROP_CELL_TL2BR, u"CellTl2br"_ustr},
         { PROP_CELL_TR2BL, u"CellTr2bl"_ustr},
+        { PROP_CELL_TEXT_DIRECTION, u"CellTextDirection"_ustr},
         { PROP_FOLLOW_TEXT_FLOW, u"IsFollowingTextFlow"_ustr},
         { PROP_FILL_STYLE, u"FillStyle"_ustr},
         { PROP_FILL_COLOR, u"FillColor"_ustr},

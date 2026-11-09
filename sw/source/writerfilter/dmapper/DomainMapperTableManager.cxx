@@ -352,6 +352,18 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                 }
                 if ( bInsertCellProps )
                     cellProps( pPropMap );
+                // tbRlV (East Asian vertical, imported as TB_RL) and tbLrV have no exact
+                // Writer equivalent: remember the original value for export
+                if (nIntValue == NS_ooxml::LN_Value_ST_TextDirection_tbRlV
+                    || nIntValue == NS_ooxml::LN_Value_ST_TextDirection_tbLrV)
+                {
+                    TablePropertyMapPtr pGrabBagMap(new TablePropertyMap);
+                    pGrabBagMap->Insert(PROP_CELL_TEXT_DIRECTION,
+                                        uno::Any(nIntValue == NS_ooxml::LN_Value_ST_TextDirection_tbRlV
+                                                     ? u"tbRlV"_ustr : u"tbLrV"_ustr),
+                                        true, CELL_GRAB_BAG);
+                    cellProps(pGrabBagMap);
+                }
                 break;
             }
             case NS_ooxml::LN_CT_TcPrBase_tcW:

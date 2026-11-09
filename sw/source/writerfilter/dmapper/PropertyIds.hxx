@@ -402,6 +402,7 @@ enum PropertyIds
         ,PROP_CELL_NO_WRAP
         ,PROP_CELL_TL2BR
         ,PROP_CELL_TR2BL
+        ,PROP_CELL_TEXT_DIRECTION
         ,PROP_FOLLOW_TEXT_FLOW
         ,PROP_FILL_STYLE
         ,PROP_FILL_COLOR
