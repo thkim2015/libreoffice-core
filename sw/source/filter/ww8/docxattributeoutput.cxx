@@ -8587,7 +8587,19 @@ void DocxAttributeOutput::CharAutoKern( const SvxAutoKernItem& rAutoKern )
 {
     // auto kerning is bound to a minimum font size in Word - but is just a boolean in Writer :-(
     // kerning is based on half-point sizes, so 2 enables kerning for fontsize 1pt or higher. (1 is treated as size 12, and 0 is treated as disabled.)
-    const OString sFontSize = OString::number( static_cast<sal_uInt32>(rAutoKern.GetValue()) * 2 );
+    sal_Int32 nMinSize = rAutoKern.GetValue() ? 2 : 0;
+    // the minimum size read from DOCX (writerfilter keeps it in the character grab bag)
+    if (nMinSize)
+    {
+        if (const SfxGrabBagItem* pGrabBag = GetExport().HasItem(RES_CHRATR_GRABBAG))
+        {
+            auto it = pGrabBag->GetGrabBag().find(u"CharKernMinSize"_ustr);
+            sal_Int32 nStored = 0;
+            if (it != pGrabBag->GetGrabBag().end() && (it->second >>= nStored) && nStored > 0)
+                nMinSize = nStored;
+        }
+    }
+    const OString sFontSize = OString::number(nMinSize);
     m_pSerializer->singleElementNS(XML_w, XML_kern, FSNS(XML_w, XML_val), sFontSize);
 }
 
@@ -10962,10 +10974,17 @@ void DocxAttributeOutput::CharGrabBag( const SfxGrabBagItem& rItem )
             rGrabBagElement.second >>= str;
             AddToAttrList( m_pFontsAttrList, FSNS( XML_w, XML_hAnsiTheme ), str );
         }
+        else if (rGrabBagElement.first == "CharNoProof")
+        {
+            bool bNoProof = false;
+            if ((rGrabBagElement.second >>= bNoProof) && bNoProof)
+                m_pSerializer->singleElementNS(XML_w, XML_noProof);
+        }
         else if( rGrabBagElement.first == "CharThemeFontNameCs"   ||
                 rGrabBagElement.first == "CharThemeFontNameAscii" ||
                 rGrabBagElement.first == "CharThemeFontNameEastAsia" ||
-                rGrabBagElement.first == "CharThemeOriginalColor" )
+                rGrabBagElement.first == "CharThemeOriginalColor" ||
+                rGrabBagElement.first == "CharKernMinSize" )
         {
             // just skip these, they were processed before
         }

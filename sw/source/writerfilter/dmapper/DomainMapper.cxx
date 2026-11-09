@@ -2485,6 +2485,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         break;
     case NS_ooxml::LN_EG_RPrBase_kern: // auto kerning is bound to a minimum font size in Word - but not in Writer :-(
         rContext->Insert(PROP_CHAR_AUTO_KERNING, uno::Any( nIntValue != 0 ) );
+        // keep Word's minimum font size (half-points) for the export
+        if (nIntValue > 0)
+            rContext->Insert(PROP_CHAR_KERN_MIN_SIZE, uno::Any(sal_Int32(nIntValue)), true, CHAR_GRAB_BAG);
         break;
     case NS_ooxml::LN_EG_RPrBase_w:
         // ST_TextScale must fall between 1% and 600% according to spec, otherwise resets to 100% according to experience
@@ -3096,7 +3099,8 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         }
     }
     break;
-    case NS_ooxml::LN_EG_RPrBase_noProof: // no grammar and spell checking, unsupported
+    case NS_ooxml::LN_EG_RPrBase_noProof: // no grammar and spell checking, unsupported: keep it for the export
+        rContext->Insert(PROP_CHAR_NO_PROOF, uno::Any(nIntValue != 0), true, CHAR_GRAB_BAG);
     break;
     case NS_ooxml::LN_anchor_anchor: // at_character drawing
     case NS_ooxml::LN_inline_inline: // as_character drawing
