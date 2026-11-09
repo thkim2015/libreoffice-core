@@ -4315,7 +4315,16 @@ void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >
 
     const char* sAnchor = nullptr;
     bool bAnchorCtr = false;
-    if (sWritingMode.has_value()
+    // A Writer text box (DOCX wps:txbx) keeps bodyPr/@anchor as is in TextVerticalAdjust (see
+    // WpsContext), it does not swap it into TextHorizontalAdjust for vertical writing modes.
+    const bool bWriterTextBox
+        = mpTextExport && xShape && mpTextExport->GetUnoTextFrame(xShape).is();
+    if (bWriterTextBox && sWritingMode.has_value()
+        && (sWritingMode.value() == "eaVert" || sWritingMode.value() == "mongolianVert"))
+    {
+        sAnchor = GetTextVerticalAdjust(eVerticalAlignment);
+    }
+    else if (sWritingMode.has_value()
         && (sWritingMode.value() == "eaVert" || sWritingMode.value() == "mongolianVert"))
     {
         bAnchorCtr = eVerticalAlignment == TextVerticalAdjust_CENTER

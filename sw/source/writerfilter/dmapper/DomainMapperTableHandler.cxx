@@ -378,7 +378,7 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
             aGrabBag[u"TableStyleLook"_ustr] = oTableLook->second;
             m_aTableProperties->Erase(oTableLook->first);
         }
-        for (PropertyIds eId : { META_PROP_TABLE_CAPTION, META_PROP_TABLE_DESCRIPTION })
+        for (PropertyIds eId : { META_PROP_TABLE_CAPTION, META_PROP_TABLE_DESCRIPTION, META_PROP_TABLE_CELL_SPACING })
         {
             const std::optional<PropertyMap::Property> oProp = m_aTableProperties->getProperty(eId);
             if (oProp)
