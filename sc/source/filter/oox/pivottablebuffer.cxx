@@ -740,7 +740,7 @@ void PivotTableField::convertDataField( const PTDataFieldModel& rDataField )
     // ZETA: the data field's own number format (else the source cells' format is used)
     if( rDataField.mnNumFmtId > 0 ) try
     {
-        SfxItemSetFixed<ATTR_VALUE_FORMAT, ATTR_LANGUAGE_FORMAT> aSet( *getScDocument().GetPool() );
+        SfxItemSet aSet( SfxItemSet::makeFixedSfxItemSet<ATTR_VALUE_FORMAT, ATTR_LANGUAGE_FORMAT>( *getScDocument().GetPool() ) );
         sal_uInt32 nScFmt = getStyles().writeNumFmtToItemSet( aSet, rDataField.mnNumFmtId, false );
         if( aSet.GetItemState( ATTR_VALUE_FORMAT, false ) == SfxItemState::SET )
             xDPField->setPropertyValue( u"ZetaNumberFormat"_ustr, css::uno::Any( sal_Int32( nScFmt ) ) );
