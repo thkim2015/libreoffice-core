@@ -25,6 +25,24 @@
 
 namespace sd {
 
+// ZETA: a PowerPoint chart, table, SmartArt, online-image, media or picture placeholder takes only
+// what it is for; a content one takes anything
+static bool implTakesKind( const SdrObject* pObj, PresObjKind eKind )
+{
+    const OUString aType = SdPage::GetMsoPlaceholderType(pObj);
+    if (aType == "chart")
+        return eKind == PresObjKind::Chart;
+    if (aType == "tbl")
+        return eKind == PresObjKind::Table;
+    if (aType == "dgm")
+        return eKind == PresObjKind::OrgChart;
+    if (aType == "media")
+        return eKind == PresObjKind::Media;
+    if (aType == "clipArt" || aType == "pic")
+        return eKind == PresObjKind::Graphic;
+    return true;
+}
+
 static bool implIsMultiPresObj( PresObjKind eKind )
 {
     switch( eKind )
@@ -109,7 +127,8 @@ SdrObject* View::GetEmptyPresentationObject( PresObjKind eKind )
     if ( pPage && !pPage->IsMasterPage() ) {
         SdrObject* pObj = GetSelectedSingleObject( pPage );
 
-        if( pObj && pObj->IsEmptyPresObj() && implIsMultiPresObj( pPage->GetPresObjKind(pObj) ) )
+        if( pObj && pObj->IsEmptyPresObj() && implIsMultiPresObj( pPage->GetPresObjKind(pObj) )
+            && implTakesKind( pObj, eKind ) )
             pEmptyObj = pObj;
 
         // try to find empty pres obj of same type
@@ -129,7 +148,8 @@ SdrObject* View::GetEmptyPresentationObject( PresObjKind eKind )
             const std::list< SdrObject* >& rShapes = pPage->GetPresentationShapeList().getList();
 
             auto iter = std::find_if(rShapes.begin(), rShapes.end(),
-                [&pPage](SdrObject* pShape) { return pShape->IsEmptyPresObj() && implIsMultiPresObj(pPage->GetPresObjKind(pShape)); });
+                [&pPage, eKind](SdrObject* pShape) { return pShape->IsEmptyPresObj() && implIsMultiPresObj(pPage->GetPresObjKind(pShape))
+                                                           && implTakesKind(pShape, eKind); });
             if (iter != rShapes.end())
                 pEmptyObj = (*iter);
         }
