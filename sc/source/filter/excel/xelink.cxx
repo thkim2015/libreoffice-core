@@ -1048,7 +1048,35 @@ void XclExpExtName::SaveXml(XclExpXmlStream& rStrm)
     to export it without the external document identifier. */
     if (mpArray->GetLen())
     {
-        const OUString aFormula = XclXmlUtils::ToOUString(GetCompileFormulaContext(), ScAddress(0, 0, 0), mpArray.get());
+        OUString aFormula = XclXmlUtils::ToOUString(GetCompileFormulaContext(), ScAddress(0, 0, 0), mpArray.get());
+        // ZETA: write the name the way Excel writes it: with the sheets of the external book, without
+        // the document part, and with a leading '=' ("[1]Src!$A$1:$A$5" -> "=Src!$A$1:$A$5").
+        // Sheet names cannot contain brackets, so every "[n]" outside a string literal is a document part.
+        {
+            OUStringBuffer aBuf("=");
+            bool bInStr = false;
+            for (sal_Int32 i = 0; i < aFormula.getLength(); ++i)
+            {
+                const sal_Unicode c = aFormula[i];
+                if (c == '"')
+                    bInStr = !bInStr;
+                if (!bInStr && c == '[')
+                {
+                    sal_Int32 j = i + 1;
+                    while (j < aFormula.getLength() && aFormula[j] >= '0' && aFormula[j] <= '9')
+                        ++j;
+                    if (j > i + 1 && j < aFormula.getLength() && aFormula[j] == ']')
+                    {
+                        i = j;
+                        continue;
+                    }
+                }
+                aBuf.append(c);
+            }
+            if (aFormula.startsWith("="))
+                aBuf.remove(0, 1);
+            aFormula = aBuf.makeStringAndClear();
+        }
         pExternalLink->startElement(XML_definedName,
             XML_name, maName.toUtf8(),
             XML_refersTo, aFormula.toUtf8(),
