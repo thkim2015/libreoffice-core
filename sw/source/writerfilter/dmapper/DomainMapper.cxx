@@ -97,6 +97,9 @@
 #include <sal/log.hxx>
 #include <tools/UnitConversion.hxx>
 #include <unotxdoc.hxx>
+#include <docsh.hxx>
+#include <doc.hxx>
+#include <ftnidx.hxx>
 #include <unostyle.hxx>
 #include <unosett.hxx>
 #include <SwXTextDefaults.hxx>
@@ -398,6 +401,13 @@ DomainMapper::~DomainMapper()
             comphelper::SequenceAsHashMap aGrabBag(m_pImpl->GetTextDocument()->getPropertyValue(u"InteropGrabBag"_ustr));
             aGrabBag.update(aProperties);
             m_pImpl->GetTextDocument()->setPropertyValue(u"InteropGrabBag"_ustr, uno::Any(aGrabBag.getAsConstPropertyValueList()));
+            // number the notes of the sections with their own numbering, see
+            // lcl_UpdateWordSectionNumbering() in sw/source/core/doc/ftnidx.cxx
+            if (aProperties.contains(u"OoxmlSectionFootnoteNumbering"_ustr)
+                || aProperties.contains(u"OoxmlSectionEndnoteNumbering"_ustr))
+                if (SwDocShell* pDocShell = m_pImpl->GetTextDocument()->GetDocShell())
+                    if (SwDoc* pDoc = pDocShell->GetDoc())
+                        pDoc->GetFootnoteIdxs().UpdateAllFootnote();
         }
     }
     catch(const uno::Exception&)

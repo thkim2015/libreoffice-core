@@ -710,6 +710,7 @@ std::unique_ptr<SwField> SwField::CopyField() const
     // use this->cache, not this->Expand(): only text formatting calls Expand()
     pNew->m_Cache = m_Cache;
     pNew->m_bUseFieldValueCache = m_bUseFieldValueCache;
+    pNew->SetWordSwitches(m_bWordMergeFormat, m_bWordNoHyperlink, m_aWordNumberPicture);
 
     return pNew;
 }

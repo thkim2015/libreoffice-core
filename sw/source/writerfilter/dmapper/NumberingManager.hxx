@@ -53,6 +53,8 @@ class ListLevel : public PropertyMap
     tools::SvRef< StyleSheetEntry >          m_pParaStyle;
     bool m_bHasValues = false;
     bool m_bIsLegal = false;
+    /// LN_CT_Lvl_lvlRestart, -1 if not set.
+    sal_Int16 m_nLevelRestart = -1;
 
 public:
 
@@ -78,6 +80,7 @@ public:
     // Getters
     sal_Int16 GetNumberingType(sal_Int16 nDefault) const;
     sal_Int32 GetNFC() const { return m_nNFC; }
+    sal_Int16 GetLevelRestart() const { return m_nLevelRestart; }
     bool HasBulletChar() const { return m_sBulletChar.has_value(); };
     OUString GetBulletChar( ) const { return m_sBulletChar.has_value()? *m_sBulletChar : OUString(); };
     const tools::SvRef< StyleSheetEntry >& GetParaStyle( ) const { return m_pParaStyle; };

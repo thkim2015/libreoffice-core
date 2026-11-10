@@ -48,6 +48,9 @@ class SW_DLLPUBLIC SwFormatFootnote final
     sal_uInt16 m_nNumber;   ///< automatic sequence number
     sal_uInt16 m_nNumberRLHidden; ///< automatic sequence number (hidden redlines)
     bool    m_bEndNote;     ///< Is it an End note?
+    /// Numbering type of the Word section of the note, if it differs from the document setting
+    /// (-1: none), see SwFootnoteIdxs::UpdateWordSectionNumbering()
+    sal_Int16 m_nWordNumType = -1;
 
     unotools::WeakReference<SwXFootnote> m_wXFootnote;
 
@@ -78,7 +81,10 @@ public:
         m_nNumber = rFootnote.m_nNumber;
         m_nNumberRLHidden = rFootnote.m_nNumberRLHidden;
         m_aNumber = rFootnote.m_aNumber;
+        m_nWordNumType = rFootnote.m_nWordNumType;
     }
+    sal_Int16 GetWordNumType() const { return m_nWordNumType; }
+    void SetWordNumType(sal_Int16 nType) { m_nWordNumType = nType; }
 
     const SwTextFootnote *GetTextFootnote() const   { return m_pTextAttr; }
           SwTextFootnote *GetTextFootnote()         { return m_pTextAttr; }

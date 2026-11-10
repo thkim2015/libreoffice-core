@@ -9163,6 +9163,28 @@ void DomainMapper_Impl::CloseFieldCommand()
                 break;
             }
 
+            // Word switches without a Writer equivalent, written back by the DOCX export:
+            // \* MERGEFORMAT, a REF/PAGEREF without \h (the export adds \h by default)
+            // and the \# number picture of document statistics and PAGE fields
+            if (xFieldInterface.is())
+            {
+                const OUString aCommand = pContext->GetCommand();
+                const FieldId eId = aIt->second.eFieldId;
+                OUString aValue;
+                const bool bMergeFormat
+                    = aCommand.toAsciiLowerCase().indexOf("\\* mergeformat") >= 0;
+                const bool bNoHyperlink
+                    = (eId == FIELD_REF || eId == FIELD_PAGEREF)
+                      && !lcl_FindInCommand(aCommand, 'h', aValue);
+                OUString aPicture;
+                if ((eId == FIELD_NUMCHARS || eId == FIELD_NUMWORDS || eId == FIELD_NUMPAGES
+                     || eId == FIELD_PAGE)
+                    && lcl_FindInCommand(aCommand, '#', aPicture))
+                    aPicture = aPicture.replaceAll("\"", "").trim();
+                if (bMergeFormat || bNoHyperlink || !aPicture.isEmpty())
+                    xFieldInterface->SetWordSwitches(bMergeFormat, bNoHyperlink, aPicture);
+            }
+
             if (!bCreateEnhancedField)
             {
                 pContext->SetTextField( xFieldInterface );

@@ -166,8 +166,9 @@ void SwNumberTreeNode::ValidateHierarchical(const SwNumberTreeNode * pNode) cons
         const bool bParentCounted( IsCounted() &&
                                    ( !IsPhantom() ||
                                      HasPhantomCountedParent() ) );
+        const bool bContinueAcrossParent((*aIt)->IsContinueAcrossParent());
         if ( !(*aIt)->IsRestart() &&
-             GetParent() && !bParentCounted )
+             GetParent() && ( !bParentCounted || bContinueAcrossParent ) )
         {
             tSwNumberTreeChildren::const_iterator aParentChildIt =
                                             GetParent()->GetIterator( this );
@@ -187,7 +188,7 @@ void SwNumberTreeNode::ValidateHierarchical(const SwNumberTreeNode * pNode) cons
                     }
                     break;
                 }
-                else if ( pPrevNode->IsCounted() )
+                else if ( pPrevNode->IsCounted() && !bContinueAcrossParent )
                 {
                     break;
                 }

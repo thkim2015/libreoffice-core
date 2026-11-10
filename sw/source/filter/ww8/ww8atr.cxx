@@ -3444,7 +3444,8 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                 default: break; // ReferencesSubtype::Outline not handled ?
             }
 
-            OUString sExtraFlags = u"\\h "_ustr; // by default, include a hyperlink
+            // by default, include a hyperlink, unless the imported Word field had none
+            OUString sExtraFlags = pField->IsWordNoHyperlink() ? OUString() : u"\\h "_ustr;
 
             switch (eField)
             {

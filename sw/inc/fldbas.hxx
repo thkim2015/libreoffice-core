@@ -294,6 +294,11 @@ private:
     bool                m_bIsAutomaticLanguage;
     /// Used for tooltip purposes when it's not-empty.
     OUString m_aTitle;
+    /// Word field switches without a Writer equivalent, kept for the DOCX export:
+    /// \* MERGEFORMAT, no \h in a REF field, and a \# number picture
+    bool m_bWordMergeFormat = false;
+    bool m_bWordNoHyperlink = false;
+    OUString m_aWordNumberPicture;
 
     virtual OUString    ExpandImpl(SwRootFrame const* pLayout) const = 0;
     virtual std::unique_ptr<SwField> Copy() const = 0;
@@ -332,6 +337,16 @@ public:
     virtual OUString    GetFieldName() const;
 
     std::unique_ptr<SwField> CopyField() const;
+
+    bool IsWordMergeFormat() const { return m_bWordMergeFormat; }
+    bool IsWordNoHyperlink() const { return m_bWordNoHyperlink; }
+    const OUString& GetWordNumberPicture() const { return m_aWordNumberPicture; }
+    void SetWordSwitches(bool bMergeFormat, bool bNoHyperlink, const OUString& rNumberPicture)
+    {
+        m_bWordMergeFormat = bMergeFormat;
+        m_bWordNoHyperlink = bNoHyperlink;
+        m_aWordNumberPicture = rNumberPicture;
+    }
 
     /// ResId
     SwFieldIds          Which() const

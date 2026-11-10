@@ -30,6 +30,18 @@
 #include <fmtftntx.hxx>
 #include <rootfrm.hxx>
 #include <txtfrm.hxx>
+#include <docsh.hxx>
+#include <unotxdoc.hxx>
+#include <fmtpdsc.hxx>
+#include <pagedesc.hxx>
+#include <swtable.hxx>
+#include <frmfmt.hxx>
+#include <SwStyleNameMapper.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <array>
+#include <unordered_map>
+#include <vector>
 
 namespace sw {
 
@@ -47,6 +59,117 @@ bool IsFootnoteDeleted(IDocumentRedlineAccess const& rIDRA,
 }
 
 using sw::IsFootnoteDeleted;
+
+namespace
+{
+/// Footnote/endnote numbering of Word sections that differ from the document setting, kept by
+/// the DOCX import per page style ({type, start offset, counting}), see
+/// lcl_ApplySectionNoteNumberings() in writerfilter.
+using WordNoteNumberings = std::unordered_map<OUString, std::array<sal_Int16, 3>>;
+
+WordNoteNumberings lcl_GetWordNoteNumberings(const SwDoc& rDoc, const OUString& rKey)
+{
+    WordNoteNumberings aRet;
+    const SwDocShell* pDocShell = rDoc.GetDocShell();
+    if (!pDocShell)
+        return aRet;
+    rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
+    css::uno::Sequence<css::beans::PropertyValue> aGrabBag;
+    css::uno::Sequence<css::beans::PropertyValue> aByStyle;
+    if (!xProps.is() || !(xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
+        || !(comphelper::SequenceAsHashMap(aGrabBag).getValue(rKey) >>= aByStyle))
+        return aRet;
+    for (const auto& rStyle : aByStyle)
+    {
+        css::uno::Sequence<sal_Int16> aValues;
+        if ((rStyle.Value >>= aValues) && aValues.getLength() == 3)
+            aRet[rStyle.Name] = { aValues[0], aValues[1], aValues[2] };
+    }
+    return aRet;
+}
+
+/// Writer numbers the notes for the whole document. Number the notes of the Word sections with
+/// their own numbering type, restart (each section) and start offset like Word: a continuous
+/// section counts all notes before it.
+void lcl_UpdateWordSectionNumbering(SwFootnoteIdxs& rIdxs, SwDoc& rDoc)
+{
+    if (rIdxs.empty() || !rDoc.GetDocShell())
+        return;
+    const WordNoteNumberings aFootnotes
+        = lcl_GetWordNoteNumberings(rDoc, u"OoxmlSectionFootnoteNumbering"_ustr);
+    const WordNoteNumberings aEndnotes
+        = lcl_GetWordNoteNumberings(rDoc, u"OoxmlSectionEndnoteNumbering"_ustr);
+    if (aFootnotes.empty() && aEndnotes.empty())
+        return;
+
+    // The Word sections: page style breaks of the body text.
+    std::vector<std::pair<SwNodeOffset, OUString>> aBreaks;
+    const SwNodes& rNodes = rDoc.GetNodes();
+    for (SwNodeOffset n = rNodes.GetEndOfExtras().GetIndex() + 1;
+         n < rNodes.GetEndOfContent().GetIndex(); ++n)
+    {
+        const SwNode* pNode = rNodes[n];
+        const SwFormatPageDesc* pItem = nullptr;
+        if (pNode->IsContentNode())
+            pItem = pNode->GetContentNode()->GetSwAttrSet().GetItemIfSet(RES_PAGEDESC, false);
+        else if (pNode->IsTableNode())
+            pItem = pNode->GetTableNode()->GetTable().GetFrameFormat()->GetAttrSet().GetItemIfSet(
+                RES_PAGEDESC, false);
+        if (pItem && pItem->GetPageDesc())
+            aBreaks.emplace_back(n, SwStyleNameMapper::GetProgName(pItem->GetPageDesc()->GetName(),
+                                                                   SwGetPoolIdFromName::PageDesc)
+                                        .toString());
+    }
+
+    const SwFootnoteInfo& rFootnoteInfo = rDoc.GetFootnoteInfo();
+    size_t nBreak = 0;
+    OUString sStyle = u"Standard"_ustr;
+    sal_Int32 nSection = 0;
+    sal_Int32 nNoteSection = -1;
+    sal_uInt16 nAll = 0;
+    sal_uInt16 nInSection = 0;
+    for (size_t nPos = 0; nPos < rIdxs.size(); ++nPos)
+    {
+        SwTextFootnote* pTextFootnote = rIdxs[nPos];
+        const SwNodeOffset nNode = pTextFootnote->GetTextNode().GetIndex();
+        while (nBreak < aBreaks.size() && aBreaks[nBreak].first <= nNode)
+        {
+            sStyle = aBreaks[nBreak].second;
+            ++nBreak;
+            ++nSection;
+        }
+        SwFormatFootnote& rFootnote = const_cast<SwFormatFootnote&>(pTextFootnote->GetFootnote());
+        if (!rFootnote.GetNumStr().isEmpty())
+            continue;
+        const bool bEndNote = rFootnote.IsEndNote();
+        const WordNoteNumberings& rMap = bEndNote ? aEndnotes : aFootnotes;
+        const auto it = rMap.find(sStyle);
+        sal_Int16 nType = it == rMap.end() ? -1 : it->second[0];
+        sal_uInt16 nNumber = rFootnote.GetNumber();
+        if (!bEndNote)
+        {
+            if (nNoteSection != nSection)
+            {
+                nNoteSection = nSection;
+                nInSection = 0;
+            }
+            ++nAll;
+            ++nInSection;
+            const sal_Int16 nStart = it == rMap.end() ? rFootnoteInfo.m_nFootnoteOffset : it->second[1];
+            const sal_Int16 nCounting = it == rMap.end() ? sal_Int16(rFootnoteInfo.m_eNum) : it->second[2];
+            if (nCounting == FTNNUM_CHAPTER) // Word: restart each section
+                nNumber = nStart + nInSection;
+            else if (nCounting == FTNNUM_DOC)
+                nNumber = nStart + nAll;
+        }
+        if (nNumber != rFootnote.GetNumber() || nType != rFootnote.GetWordNumType())
+        {
+            rFootnote.SetWordNumType(nType);
+            pTextFootnote->SetNumber(nNumber, nNumber, OUString());
+        }
+    }
+}
+}
 
 bool CompareSwFootnoteIdxs::operator()(SwTextFootnote* const& lhs, SwTextFootnote* const& rhs) const
 {
@@ -264,6 +387,8 @@ void SwFootnoteIdxs::UpdateFootnote( const SwNode& rStt )
             }
         }
     }
+
+    lcl_UpdateWordSectionNumbering(*this, rDoc);
 }
 
 void SwFootnoteIdxs::UpdateAllFootnote()
@@ -402,6 +527,8 @@ void SwFootnoteIdxs::UpdateAllFootnote()
             }
         }
     }
+
+    lcl_UpdateWordSectionNumbering(*this, rDoc);
 
     if (pLayout && FTNNUM_PAGE == rFootnoteInfo.m_eNum)
         for( auto aLayout : aAllLayouts )
