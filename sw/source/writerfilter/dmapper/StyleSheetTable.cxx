@@ -1063,7 +1063,32 @@ OUString StyleSheetTable::CloneTOCStyle(FontTablePtr const& rFontTable, StyleShe
 
 void StyleSheetTable::ApplyStyleSheets( const FontTablePtr& rFontTable )
 {
-    return ApplyStyleSheetsImpl(rFontTable, m_aStyleSheetEntries);
+    ApplyStyleSheetsImpl(rFontTable, m_aStyleSheetEntries);
+
+    // Remember the paragraph styles defined in styles.xml: the DOCX export leaves out
+    // unused Writer default paragraph styles that the document did not define.
+    if (!m_xTextDocument)
+        return;
+    std::vector<OUString> aNames;
+    for (const auto& pEntry : m_aStyleSheetEntries)
+        if (pEntry->m_nStyleTypeCode == StyleType::Paragraph && !pEntry->m_sStyleName.isEmpty())
+            aNames.push_back(ConvertStyleName(pEntry->m_sStyleName).first);
+    if (aNames.empty())
+        return;
+    try
+    {
+        auto aGrabBag = comphelper::sequenceToContainer<std::vector<beans::PropertyValue>>(
+            m_xTextDocument->getPropertyValue(u"InteropGrabBag"_ustr)
+                .get<uno::Sequence<beans::PropertyValue>>());
+        aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlParaStyleNames"_ustr,
+                                                         comphelper::containerToSequence(aNames)));
+        m_xTextDocument->setPropertyValue(u"InteropGrabBag"_ustr,
+                                          uno::Any(comphelper::containerToSequence(aGrabBag)));
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("writerfilter", "StyleSheetTable::ApplyStyleSheets");
+    }
 }
 
 void StyleSheetTable::ApplyStyleSheetsImpl(const FontTablePtr& rFontTable, std::vector<StyleSheetEntryPtr> const& rEntries)

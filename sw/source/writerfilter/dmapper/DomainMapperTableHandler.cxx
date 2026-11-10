@@ -1346,6 +1346,13 @@ void DomainMapperTableHandler::ApplyParagraphPropertiesFromTableStyle(TableParag
                         GetCompatSettingHasAndValue(u"overrideTableStyleFontSizeAndJustification").second;
                 }
 
+                // The table style repeats the value that the paragraph already gets from the
+                // document defaults (e.g. the theme font resolved to a name): setting it as
+                // direct formatting changes nothing, but would be exported as a literal value
+                // instead of the theme reference.
+                if (bDocDefault && aParaStyle.hasValue() && aParaStyle == pCellProp->Value)
+                    continue;
+
                 // use table style when no paragraph style setting or a docDefault value is applied instead of it
                 if (!aParaStyle.hasValue() || bDocDefault || bCompatOverride) try
                 {
