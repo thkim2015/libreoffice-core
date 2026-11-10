@@ -375,6 +375,13 @@ DomainMapper::~DomainMapper()
             std::copy(m_pImpl->m_aStyleRefUINames.begin(), m_pImpl->m_aStyleRefUINames.end(), aNames.getArray());
             aProperties[u"StyleRefUINames"_ustr] <<= aNames;
         }
+        // heading levels referred to as STYLEREF 1 etc., see MSWordExportBase::GetStyleRefName()
+        if (!m_pImpl->m_aStyleRefLevels.empty())
+        {
+            uno::Sequence<OUString> aLevels(m_pImpl->m_aStyleRefLevels.size());
+            std::copy(m_pImpl->m_aStyleRefLevels.begin(), m_pImpl->m_aStyleRefLevels.end(), aLevels.getArray());
+            aProperties[u"StyleRefLevels"_ustr] <<= aLevels;
+        }
 
         // w:pgNumType chapStyle/chapSep per page style, see DocxAttributeOutput::SectionPageNumbering()
         if (!m_pImpl->m_aPageNumberChapters.empty())
