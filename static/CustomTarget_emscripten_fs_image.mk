@@ -1678,6 +1678,9 @@ gb_emscripten_fs_image_files += \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/gallery/fontwork.sdg \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/gallery/fontwork.sdv \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/gallery/fontwork.thm \
+    $(INSTROOT)/$(LIBO_SHARE_FOLDER)/numbertext/en.sor \
+    $(INSTROOT)/$(LIBO_SHARE_FOLDER)/numbertext/ja.sor \
+    $(INSTROOT)/$(LIBO_SHARE_FOLDER)/numbertext/ko.sor \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/registry/cjk.xcd \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/registry/ctlseqcheck.xcd \
     $(INSTROOT)/$(LIBO_SHARE_FOLDER)/registry/ctl.xcd \
