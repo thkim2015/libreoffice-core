@@ -508,7 +508,12 @@ bool ViewOverlayManager::CreateTags()
 
         for( SdrObject* pShape : rShapes )
         {
-            if( pShape->IsEmptyPresObj() && (pShape->GetObjIdentifier() == SdrObjKind::OutlineText) && (pDrawView->GetTextEditObject() != pShape) )
+            // ZETA: a PowerPoint chart, table, SmartArt, online-image or media placeholder is an
+            // outline here too, but offers one kind of content - the UI puts that one icon on it
+            const OUString aMsoType = SdPage::GetMsoPlaceholderType(pShape);
+            const bool bContentOnly = aMsoType == "chart" || aMsoType == "tbl" || aMsoType == "dgm"
+                                      || aMsoType == "clipArt" || aMsoType == "media";
+            if( !bContentOnly && pShape->IsEmptyPresObj() && (pShape->GetObjIdentifier() == SdrObjKind::OutlineText) && (pDrawView->GetTextEditObject() != pShape) )
             {
                 rtl::Reference< SmartTag > xTag( new ChangePlaceholderTag( *mrBase.GetMainViewShell()->GetView(), *pShape ) );
                 maTagVector.push_back(xTag);
