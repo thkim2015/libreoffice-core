@@ -1410,7 +1410,7 @@ void ScInterpreter::ScConcat_MS()
                 if (!aCell.hasEmptyValue())
                 {
                     svl::SharedString aSS;
-                    GetCellString( aSS, aCell);
+                    GetCellStringExcel( aSS, aAdr, aCell); // weboffice: TRUE/FALSE cells as TRUE/FALSE
                     const OUString& rStr = aSS.getString();
                     if (CheckStringResultLen(aResBuf, rStr.getLength()))
                         aResBuf.append( rStr);
@@ -1448,7 +1448,7 @@ void ScInterpreter::ScConcat_MS()
                         if (!aCell.hasEmptyValue() )
                         {
                             svl::SharedString aSS;
-                            GetCellString( aSS, aCell);
+                            GetCellStringExcel( aSS, aAdr, aCell); // weboffice: TRUE/FALSE cells as TRUE/FALSE
                             const OUString& rStr = aSS.getString();
                             if (CheckStringResultLen(aResBuf, rStr.getLength()))
                                 aResBuf.append( rStr);
@@ -1484,7 +1484,7 @@ void ScInterpreter::ScConcat_MS()
                                 {
                                     if ( pMat->IsValue( j, k ) )
                                     {
-                                        OUString aStr = pMat->GetString( mrContext, j, k ).getString();
+                                        OUString aStr = (pMat->IsBoolean( j, k ) ? LogicalString( pMat->GetDouble( j, k ) ) : pMat->GetString( mrContext, j, k ).getString());
                                         if (CheckStringResultLen(aResBuf, aStr.getLength()))
                                             aResBuf.append(aStr);
                                     }
@@ -1535,7 +1535,7 @@ void ScInterpreter::ScTextJoin_MS()
             else
             {
                 svl::SharedString aSS;
-                GetCellString( aSS, aCell);
+                GetCellStringExcel( aSS, aAdr, aCell); // weboffice: TRUE/FALSE cells as TRUE/FALSE
                 aDelimiters.push_back( aSS.getString());
             }
         }
@@ -1573,7 +1573,7 @@ void ScInterpreter::ScTextJoin_MS()
                     else
                     {
                         svl::SharedString aSS;
-                        GetCellString( aSS, aCell);
+                        GetCellStringExcel( aSS, aAdr, aCell); // weboffice: TRUE/FALSE cells as TRUE/FALSE
                         aDelimiters.push_back( aSS.getString());
                     }
                 }
@@ -1602,7 +1602,7 @@ void ScInterpreter::ScTextJoin_MS()
                             else if (pMat->IsStringOrEmpty( j, k ))
                                 aDelimiters.push_back( pMat->GetString( j, k ).getString() );
                             else if (pMat->IsValue( j, k ))
-                                aDelimiters.push_back( pMat->GetString( mrContext, j, k ).getString() );
+                                aDelimiters.push_back( (pMat->IsBoolean( j, k ) ? LogicalString( pMat->GetDouble( j, k ) ) : pMat->GetString( mrContext, j, k ).getString()) );
                             else
                             {
                                 assert(!"should this really happen?");
@@ -1670,7 +1670,7 @@ void ScInterpreter::ScTextJoin_MS()
                 if (!aCell.hasEmptyValue())
                 {
                     svl::SharedString aSS;
-                    GetCellString( aSS, aCell);
+                    GetCellStringExcel( aSS, aAdr, aCell); // weboffice: TRUE/FALSE cells as TRUE/FALSE
                     aStr = aSS.getString();
                 }
                 if ( !aStr.isEmpty() || !bSkipEmpty )
@@ -1725,7 +1725,7 @@ void ScInterpreter::ScTextJoin_MS()
                         else
                         {
                             svl::SharedString aSS;
-                            GetCellString( aSS, aCell);
+                            GetCellStringExcel( aSS, aAdr, aCell); // weboffice: TRUE/FALSE cells as TRUE/FALSE
                             aStr = aSS.getString();
                         }
                         if ( !aStr.isEmpty() || !bSkipEmpty )
@@ -1771,7 +1771,7 @@ void ScInterpreter::ScTextJoin_MS()
                                 else if (pMat->IsStringOrEmpty( j, k ))
                                     aStr = pMat->GetString( j, k ).getString();
                                 else if (pMat->IsValue( j, k ))
-                                    aStr = pMat->GetString( mrContext, j, k ).getString();
+                                    aStr = (pMat->IsBoolean( j, k ) ? LogicalString( pMat->GetDouble( j, k ) ) : pMat->GetString( mrContext, j, k ).getString());
                                 else
                                 {
                                     assert(!"should this really happen?");

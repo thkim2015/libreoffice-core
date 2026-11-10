@@ -48,6 +48,8 @@
 #include <unicode/uchar.h>
 #include <unicode/regex.h>
 #include <i18nlangtag/mslangid.hxx>
+#include <i18nlangtag/languagetag.hxx>
+#include <unotools/wincodepage.hxx> // weboffice: CODE/CHAR
 
 #include <patattr.hxx>
 #include <global.hxx>
@@ -2379,6 +2381,18 @@ void ScInterpreter::ScType()
         case svDoubleRef :
         case svSingleRef :
         {
+            // weboffice: a range of more than one cell is an array (64) in Excel, TYPE(A1:A2)
+            if (GetStackType() == svDoubleRef)
+            {
+                const ScRange aRange = static_cast<const ScDoubleRefToken*>(pStack[sp - 1])->GetDoubleRef().toAbs(mrDoc, aPos);
+                if (aRange.aStart.Col() != aRange.aEnd.Col() || aRange.aStart.Row() != aRange.aEnd.Row()
+                    || aRange.aStart.Tab() != aRange.aEnd.Tab())
+                {
+                    Pop();
+                    nType = 64;
+                    break;
+                }
+            }
             ScAddress aAdr;
             if ( !PopDoubleRefOrSingleRef( aAdr ) )
                 break;
@@ -2407,8 +2421,17 @@ void ScInterpreter::ScType()
                         nType = 1;
                         break;
                     case CELLTYPE_FORMULA :
-                        nType = 8;
-                        break;
+                    {
+                        // weboffice: Excel gives the type of the result (no 8), TRUE/FALSE is 4
+                        ScFormulaCell* pFCell = aCell.getFormula();
+                        if (!pFCell->IsValue())
+                            nType = 2;
+                        else if (IsLogicalCell(aAdr, aCell))
+                            nType = 4;
+                        else
+                            nType = 1;
+                    }
+                    break;
                     default:
                         PushIllegalArgument();
                 }
@@ -2438,6 +2461,12 @@ void ScInterpreter::ScType()
                 nType = 64;
                 // we could return the type of one element if in JumpMatrix or
                 // ForceArray mode, but Xcl doesn't ...
+        break;
+        case svDouble:
+            // weboffice: TYPE(TRUE) and TYPE(1>0) are 4 in Excel
+            nType = static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                    == static_cast<sal_Int16>(SvNumFormatType::LOGICAL) ? 4 : 1;
+            Pop();
         break;
         default:
             PopError();
@@ -3833,32 +3862,76 @@ void ScInterpreter::ScClean()
 }
 
 
+// weboffice: like Excel, CODE/CHAR use the Windows ANSI code page of the locale (Korean CP949, measured:
+// CODE("가")=45217, CHAR(45217)="가", CODE of a character the code page lacks, emoji too, is 63 "?").
+static rtl_TextEncoding lcl_ExcelAnsiEncoding()
+{
+    return utl_getWinTextEncodingFromLangStr(LanguageTag(ScGlobal::eLnge).getBcp47());
+}
+
+static bool lcl_IsDoubleByteEncoding( rtl_TextEncoding eEnc )
+{
+    return eEnc == RTL_TEXTENCODING_MS_932 || eEnc == RTL_TEXTENCODING_MS_936
+           || eEnc == RTL_TEXTENCODING_MS_949 || eEnc == RTL_TEXTENCODING_MS_950;
+}
+
 void ScInterpreter::ScCode()
 {
-//2do: make it full range unicode?
     OUString aStr = GetString().getString();
     if (aStr.isEmpty())
         PushNoValue(); // weboffice: #VALUE! like Excel
     else
     {
-        //"classic" ByteString conversion flags
-        const sal_uInt32 convertFlags =
-            RTL_UNICODETOTEXT_FLAGS_NONSPACING_IGNORE |
-            RTL_UNICODETOTEXT_FLAGS_CONTROL_IGNORE |
-            RTL_UNICODETOTEXT_FLAGS_FLUSH |
-            RTL_UNICODETOTEXT_FLAGS_UNDEFINED_DEFAULT |
-            RTL_UNICODETOTEXT_FLAGS_INVALID_DEFAULT |
-            RTL_UNICODETOTEXT_FLAGS_UNDEFINED_REPLACE;
-        PushInt( static_cast<unsigned char>(OUStringToOString(OUStringChar(aStr[0]), osl_getThreadTextEncoding(), convertFlags).toChar()) );
+        sal_Int32 nIdx = 0;
+        const sal_uInt32 nCodePoint = aStr.iterateCodePoints(&nIdx);
+        OString aBytes;
+        const bool bOk = OUString(&nCodePoint, 1).convertToString(&aBytes, lcl_ExcelAnsiEncoding(),
+            RTL_UNICODETOTEXT_FLAGS_UNDEFINED_ERROR | RTL_UNICODETOTEXT_FLAGS_INVALID_ERROR);
+        if (!bOk || aBytes.isEmpty() || aBytes.getLength() > 2)
+            PushInt(63);
+        else
+        {
+            sal_Int32 nCode = 0;
+            for (sal_Int32 i = 0; i < aBytes.getLength(); ++i)
+                nCode = nCode * 256 + static_cast<unsigned char>(aBytes[i]);
+            PushInt(nCode);
+        }
     }
 }
 
 void ScInterpreter::ScChar()
 {
-//2do: make it full range unicode?
-    double fVal = GetDouble();
-    if (fVal < 0.0 || fVal >= 256.0)
+    double fVal = ::rtl::math::approxFloor(GetDouble());
+    const rtl_TextEncoding eEnc = lcl_ExcelAnsiEncoding();
+    const bool bKorean = eEnc == RTL_TEXTENCODING_MS_949;
+    // weboffice: Excel's CHAR(0) is #VALUE!; Korean Excel (measured) takes CP949 double-byte codes above 0x8100
+    // (lower ones #VALUE!), an undefined one is "?" (lead byte 0xFF U+F8F7), and single bytes 0x81-0xFE are a space.
+    if (fVal < 1.0 || fVal >= (lcl_IsDoubleByteEncoding(eEnc) ? 65536.0 : 256.0) || (bKorean && fVal >= 256.0 && fVal <= 33024.0))
         PushIllegalArgument();
+    else if (fVal >= 256.0)
+    {
+        // a double-byte code: lead byte, trail byte
+        const sal_uInt32 n = static_cast<sal_uInt32>(fVal);
+        const char aBytes[2] = { static_cast<char>(n >> 8), static_cast<char>(n & 0xFF) };
+        OUString aStr;
+        if (!rtl_convertStringToUString(&aStr.pData, aBytes, 2, eEnc,
+                RTL_TEXTTOUNICODE_FLAGS_UNDEFINED_ERROR | RTL_TEXTTOUNICODE_FLAGS_MBUNDEFINED_ERROR
+                | RTL_TEXTTOUNICODE_FLAGS_INVALID_ERROR)
+            || aStr.getLength() != 1)
+        {
+            if (bKorean)
+                PushString((n >> 8) == 0xFF ? u""_ustr : u"?"_ustr);
+            else
+                PushIllegalArgument();
+        }
+        else
+            PushString(aStr);
+    }
+    else if (bKorean && fVal >= 128.0)
+    {
+        const sal_Unicode c = fVal == 128.0 ? 0x80 : (fVal == 255.0 ? 0xFF : 0x20);
+        PushString(OUString(c));
+    }
     else
     {
         //"classic" ByteString conversion flags
@@ -3868,7 +3941,7 @@ void ScInterpreter::ScChar()
             RTL_TEXTTOUNICODE_FLAGS_INVALID_DEFAULT;
 
         char cEncodedChar = static_cast<char>(fVal);
-        OUString aStr(&cEncodedChar, 1,  osl_getThreadTextEncoding(), convertFlags);
+        OUString aStr(&cEncodedChar, 1, eEnc, convertFlags);
         PushString(aStr);
     }
 }
@@ -5854,6 +5927,17 @@ void ScInterpreter::IterateParametersIf( ScIterFuncIf eFunc )
     if ( !MustHaveParamCount( nParamCount, 2, 3 ) )
         return;
 
+    // weboffice: SUMIF/AVERAGEIF with Excel's criteria rules, see ExcelIfsValues
+    if (sp >= nParamCount
+        && (nParamCount == 2 || pStack[sp - 1]->GetType() == svDoubleRef || pStack[sp - 1]->GetType() == svSingleRef)
+        && ExcelCriteriaApplies(2, nParamCount == 3 ? 1 : 0, false))
+    {
+        sc::ParamIfsResult aRes;
+        if (ExcelIfsValues(2, nParamCount == 3 ? 1 : 0, true, aRes))
+            PushDouble(eFunc == ifSUMIF ? aRes.mfSum.get() : sc::div(aRes.mfSum.get(), aRes.mfCount));
+        return;
+    }
+
     SCCOL nCol3 = 0;
     SCROW nRow3 = 0;
     SCTAB nTab3 = 0;
@@ -6788,6 +6872,17 @@ void ScInterpreter::ScCountIf()
 void ScInterpreter::IterateParametersIfs( double(*ResultFunc)( const sc::ParamIfsResult& rRes ) )
 {
     sal_uInt8 nParamCount = GetByte();
+    // weboffice: SUMIFS/AVERAGEIFS/MAXIFS/MINIFS with Excel's criteria rules, see ExcelIfsValues
+    if (nParamCount % 2 == 1 && sp >= nParamCount
+        && (pStack[sp - nParamCount]->GetType() == svDoubleRef || pStack[sp - nParamCount]->GetType() == svSingleRef)
+        && ExcelCriteriaApplies(nParamCount - 1, 0, false))
+    {
+        sc::ParamIfsResult aRes;
+        if (ExcelIfsValues(nParamCount - 1, 2, false, aRes))
+            PushDouble(ResultFunc(aRes));
+        return;
+    }
+
     sal_uInt8 nQueryCount = nParamCount / 2;
 
     std::vector<sal_uInt8>& vConditions = mrContext.maConditions;
@@ -7544,6 +7639,370 @@ void ScInterpreter::ScAverageIfs()
     IterateParametersIfs(ResultFunc);
 }
 
+// weboffice: Excel's criteria rules (the same as COUNTIF, measured): a number matches numbers
+// and texts reading as that number, texts and wildcards only texts, TRUE/FALSE only TRUE/FALSE
+// cells, "<>" every other cell (blank and error ones too), "" blank and empty text cells, "="
+// only blank ones, an error the cells with that error. Ranges must be references of one size.
+// ExcelCriteriaApplies: the nCritParams (range, criterion) pairs below nAbove stack entries can take this path.
+bool ScInterpreter::ExcelCriteriaApplies( sal_uInt8 nCritParams, sal_uInt8 nAbove, bool bAllowArrayRange )
+{
+    if (sp < nCritParams + nAbove)
+        return false;
+    for (sal_uInt8 i = 0; i < nCritParams; i += 2)
+    {
+        const StackVar eRange = pStack[sp - nAbove - nCritParams + i]->GetType();
+        const StackVar eCrit = pStack[sp - nAbove - nCritParams + i + 1]->GetType();
+        if (eRange == svMatrix && bAllowArrayRange)
+            continue; // #VALUE! in ExcelCriteriaMask
+        if (eRange != svDoubleRef && eRange != svSingleRef)
+            return false;
+        if (eCrit == svMatrix || eCrit == svRefList || eCrit == svExternalSingleRef || eCrit == svExternalDoubleRef)
+            return false;
+    }
+    return true;
+}
+
+// ExcelCriteriaMask pops the pairs from the stack top: rMask (column-major, the first range's size) marks the
+// positions every criterion matches, rFirst is the first criteria range. False when it pushed an error.
+bool ScInterpreter::ExcelCriteriaMask( sal_uInt8 nCritParams, std::vector<char>& rMask, ScRange& rFirst )
+{
+    struct Criterion
+    {
+        int nOp = 0;                // 0 =, 1 <>, 2 <, 3 <=, 4 >, 5 >=
+        bool bExplicitOp = false;
+        bool bLogical = false;      // TRUE/FALSE criterion
+        bool bLogicalValue = false;
+        bool bError = false;
+        FormulaError eError = FormulaError::NONE;
+        bool bNumber = false;
+        double fNumber = 0.0;
+        bool bEmpty = false;
+        OUString aText, aTextLower;
+    };
+    auto lcl_ParseString = [this](const OUString& rStr, Criterion& rCrit)
+    {
+        OUString aRest = rStr;
+        static const std::pair<std::u16string_view, int> aOps[] = {
+            { u"<>", 1 }, { u"<=", 3 }, { u">=", 5 }, { u"<", 2 }, { u">", 4 }, { u"=", 0 } };
+        for (const auto& [aSym, n] : aOps)
+            if (aRest.startsWith(aSym))
+            {
+                rCrit.nOp = n;
+                rCrit.bExplicitOp = true;
+                aRest = aRest.copy(aSym.size());
+                break;
+            }
+        const OUString aTrim = aRest.trim();
+        if (aTrim.equalsIgnoreAsciiCase(u"TRUE") || aTrim.equalsIgnoreAsciiCase(u"FALSE"))
+        {
+            rCrit.bLogical = true;
+            rCrit.bLogicalValue = aTrim.equalsIgnoreAsciiCase(u"TRUE");
+            return;
+        }
+        // an error name ("#N/A", "<>#DIV/0!") matches the cells with that error (measured)
+        if ((rCrit.nOp == 0 || rCrit.nOp == 1) && aRest.startsWith(u"#"))
+        {
+            static const FormulaError aErrors[] = { FormulaError::NotAvailable, FormulaError::DivisionByZero,
+                FormulaError::NoValue, FormulaError::NoRef, FormulaError::NoName, FormulaError::IllegalFPOperation,
+                FormulaError::NoCode, FormulaError::Spill, FormulaError::NestedArray };
+            for (FormulaError eErr : aErrors)
+                if (aRest.equalsIgnoreAsciiCase(ScGlobal::GetErrorString(eErr)))
+                {
+                    rCrit.bError = true;
+                    rCrit.eError = eErr;
+                    return;
+                }
+        }
+        rCrit.aText = aRest;
+        rCrit.aTextLower = ScGlobal::getCharClass().lowercase(aRest);
+        rCrit.bEmpty = aRest.isEmpty();
+        sal_uInt32 nFormat = 0;
+        rCrit.bNumber = !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, rCrit.fNumber);
+    };
+    std::vector<std::pair<ScRange, Criterion>> aPairs(nCritParams / 2);
+    bool bArrayRange = false;
+    for (sal_Int32 k = nCritParams / 2 - 1; k >= 0; --k)
+    {
+        Criterion& rCrit = aPairs[k].second;
+        switch (GetRawStackType())
+        {
+            case svError:
+                rCrit.bError = true;
+                rCrit.eError = static_cast<const FormulaErrorToken*>(pStack[sp - 1])->GetError();
+                Pop();
+                break;
+            case svMissing:
+            case svEmptyCell:
+                Pop();
+                rCrit.bNumber = true;
+                break;
+            case svDouble:
+            {
+                const bool bLogicalToken = static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                                           == static_cast<sal_Int16>(SvNumFormatType::LOGICAL);
+                const double f = GetDouble();
+                if (bLogicalToken)
+                {
+                    rCrit.bLogical = true;
+                    rCrit.bLogicalValue = f != 0.0;
+                }
+                else
+                {
+                    rCrit.bNumber = true;
+                    rCrit.fNumber = f;
+                }
+            }
+            break;
+            case svSingleRef:
+            case svDoubleRef:
+            {
+                ScAddress aAdr;
+                if (!PopDoubleRefOrSingleRef(aAdr))
+                {
+                    rCrit.bNumber = true;
+                    break;
+                }
+                ScRefCellValue aCell(mrDoc, aAdr);
+                if (aCell.isEmpty())
+                    rCrit.bNumber = true;   // a blank criterion cell is 0
+                else if (aCell.hasError())
+                {
+                    rCrit.bError = true;
+                    rCrit.eError = aCell.getFormula()->GetErrCode();
+                }
+                else if ((aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                         && IsLogicalCell(aAdr, aCell))
+                {
+                    rCrit.bLogical = true;
+                    rCrit.bLogicalValue = aCell.getValue() != 0.0;
+                }
+                else if (aCell.hasNumeric())
+                {
+                    rCrit.bNumber = true;
+                    rCrit.fNumber = aCell.getValue();
+                }
+                else
+                    lcl_ParseString(aCell.getString(mrDoc), rCrit);
+            }
+            break;
+            default:
+                lcl_ParseString(GetString().getString(), rCrit);
+        }
+        nGlobalError = FormulaError::NONE;
+        if (GetStackType() == svMatrix)
+        {
+            Pop();
+            bArrayRange = true;
+            continue;
+        }
+        if (GetStackType() == svSingleRef)
+        {
+            ScAddress aAdr;
+            PopSingleRef(aAdr);
+            aPairs[k].first = ScRange(aAdr);
+        }
+        else
+            PopDoubleRef(aPairs[k].first);
+    }
+    if (bArrayRange)
+    {
+        PushNoValue();
+        return false;
+    }
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return false;
+    }
+    const SCCOL nCols = aPairs[0].first.aEnd.Col() - aPairs[0].first.aStart.Col() + 1;
+    const SCROW nRows = aPairs[0].first.aEnd.Row() - aPairs[0].first.aStart.Row() + 1;
+    for (const auto& rPair : aPairs)
+        if (rPair.first.aEnd.Col() - rPair.first.aStart.Col() + 1 != nCols
+            || rPair.first.aEnd.Row() - rPair.first.aStart.Row() + 1 != nRows
+            || rPair.first.aStart.Tab() != rPair.first.aEnd.Tab())
+        {
+            PushNoValue();
+            return false;
+        }
+    CollatorWrapper& rCollator = ScGlobal::GetCollator();
+    auto lcl_Rel = [](int nOp, sal_Int32 nCmp)
+    {
+        switch (nOp)
+        {
+            case 0: return nCmp == 0;
+            case 1: return nCmp != 0;
+            case 2: return nCmp < 0;
+            case 3: return nCmp <= 0;
+            case 4: return nCmp > 0;
+            default: return nCmp >= 0;
+        }
+    };
+    auto lcl_Match = [&](const Criterion& rCrit, const ScAddress& rPos, ScRefCellValue rCell) -> bool
+    {
+        if (rCell.isEmpty())
+        {
+            if (rCrit.bError)
+                return rCrit.nOp == 1;
+            if (rCrit.bLogical)
+                return rCrit.nOp == 1;
+            if (rCrit.bEmpty)
+                return rCrit.nOp == 0;
+            return rCrit.nOp == 1;
+        }
+        if (rCell.hasError())
+        {
+            if (rCrit.bError)
+                return (rCell.getFormula()->GetErrCode() == rCrit.eError) == (rCrit.nOp == 0);
+            return rCrit.nOp == 1;
+        }
+        if (rCrit.bError)
+            return rCrit.nOp == 1;
+        const bool bLogicalCell = (rCell.getType() == CELLTYPE_VALUE || rCell.getType() == CELLTYPE_FORMULA)
+                                  && IsLogicalCell(rPos, rCell);
+        if (bLogicalCell)
+        {
+            if (rCrit.bLogical)
+            {
+                const bool b = rCell.getValue() != 0.0;
+                return lcl_Rel(rCrit.nOp, b == rCrit.bLogicalValue ? 0 : (b ? 1 : -1));
+            }
+            return rCrit.nOp == 1;
+        }
+        if (rCrit.bLogical)
+            return rCrit.nOp == 1;
+        if (rCell.hasNumeric())
+        {
+            if (rCrit.bEmpty)
+                return rCrit.nOp == 1;
+            if (!rCrit.bNumber)
+                return rCrit.nOp == 1;
+            const double f = rCell.getValue();
+            return lcl_Rel(rCrit.nOp, rtl::math::approxEqual(f, rCrit.fNumber) ? 0 : (f < rCrit.fNumber ? -1 : 1));
+        }
+        // text
+        const OUString aText = rCell.getString(mrDoc);
+        if (rCrit.bEmpty)
+        {
+            if (rCrit.nOp == 0)
+                return !rCrit.bExplicitOp && aText.isEmpty();
+            return rCrit.nOp == 1;
+        }
+        if (rCrit.bNumber)
+        {
+            if (rCrit.nOp == 0)
+            {
+                sal_uInt32 nFormat = 0;
+                double fText = 0.0;
+                const OUString aTrim = aText.trim();
+                return !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, fText)
+                       && rtl::math::approxEqual(fText, rCrit.fNumber);
+            }
+            return rCrit.nOp == 1;
+        }
+        if (rCrit.nOp == 0 || rCrit.nOp == 1)
+        {
+            const bool bEq = lcl_ExcelWildcardMatch(rCrit.aTextLower, ScGlobal::getCharClass().lowercase(aText));
+            return rCrit.nOp == 0 ? bEq : !bEq;
+        }
+        return lcl_Rel(rCrit.nOp, rCollator.compareString(aText, rCrit.aText));
+    };
+    const size_t nSize = static_cast<size_t>(nCols) * nRows;
+    rMask.assign(nSize, 1);
+    for (const auto& [rRange, rCrit] : aPairs)
+    {
+        // a blank cell matches or not for the whole range; then the non-blank cells
+        ScRefCellValue aBlank;
+        const char nBlank = lcl_Match(rCrit, rRange.aStart, aBlank) ? 1 : 0;
+        std::vector<char> aThis(nSize, nBlank);
+        ScCellIterator aIter(mrDoc, rRange);
+        for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+        {
+            const ScAddress& rPos = aIter.GetPos();
+            const size_t nIdx = static_cast<size_t>(rPos.Col() - rRange.aStart.Col()) * nRows
+                                + (rPos.Row() - rRange.aStart.Row());
+            aThis[nIdx] = lcl_Match(rCrit, rPos, aIter.getRefCellValue()) ? 1 : 0;
+        }
+        for (size_t i = 0; i < nSize; ++i)
+            rMask[i] &= aThis[i];
+    }
+    rFirst = aPairs[0].first;
+    return true;
+}
+
+// weboffice: SUMIF(S)/AVERAGEIF(S)/MAXIFS/MINIFS by Excel's rules (measured): at the positions ExcelCriteriaMask
+// matches, only number cells of the value range count, not TRUE/FALSE or text ones, and an error cell is the result.
+// The value range is the criteria range itself (eValues 0), on the stack top (1, SUMIF) or below the pairs (2, SUMIFS).
+// bResize: SUMIF/AVERAGEIF take the criteria range's size from the value range's top-left cell; otherwise the sizes
+// must be the same (#VALUE!).
+bool ScInterpreter::ExcelIfsValues( sal_uInt8 nCritParams, int eValues, bool bResize, sc::ParamIfsResult& rRes )
+{
+    auto lcl_PopRange = [this](ScRange& rRange)
+    {
+        if (GetStackType() == svSingleRef)
+        {
+            ScAddress aAdr;
+            PopSingleRef(aAdr);
+            rRange = ScRange(aAdr);
+        }
+        else
+            PopDoubleRef(rRange);
+    };
+    ScRange aValues;
+    if (eValues == 1)
+        lcl_PopRange(aValues);
+    std::vector<char> aMask;
+    ScRange aFirst;
+    if (!ExcelCriteriaMask(nCritParams, aMask, aFirst))
+        return false;
+    if (eValues == 2)
+        lcl_PopRange(aValues);
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return false;
+    }
+    const SCCOL nCols = aFirst.aEnd.Col() - aFirst.aStart.Col() + 1;
+    const SCROW nRows = aFirst.aEnd.Row() - aFirst.aStart.Row() + 1;
+    if (eValues == 0)
+        aValues = aFirst;
+    else if (bResize)
+    {
+        aValues.aEnd.SetCol(std::min<SCCOL>(aValues.aStart.Col() + nCols - 1, mrDoc.MaxCol()));
+        aValues.aEnd.SetRow(std::min<SCROW>(aValues.aStart.Row() + nRows - 1, mrDoc.MaxRow()));
+        aValues.aEnd.SetTab(aValues.aStart.Tab());
+    }
+    else if (aValues.aEnd.Col() - aValues.aStart.Col() + 1 != nCols
+             || aValues.aEnd.Row() - aValues.aStart.Row() + 1 != nRows
+             || aValues.aStart.Tab() != aValues.aEnd.Tab())
+    {
+        PushNoValue();
+        return false;
+    }
+    ScCellIterator aIter(mrDoc, aValues);
+    for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+    {
+        const ScAddress& rPos = aIter.GetPos();
+        const size_t nIdx = static_cast<size_t>(rPos.Col() - aValues.aStart.Col()) * nRows
+                            + (rPos.Row() - aValues.aStart.Row());
+        if (nIdx >= aMask.size() || !aMask[nIdx])
+            continue;
+        ScRefCellValue aCell = aIter.getRefCellValue();
+        if (aCell.hasError())
+        {
+            PushError(aCell.getFormula()->GetErrCode());
+            return false;
+        }
+        if (!aCell.hasNumeric() || IsLogicalCell(rPos, aCell))
+            continue;
+        const double f = aCell.getValue();
+        rRes.mfSum += f;
+        rRes.mfCount += 1.0;
+        rRes.mfMin = std::min(rRes.mfMin, f);
+        rRes.mfMax = std::max(rRes.mfMax, f);
+    }
+    return true;
+}
+
 void ScInterpreter::ScCountIfs()
 {
     sal_uInt8 nParamCount = GetByte();
@@ -7554,269 +8013,13 @@ void ScInterpreter::ScCountIfs()
         return;
     }
 
-    // weboffice: Excel's criteria rules (the same as COUNTIF, measured): a number matches numbers
-    // and texts reading as that number, texts and wildcards only texts, TRUE/FALSE only TRUE/FALSE
-    // cells, "<>" every other cell (blank and error ones too), "" blank and empty text cells, "="
-    // only blank ones, an error the cells with that error. Ranges must be references of one size.
-    bool bExcelPath = sp >= nParamCount;
-    for (sal_uInt8 i = 0; bExcelPath && i < nParamCount; i += 2)
+    // weboffice: Excel's criteria rules, see ExcelCriteriaMask
+    if (ExcelCriteriaApplies(nParamCount, 0, true))
     {
-        const StackVar eRange = pStack[sp - nParamCount + i]->GetType();
-        const StackVar eCrit = pStack[sp - nParamCount + i + 1]->GetType();
-        if (eRange == svMatrix)
-            continue; // #VALUE! below
-        if (eRange != svDoubleRef && eRange != svSingleRef)
-            bExcelPath = false;
-        if (eCrit == svMatrix || eCrit == svRefList || eCrit == svExternalSingleRef || eCrit == svExternalDoubleRef)
-            bExcelPath = false;
-    }
-    if (bExcelPath)
-    {
-        struct Criterion
-        {
-            int nOp = 0;                // 0 =, 1 <>, 2 <, 3 <=, 4 >, 5 >=
-            bool bExplicitOp = false;
-            bool bLogical = false;      // TRUE/FALSE criterion
-            bool bLogicalValue = false;
-            bool bError = false;
-            FormulaError eError = FormulaError::NONE;
-            bool bNumber = false;
-            double fNumber = 0.0;
-            bool bEmpty = false;
-            OUString aText, aTextLower;
-        };
-        auto lcl_ParseString = [this](const OUString& rStr, Criterion& rCrit)
-        {
-            OUString aRest = rStr;
-            static const std::pair<std::u16string_view, int> aOps[] = {
-                { u"<>", 1 }, { u"<=", 3 }, { u">=", 5 }, { u"<", 2 }, { u">", 4 }, { u"=", 0 } };
-            for (const auto& [aSym, n] : aOps)
-                if (aRest.startsWith(aSym))
-                {
-                    rCrit.nOp = n;
-                    rCrit.bExplicitOp = true;
-                    aRest = aRest.copy(aSym.size());
-                    break;
-                }
-            const OUString aTrim = aRest.trim();
-            if (aTrim.equalsIgnoreAsciiCase(u"TRUE") || aTrim.equalsIgnoreAsciiCase(u"FALSE"))
-            {
-                rCrit.bLogical = true;
-                rCrit.bLogicalValue = aTrim.equalsIgnoreAsciiCase(u"TRUE");
-                return;
-            }
-            rCrit.aText = aRest;
-            rCrit.aTextLower = ScGlobal::getCharClass().lowercase(aRest);
-            rCrit.bEmpty = aRest.isEmpty();
-            sal_uInt32 nFormat = 0;
-            rCrit.bNumber = !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, rCrit.fNumber);
-        };
-        std::vector<std::pair<ScRange, Criterion>> aPairs(nParamCount / 2);
-        bool bArrayRange = false;
-        for (sal_Int32 k = nParamCount / 2 - 1; k >= 0; --k)
-        {
-            Criterion& rCrit = aPairs[k].second;
-            switch (GetRawStackType())
-            {
-                case svError:
-                    rCrit.bError = true;
-                    rCrit.eError = static_cast<const FormulaErrorToken*>(pStack[sp - 1])->GetError();
-                    Pop();
-                    break;
-                case svMissing:
-                case svEmptyCell:
-                    Pop();
-                    rCrit.bNumber = true;
-                    break;
-                case svDouble:
-                {
-                    const bool bLogicalToken = static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
-                                               == static_cast<sal_Int16>(SvNumFormatType::LOGICAL);
-                    const double f = GetDouble();
-                    if (bLogicalToken)
-                    {
-                        rCrit.bLogical = true;
-                        rCrit.bLogicalValue = f != 0.0;
-                    }
-                    else
-                    {
-                        rCrit.bNumber = true;
-                        rCrit.fNumber = f;
-                    }
-                }
-                break;
-                case svSingleRef:
-                case svDoubleRef:
-                {
-                    ScAddress aAdr;
-                    if (!PopDoubleRefOrSingleRef(aAdr))
-                    {
-                        rCrit.bNumber = true;
-                        break;
-                    }
-                    ScRefCellValue aCell(mrDoc, aAdr);
-                    if (aCell.isEmpty())
-                        rCrit.bNumber = true;   // a blank criterion cell is 0
-                    else if (aCell.hasError())
-                    {
-                        rCrit.bError = true;
-                        rCrit.eError = aCell.getFormula()->GetErrCode();
-                    }
-                    else if ((aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
-                             && IsLogicalCell(aAdr, aCell))
-                    {
-                        rCrit.bLogical = true;
-                        rCrit.bLogicalValue = aCell.getValue() != 0.0;
-                    }
-                    else if (aCell.hasNumeric())
-                    {
-                        rCrit.bNumber = true;
-                        rCrit.fNumber = aCell.getValue();
-                    }
-                    else
-                        lcl_ParseString(aCell.getString(mrDoc), rCrit);
-                }
-                break;
-                default:
-                    lcl_ParseString(GetString().getString(), rCrit);
-            }
-            nGlobalError = FormulaError::NONE;
-            if (GetStackType() == svMatrix)
-            {
-                Pop();
-                bArrayRange = true;
-                continue;
-            }
-            if (GetStackType() == svSingleRef)
-            {
-                ScAddress aAdr;
-                PopSingleRef(aAdr);
-                aPairs[k].first = ScRange(aAdr);
-            }
-            else
-                PopDoubleRef(aPairs[k].first);
-        }
-        if (bArrayRange)
-        {
-            PushNoValue();
+        std::vector<char> aMask;
+        ScRange aFirst;
+        if (!ExcelCriteriaMask(nParamCount, aMask, aFirst))
             return;
-        }
-        if (nGlobalError != FormulaError::NONE)
-        {
-            PushError(nGlobalError);
-            return;
-        }
-        const SCCOL nCols = aPairs[0].first.aEnd.Col() - aPairs[0].first.aStart.Col() + 1;
-        const SCROW nRows = aPairs[0].first.aEnd.Row() - aPairs[0].first.aStart.Row() + 1;
-        for (const auto& rPair : aPairs)
-            if (rPair.first.aEnd.Col() - rPair.first.aStart.Col() + 1 != nCols
-                || rPair.first.aEnd.Row() - rPair.first.aStart.Row() + 1 != nRows
-                || rPair.first.aStart.Tab() != rPair.first.aEnd.Tab())
-            {
-                PushNoValue();
-                return;
-            }
-        CollatorWrapper& rCollator = ScGlobal::GetCollator();
-        auto lcl_Rel = [](int nOp, sal_Int32 nCmp)
-        {
-            switch (nOp)
-            {
-                case 0: return nCmp == 0;
-                case 1: return nCmp != 0;
-                case 2: return nCmp < 0;
-                case 3: return nCmp <= 0;
-                case 4: return nCmp > 0;
-                default: return nCmp >= 0;
-            }
-        };
-        auto lcl_Match = [&](const Criterion& rCrit, const ScAddress& rPos, ScRefCellValue rCell) -> bool
-        {
-            if (rCell.isEmpty())
-            {
-                if (rCrit.bError)
-                    return false;
-                if (rCrit.bLogical)
-                    return rCrit.nOp == 1;
-                if (rCrit.bEmpty)
-                    return rCrit.nOp == 0;
-                return rCrit.nOp == 1;
-            }
-            if (rCell.hasError())
-            {
-                if (rCrit.bError)
-                    return rCrit.nOp == 0 && rCell.getFormula()->GetErrCode() == rCrit.eError;
-                return rCrit.nOp == 1;
-            }
-            if (rCrit.bError)
-                return false;
-            const bool bLogicalCell = (rCell.getType() == CELLTYPE_VALUE || rCell.getType() == CELLTYPE_FORMULA)
-                                      && IsLogicalCell(rPos, rCell);
-            if (bLogicalCell)
-            {
-                if (rCrit.bLogical)
-                {
-                    const bool b = rCell.getValue() != 0.0;
-                    return lcl_Rel(rCrit.nOp, b == rCrit.bLogicalValue ? 0 : (b ? 1 : -1));
-                }
-                return rCrit.nOp == 1;
-            }
-            if (rCrit.bLogical)
-                return rCrit.nOp == 1;
-            if (rCell.hasNumeric())
-            {
-                if (rCrit.bEmpty)
-                    return rCrit.nOp == 1;
-                if (!rCrit.bNumber)
-                    return rCrit.nOp == 1;
-                const double f = rCell.getValue();
-                return lcl_Rel(rCrit.nOp, rtl::math::approxEqual(f, rCrit.fNumber) ? 0 : (f < rCrit.fNumber ? -1 : 1));
-            }
-            // text
-            const OUString aText = rCell.getString(mrDoc);
-            if (rCrit.bEmpty)
-            {
-                if (rCrit.nOp == 0)
-                    return !rCrit.bExplicitOp && aText.isEmpty();
-                return rCrit.nOp == 1;
-            }
-            if (rCrit.bNumber)
-            {
-                if (rCrit.nOp == 0)
-                {
-                    sal_uInt32 nFormat = 0;
-                    double fText = 0.0;
-                    const OUString aTrim = aText.trim();
-                    return !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, fText)
-                           && rtl::math::approxEqual(fText, rCrit.fNumber);
-                }
-                return rCrit.nOp == 1;
-            }
-            if (rCrit.nOp == 0 || rCrit.nOp == 1)
-            {
-                const bool bEq = lcl_ExcelWildcardMatch(rCrit.aTextLower, ScGlobal::getCharClass().lowercase(aText));
-                return rCrit.nOp == 0 ? bEq : !bEq;
-            }
-            return lcl_Rel(rCrit.nOp, rCollator.compareString(aText, rCrit.aText));
-        };
-        const size_t nSize = static_cast<size_t>(nCols) * nRows;
-        std::vector<char> aMask(nSize, 1);
-        for (const auto& [rRange, rCrit] : aPairs)
-        {
-            // a blank cell matches or not for the whole range; then the non-blank cells
-            ScRefCellValue aBlank;
-            const char nBlank = lcl_Match(rCrit, rRange.aStart, aBlank) ? 1 : 0;
-            std::vector<char> aThis(nSize, nBlank);
-            ScCellIterator aIter(mrDoc, rRange);
-            for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
-            {
-                const ScAddress& rPos = aIter.GetPos();
-                const size_t nIdx = static_cast<size_t>(rPos.Col() - rRange.aStart.Col()) * nRows
-                                    + (rPos.Row() - rRange.aStart.Row());
-                aThis[nIdx] = lcl_Match(rCrit, rPos, aIter.getRefCellValue()) ? 1 : 0;
-            }
-            for (size_t i = 0; i < nSize; ++i)
-                aMask[i] &= aThis[i];
-        }
         double fHits = 0.0;
         for (char c : aMask)
             fHits += c;
@@ -15603,6 +15806,13 @@ void ScInterpreter::ScErrorType_ODF()
             break;
         case FormulaError::NotAvailable :       // #N/A
             nErrType = 7;
+            break;
+        // weboffice: Excel ERROR.TYPE of #SPILL! (#분산! in Korean Excel) and #CALC!
+        case FormulaError::Spill :
+            nErrType = 9;
+            break;
+        case FormulaError::NestedArray :        // #CALC!
+            nErrType = 14;
             break;
         /*
         #GETTING_DATA is a message that can appear in Excel when a large or
