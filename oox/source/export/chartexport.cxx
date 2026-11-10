@@ -7213,6 +7213,38 @@ OUString ChartExport::getNumberFormatCode(sal_Int32 nKey) const
     aTempFormatter.FillKeywordTableForExcel( aKeywords);
     aCode = pNumberFormatter->GetFormatStringForExcel( nKey, aKeywords, aTempFormatter);
 
+    // ZetaOffice: the formatter writes single literal characters escaped (0\k); Excel's chart
+    // number formats quote them (0"k"). Turn runs of escaped characters back into a quoted text.
+    if (aCode.indexOf('\\') >= 0)
+    {
+        OUStringBuffer aBuf(aCode.getLength() + 4);
+        bool bInQuote = false;
+        for (sal_Int32 n = 0; n < aCode.getLength(); ++n)
+        {
+            const sal_Unicode c = aCode[n];
+            if (c == '"')
+                bInQuote = !bInQuote;
+            if (bInQuote || c != '\\' || n + 1 >= aCode.getLength() || aCode[n + 1] == '"'
+                || aCode[n + 1] == ' ' || aCode[n + 1] == '\\')
+            {
+                aBuf.append(c);
+                if (!bInQuote && c == '\\' && n + 1 < aCode.getLength())
+                    aBuf.append(aCode[++n]);
+                continue;
+            }
+            aBuf.append('"');
+            while (n + 1 < aCode.getLength() && aCode[n] == '\\' && aCode[n + 1] != '"'
+                   && aCode[n + 1] != ' ' && aCode[n + 1] != '\\')
+            {
+                aBuf.append(aCode[n + 1]);
+                n += 2;
+            }
+            aBuf.append('"');
+            --n;
+        }
+        aCode = aBuf.makeStringAndClear();
+    }
+
     return aCode;
 }
 
