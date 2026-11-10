@@ -3599,6 +3599,18 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
         {
             ww::eField eField = ww::eEquals;
             OUString aExpand = OUString::Concat(" =") + o3tl::trim(pField->GetFieldName());
+            // A simple numeric number format (e.g. imported from \# "0.00") as the \# picture
+            const sal_uInt32 nFormat = pField->GetUntypedFormat();
+            if (nFormat % SV_COUNTRY_LANGUAGE_OFFSET != 0)
+            {
+                const SvNumberformat* pEntry = GetExport().m_rDoc.GetNumberFormatter()->GetEntry(nFormat);
+                const OUString sPicture = pEntry ? pEntry->GetFormatstring() : OUString();
+                if (!sPicture.isEmpty()
+                    && (pEntry->GetType() & (SvNumFormatType::NUMBER | SvNumFormatType::PERCENT))
+                    && std::all_of(sPicture.getStr(), sPicture.getStr() + sPicture.getLength(),
+                                   [](sal_Unicode c) { return OUString(u"0#,.;%$+-() ").indexOf(c) >= 0; }))
+                    aExpand += " \\# \"" + sPicture + "\"";
+            }
             GetExport().OutputField(pField, eField, aExpand);
         }
         break;

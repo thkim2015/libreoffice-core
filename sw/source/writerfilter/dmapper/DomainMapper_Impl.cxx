@@ -7124,12 +7124,42 @@ void DomainMapper_Impl::handleFieldFormula
 {
     OUString command = pContext->GetCommand().trim();
 
-    //  Remove number formatting from \# to end of command
-    //  TODO: handle custom number formatting
+    //  Remove number formatting from \# to end of command; keep a simple numeric picture
+    //  (0.00, #,##0, 0% ...) as the number format of the field
     sal_Int32 delimPos = command.indexOf("\\#");
+    OUString sPicture;
     if (delimPos != -1)
     {
+        sPicture = command.copy(delimPos + 2).trim();
+        if (sPicture.startsWith("\""))
+        {
+            const sal_Int32 nClose = sPicture.indexOf('"', 1);
+            sPicture = nClose > 0 ? sPicture.copy(1, nClose - 1) : OUString();
+        }
+        else
+            sPicture = sPicture.getToken(0, ' ');
         command = command.replaceAt(delimPos, command.getLength() - delimPos, u"").trim();
+    }
+    sal_Int32 nNumberFormat = 0;
+    if (!sPicture.isEmpty() && m_xTextDocument
+        && std::all_of(sPicture.getStr(), sPicture.getStr() + sPicture.getLength(),
+                       [](sal_Unicode c) { return OUString(u"0#,.;%$+-() ").indexOf(c) >= 0; }))
+    {
+        try
+        {
+            uno::Reference<util::XNumberFormatsSupplier> xSupplier(
+                static_cast<cppu::OWeakObject*>(m_xTextDocument.get()), uno::UNO_QUERY_THROW);
+            uno::Reference<util::XNumberFormats> xFormats = xSupplier->getNumberFormats();
+            const lang::Locale aUSLocale(u"en"_ustr, u"US"_ustr, OUString());
+            sal_Int32 nKey = xFormats->queryKey(sPicture, aUSLocale, false);
+            if (nKey < 0)
+                nKey = xFormats->addNew(sPicture, aUSLocale);
+            if (nKey > 0)
+                nNumberFormat = nKey;
+        }
+        catch (const uno::Exception&)
+        {
+        }
     }
 
     // command must contains = and at least another char
@@ -7140,7 +7170,7 @@ void DomainMapper_Impl::handleFieldFormula
     OUString formula = convertFieldFormula(command.copy(1));
 
     xFieldProperties->setPropertyValue(getPropertyName(PROP_CONTENT), uno::Any(formula));
-    xFieldProperties->setPropertyValue(getPropertyName(PROP_NUMBER_FORMAT), uno::Any(sal_Int32(0)));
+    xFieldProperties->setPropertyValue(getPropertyName(PROP_NUMBER_FORMAT), uno::Any(nNumberFormat));
     xFieldProperties->setPropertyValue(u"IsShowFormula"_ustr, uno::Any(false));
 
     // grab-bag the original and converted formula
@@ -8209,6 +8239,20 @@ void DomainMapper_Impl::CloseFieldCommand()
                 = !msfilter::util::ParseCombinedChars(aEqCommand).sType.isEmpty()
                   || aEqArgs.startsWith("\\s\\do") || aEqArgs.startsWith("\\* jc");
             bEnclosedEq = aEqCommand.toAsciiLowerCase().indexOf("\\ac") >= 0 || !bConverted;
+        }
+        // Document information fields with a case switch (\* Upper, Lower, Caps, FirstCap):
+        // Writer fields can not change the case, so keep the code and Word's result the same way.
+        // FILENAME too: in the web office the Writer field would show the temporary file path.
+        else if (sType == "FILENAME")
+            bEnclosedEq = true;
+        else if (sType == "AUTHOR" || sType == "TITLE" || sType == "SUBJECT" || sType == "KEYWORDS"
+                 || sType == "COMMENTS" || sType == "USERNAME" || sType == "LASTSAVEDBY"
+                 || sType == "TEMPLATE")
+        {
+            const OUString aLower = pContext->GetCommand().toAsciiLowerCase();
+            for (std::u16string_view aSwitch : { u"\\* upper", u"\\* lower", u"\\* caps", u"\\* firstcap" })
+                if (aLower.indexOf(aSwitch) >= 0)
+                    bEnclosedEq = true;
         }
         if (aIt != aFieldConversionMap.end() && !bEnclosedEq
             && (!m_bForceGenericFields
