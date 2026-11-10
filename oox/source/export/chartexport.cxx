@@ -3502,6 +3502,9 @@ void ChartExport::exportAreaChart( const Reference< chart2::XChartType >& xChart
         pFS->startElement(FSNS(XML_c, nTypeId));
 
         exportGrouping();
+        // ZETA: without c:varyColors Excel takes the schema default (true) and reports
+        // "vary colors by point" on for every area chart.
+        exportVaryColors(xChartType);
         bool bPrimaryAxes = true;
         if (splitDataSeries.hasElements())
             exportSeries_chart(xChartType, splitDataSeries, bPrimaryAxes);
