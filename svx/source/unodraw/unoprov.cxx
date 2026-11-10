@@ -765,6 +765,8 @@ static std::span<SfxItemPropertyMapEntry const> ImplGetSvxTableShapePropertyMap(
         { u"UseBandingRowStyle"_ustr,           OWN_ATTR_TABLETEMPLATE_BANDINGROWS, cppu::UnoType<bool>::get(),0, 0},
         { u"UseBandingColumnStyle"_ustr,        OWN_ATTR_TABLETEMPLATE_BANDINGCOLUMNS, cppu::UnoType<bool>::get(),0, 0},
         { u"ReplacementGraphic"_ustr,           OWN_ATTR_REPLACEMENT_GRAPHIC, cppu::UnoType<css::graphic::XGraphic>::get(), css::beans::PropertyAttribute::READONLY, 0},
+        // ZETA: a table keeps the PowerPoint placeholder it filled (mso-ph) for PPTX export
+        { UNO_NAME_MISC_OBJ_INTEROPGRABBAG,     OWN_ATTR_INTEROPGRABBAG, cppu::UnoType<css::uno::Sequence< css::beans::PropertyValue >>::get(), 0, 0},
     };
 
     return aTableShapePropertyMap_Impl;
