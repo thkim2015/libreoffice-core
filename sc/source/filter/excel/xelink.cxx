@@ -32,7 +32,6 @@
 #include <scextopt.hxx>
 #include <externalrefmgr.hxx>
 #include <tokenarray.hxx>
-#include <compiler.hxx>
 #include <xecontent.hxx>
 #include <xeformula.hxx>
 #include <xehelper.hxx>
@@ -1049,38 +1048,35 @@ void XclExpExtName::SaveXml(XclExpXmlStream& rStrm)
     to export it without the external document identifier. */
     if (mpArray->GetLen())
     {
-        OUString aFormula;
-        // ZETA: a name that is one reference into the external book is written the way Excel
-        // writes it, with the sheet of that book and without a document part ("='Src'!$A$1:$A$5").
-        if (const formula::FormulaToken* p = mpArray->GetLen() == 1 ? mpArray->FirstToken() : nullptr;
-            p && (p->GetType() == formula::svExternalSingleRef || p->GetType() == formula::svExternalDoubleRef))
+        OUString aFormula = XclXmlUtils::ToOUString(GetCompileFormulaContext(), ScAddress(0, 0, 0), mpArray.get());
+        // ZETA: write the name the way Excel writes it: with the sheets of the external book, without
+        // the document part, and with a leading '=' ("[1]Src!$A$1:$A$5" -> "=Src!$A$1:$A$5").
+        // Sheet names cannot contain brackets, so every "[n]" outside a string literal is a document part.
         {
-            const ScAddress::Details aDetails(formula::FormulaGrammar::CONV_XL_OOX);
-            OUString aTab, aRefStr;
-            if (p->GetType() == formula::svExternalSingleRef)
+            OUStringBuffer aBuf("=");
+            bool bInStr = false;
+            for (sal_Int32 i = 0; i < aFormula.getLength(); ++i)
             {
-                const auto* pTok = static_cast<const ScExternalSingleRefToken*>(p);
-                const ScAddress aAddr = pTok->GetSingleRef().toAbs(GetDoc(), ScAddress());
-                aTab = pTok->GetTableName().getString();
-                if (aAddr.IsValid())
-                    aRefStr = aAddr.Format(ScRefFlags::ADDR_ABS, nullptr, aDetails);
+                const sal_Unicode c = aFormula[i];
+                if (c == '"')
+                    bInStr = !bInStr;
+                if (!bInStr && c == '[')
+                {
+                    sal_Int32 j = i + 1;
+                    while (j < aFormula.getLength() && aFormula[j] >= '0' && aFormula[j] <= '9')
+                        ++j;
+                    if (j > i + 1 && j < aFormula.getLength() && aFormula[j] == ']')
+                    {
+                        i = j;
+                        continue;
+                    }
+                }
+                aBuf.append(c);
             }
-            else
-            {
-                const auto* pTok = static_cast<const ScExternalDoubleRefToken*>(p);
-                const ScRange aRange = pTok->GetDoubleRef().toAbs(GetDoc(), ScAddress());
-                aTab = pTok->GetTableName().getString();
-                if (aRange.IsValid())
-                    aRefStr = aRange.Format(GetDoc(), ScRefFlags::RANGE_ABS, aDetails);
-            }
-            if (!aTab.isEmpty() && !aRefStr.isEmpty())
-            {
-                ScCompiler::CheckTabQuotes(aTab, formula::FormulaGrammar::CONV_XL_OOX);
-                aFormula = "=" + aTab + "!" + aRefStr;
-            }
+            if (aFormula.startsWith("="))
+                aBuf.remove(0, 1);
+            aFormula = aBuf.makeStringAndClear();
         }
-        if (aFormula.isEmpty())
-            aFormula = XclXmlUtils::ToOUString(GetCompileFormulaContext(), ScAddress(0, 0, 0), mpArray.get());
         pExternalLink->startElement(XML_definedName,
             XML_name, maName.toUtf8(),
             XML_refersTo, aFormula.toUtf8(),
