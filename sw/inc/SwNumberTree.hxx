@@ -170,6 +170,12 @@ public:
      */
     virtual bool IsRestart() const = 0;
 
+    /** Return whether this node continues the numbering of the last node on
+        its level under the previous siblings of its parent, even if the
+        parent is counted (Word w:lvlRestart lower than the parent level).
+    */
+    virtual bool IsContinueAcrossParent() const { return false; }
+
     /**
        Return start value.
 

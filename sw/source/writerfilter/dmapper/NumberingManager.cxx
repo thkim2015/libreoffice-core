@@ -138,6 +138,9 @@ void ListLevel::SetValue( Id nId, sal_Int32 nValue )
         case NS_ooxml::LN_CT_Lvl_isLgl:
             m_bIsLegal = true;
         break;
+        case NS_ooxml::LN_CT_Lvl_lvlRestart:
+            m_nLevelRestart = static_cast<sal_Int16>(nValue);
+        break;
         case NS_ooxml::LN_CT_Lvl_legacy:
         break;
         case NS_ooxml::LN_CT_Lvl_suff:
@@ -684,12 +687,28 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
                 bHasNumFmts = true;
             }
         }
-        if (bHasNumFmts)
+        // Writer always restarts a level after its parent level: keep w:lvlRestart
+        // per level for the number tree and the DOCX export.
+        uno::Sequence<sal_Int16> aRestarts(9);
+        bool bHasRestarts = false;
+        for (sal_Int32 nLvl = 0; nLvl < aRestarts.getLength(); ++nLvl)
         {
-            uno::Sequence<beans::PropertyValue> aGrabBag{ comphelper::makePropertyValue(
-                u"OoxmlNumFmts"_ustr, aNumFmts) };
-            xStyle->setPropertyValue(u"StyleInteropGrabBag"_ustr, uno::Any(aGrabBag));
+            ListLevel::Pointer pLvl = nLvl < nAbstLevels ? GetLevel(nLvl) : nullptr;
+            ListLevel::Pointer pAbsLvl = nLvl < nAbstLevels ? m_pAbstractDef->GetLevel(nLvl) : nullptr;
+            sal_Int16 nRestart = pLvl && pLvl->GetLevelRestart() >= 0 ? pLvl->GetLevelRestart()
+                                 : pAbsLvl ? pAbsLvl->GetLevelRestart() : -1;
+            aRestarts.getArray()[nLvl] = nRestart;
+            if (nRestart >= 0)
+                bHasRestarts = true;
         }
+        std::vector<beans::PropertyValue> aGrabBag;
+        if (bHasNumFmts)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNumFmts"_ustr, aNumFmts));
+        if (bHasRestarts)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlLvlRestarts"_ustr, aRestarts));
+        if (!aGrabBag.empty())
+            xStyle->setPropertyValue(u"StyleInteropGrabBag"_ustr,
+                                     uno::Any(comphelper::containerToSequence(aGrabBag)));
     }
     catch( const lang::IllegalArgumentException& )
     {
@@ -1007,6 +1026,10 @@ void ListsManager::lcl_sprm( Sprm& rSprm )
             if (ListLevel::Pointer pCurrentLevel = m_pCurrentDefinition->GetCurrentLevel())
                 pCurrentLevel->SetValue( nSprmId, nIntValue );
             bIsStartVisited = true;
+        break;
+        case NS_ooxml::LN_CT_Lvl_lvlRestart:
+            if (ListLevel::Pointer pCurrentLevel = m_pCurrentDefinition->GetCurrentLevel())
+                pCurrentLevel->SetValue(nSprmId, nIntValue);
         break;
         case NS_ooxml::LN_CT_Lvl_numFmt:
         {

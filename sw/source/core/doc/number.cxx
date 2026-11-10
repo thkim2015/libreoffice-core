@@ -1397,6 +1397,18 @@ void SwNumRule::SetGrabBagItem(const uno::Any& rVal)
     mpGrabBagItem->PutValue(rVal, 0);
 }
 
+sal_Int16 SwNumRule::GetWordLevelRestart(sal_uInt16 nLvl) const
+{
+    if (!mpGrabBagItem)
+        return -1;
+    const std::map<OUString, uno::Any>& rMap = mpGrabBagItem->GetGrabBag();
+    auto it = rMap.find(u"OoxmlLvlRestarts"_ustr);
+    uno::Sequence<sal_Int16> aRestarts;
+    if (it == rMap.end() || !(it->second >>= aRestarts) || nLvl >= aRestarts.getLength())
+        return -1;
+    return aRestarts[nLvl];
+}
+
 namespace numfunc
 {
     namespace {

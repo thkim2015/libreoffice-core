@@ -8303,6 +8303,16 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
         m_pSerializer->singleElementNS(XML_w, XML_numFmt, FSNS(XML_w, XML_val), aFormat);
     }
 
+    // w:lvlRestart kept by the DOCX import (Writer has no own setting for it).
+    if (const SwNumRule* pRestartRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
+                                                            : m_pExportingNumRule)
+    {
+        const sal_Int16 nRestart = pRestartRule->GetWordLevelRestart(nLevel);
+        if (nRestart >= 0)
+            m_pSerializer->singleElementNS(XML_w, XML_lvlRestart, FSNS(XML_w, XML_val),
+                                           OString::number(nRestart));
+    }
+
     if (m_bExportingOutline)
     {
         sal_uInt16 nId = m_rExport.m_pStyles->GetHeadingParagraphStyleId( nLevel );
