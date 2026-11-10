@@ -3065,6 +3065,11 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
         {
             const SwSetExpField *pSet = static_cast<const SwSetExpField*>(pField);
             SwGetSetExpType nSubType = pSet->GetSubType();
+            // a hidden sequence number is SEQ \h
+            const bool bHiddenSeq = bool(nSubType & SwGetSetExpType::Sequence)
+                                    && bool(nSubType & SwGetSetExpType::Invisible);
+            if (bHiddenSeq)
+                nSubType &= ~SwGetSetExpType::Invisible;
             if (SwGetSetExpType::Sequence == nSubType)
             {
                 OUString sStr;
@@ -3081,6 +3086,11 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                 // the name alone (no "+1"), maybe in another spelling of the sequence name
                 else if (!sFormula.isEmpty() && sFormula.indexOf('+') < 0)
                     sStr += "\\c ";
+                const SwSetExpFieldType* pSeqType = static_cast<const SwSetExpFieldType*>(pField->GetTyp());
+                if (pSeqType->IsWordRestartOnly() && pSeqType->GetOutlineLvl() < MAXLEVEL)
+                    sStr += "\\s " + OUString::number(pSeqType->GetOutlineLvl() + 1) + " ";
+                if (bHiddenSeq)
+                    sStr += "\\h ";
                 GetNumberPara( sStr, *pField );
                 GetExport().OutputField(pField, ww::eSEQ, sStr);
             }
