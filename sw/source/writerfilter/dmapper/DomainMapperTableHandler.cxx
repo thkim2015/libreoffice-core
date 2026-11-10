@@ -378,7 +378,7 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
             aGrabBag[u"TableStyleLook"_ustr] = oTableLook->second;
             m_aTableProperties->Erase(oTableLook->first);
         }
-        for (PropertyIds eId : { META_PROP_TABLE_CAPTION, META_PROP_TABLE_DESCRIPTION, META_PROP_TABLE_CELL_SPACING })
+        for (PropertyIds eId : { META_PROP_TABLE_CAPTION, META_PROP_TABLE_DESCRIPTION, META_PROP_TABLE_CELL_SPACING, META_PROP_TABLE_LAYOUT, META_PROP_TABLE_WIDTH_AUTO })
         {
             const std::optional<PropertyMap::Property> oProp = m_aTableProperties->getProperty(eId);
             if (oProp)
@@ -387,6 +387,10 @@ TableStyleSheetEntry * DomainMapperTableHandler::endTableGetTableStyle(TableInfo
                 m_aTableProperties->Erase(oProp->first);
             }
         }
+        // No direct w:tblLayout: Word lays the table out by its style or autofit, so the DOCX
+        // export must not force the fixed layout.
+        if (m_rDMapper_Impl.IsOOXMLImport() && !aGrabBag.contains(u"TableLayout"_ustr))
+            aGrabBag[u"TableLayout"_ustr] <<= u"inherit"_ustr;
 
         // The "val" attribute's numeric value: a bit flag indicating applied style elements.
         const std::optional<PropertyMap::Property> aTblLook

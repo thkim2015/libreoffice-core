@@ -283,6 +283,9 @@ private:
     sal_Int32                                       m_nPageNumber;
     // Page number type is a value from css::style::NumberingType.
     sal_Int16                                       m_nPageNumberType;
+    // w:pgNumType chapStyle/chapSep, only kept for DOCX export (no layout).
+    OUString                                        m_sPageNumberChapStyle;
+    OUString                                        m_sPageNumberChapSep;
     sal_Int32                                       m_nBreakType;
 
     sal_Int32                                       m_nLeftMargin;
@@ -399,6 +402,20 @@ public:
     void SetEvenlySpaced( bool bSet )        { m_bEvenlySpaced = bSet; }
     void SetPageNumber( sal_Int32 nSet )     { m_nPageNumber = nSet; }
     void SetPageNumberType( sal_Int32 nSet ) { m_nPageNumberType = nSet; }
+    void SetPageNumberChapStyle(const OUString& rSet) { m_sPageNumberChapStyle = rSet; }
+    void SetPageNumberChapSep(const OUString& rSet) { m_sPageNumberChapSep = rSet; }
+
+    /// Numbering of w:footnotePr / w:endnotePr in this sectPr (-1: not set). Writer only has
+    /// document-wide note numbering, see DomainMapper::~DomainMapper().
+    struct NoteNumbering
+    {
+        sal_Int16 nType = -1; // css::style::NumberingType
+        sal_Int16 nStartAt = -1; // offset, numStart - 1
+        sal_Int16 nCounting = -1; // css::text::FootnoteNumbering
+        bool operator==(const NoteNumbering&) const = default;
+    };
+    NoteNumbering m_aFootnoteNumbering;
+    NoteNumbering m_aEndnoteNumbering;
     void SetBreakType( sal_Int32 nSet )      { m_nBreakType = nSet; }
 
     void SetLeftMargin( sal_Int32 nSet )   { m_nLeftMargin = nSet; }

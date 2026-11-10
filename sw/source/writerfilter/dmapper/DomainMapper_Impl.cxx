@@ -5804,9 +5804,19 @@ CHARS_CYRILLIC_LOWER_LETTER_N_UK*/
         if( /*sCommand*/sNumber.equalsAscii(rNumberingPair.cWordName ))
         {
             nRet = rNumberingPair.nType;
-            break;
+            return nRet;
         }
     }
+
+    // Number-as-text switches, case does not matter here (\* Caps etc. sets the case)
+    if (sNumber.equalsIgnoreAsciiCase("Ordinal"))
+        nRet = style::NumberingType::TEXT_NUMBER;
+    else if (sNumber.equalsIgnoreAsciiCase("OrdText"))
+        nRet = style::NumberingType::TEXT_ORDINAL;
+    else if (sNumber.equalsIgnoreAsciiCase("CardText"))
+        nRet = style::NumberingType::TEXT_CARDINAL;
+    else if (sNumber.equalsIgnoreAsciiCase("Arabic"))
+        nRet = style::NumberingType::ARABIC;
 
     return nRet;
 }
@@ -7114,12 +7124,42 @@ void DomainMapper_Impl::handleFieldFormula
 {
     OUString command = pContext->GetCommand().trim();
 
-    //  Remove number formatting from \# to end of command
-    //  TODO: handle custom number formatting
+    //  Remove number formatting from \# to end of command; keep a simple numeric picture
+    //  (0.00, #,##0, 0% ...) as the number format of the field
     sal_Int32 delimPos = command.indexOf("\\#");
+    OUString sPicture;
     if (delimPos != -1)
     {
+        sPicture = command.copy(delimPos + 2).trim();
+        if (sPicture.startsWith("\""))
+        {
+            const sal_Int32 nClose = sPicture.indexOf('"', 1);
+            sPicture = nClose > 0 ? sPicture.copy(1, nClose - 1) : OUString();
+        }
+        else
+            sPicture = sPicture.getToken(0, ' ');
         command = command.replaceAt(delimPos, command.getLength() - delimPos, u"").trim();
+    }
+    sal_Int32 nNumberFormat = 0;
+    if (!sPicture.isEmpty() && m_xTextDocument
+        && std::all_of(sPicture.getStr(), sPicture.getStr() + sPicture.getLength(),
+                       [](sal_Unicode c) { return std::u16string_view(u"0#,.;%$+-() ").find(c) != std::u16string_view::npos; }))
+    {
+        try
+        {
+            uno::Reference<util::XNumberFormatsSupplier> xSupplier(
+                static_cast<cppu::OWeakObject*>(m_xTextDocument.get()), uno::UNO_QUERY_THROW);
+            uno::Reference<util::XNumberFormats> xFormats = xSupplier->getNumberFormats();
+            const lang::Locale aUSLocale(u"en"_ustr, u"US"_ustr, OUString());
+            sal_Int32 nKey = xFormats->queryKey(sPicture, aUSLocale, false);
+            if (nKey < 0)
+                nKey = xFormats->addNew(sPicture, aUSLocale);
+            if (nKey > 0)
+                nNumberFormat = nKey;
+        }
+        catch (const uno::Exception&)
+        {
+        }
     }
 
     // command must contains = and at least another char
@@ -7130,7 +7170,7 @@ void DomainMapper_Impl::handleFieldFormula
     OUString formula = convertFieldFormula(command.copy(1));
 
     xFieldProperties->setPropertyValue(getPropertyName(PROP_CONTENT), uno::Any(formula));
-    xFieldProperties->setPropertyValue(getPropertyName(PROP_NUMBER_FORMAT), uno::Any(sal_Int32(0)));
+    xFieldProperties->setPropertyValue(getPropertyName(PROP_NUMBER_FORMAT), uno::Any(nNumberFormat));
     xFieldProperties->setPropertyValue(u"IsShowFormula"_ustr, uno::Any(false));
 
     // grab-bag the original and converted formula
@@ -8186,8 +8226,61 @@ void DomainMapper_Impl::CloseFieldCommand()
         // Word enclosed characters (Home > Font > Enclose Characters) are EQ \o\ac(sym,text):
         // there is no Writer equivalent, so keep them as a generic fieldmark (code round-trips,
         // the web shell paints a visible result) instead of dropping them.
-        bool const bEnclosedEq = sType == "EQ"
-            && pContext->GetCommand().toAsciiLowerCase().indexOf("\\ac") >= 0;
+        // The same for the other EQ forms that the FIELD_EQ import below can not convert
+        // (fractions, radicals, brackets, integrals, arrays...): it would drop them.
+        bool bEnclosedEq = false;
+        if (sType == "EQ")
+        {
+            const OUString aEqCommand = pContext->GetCommand().trim();
+            OUString aEqArgs;
+            if (sal_Int32 nSpace = aEqCommand.indexOf(' '); nSpace > 0)
+                aEqArgs = aEqCommand.copy(nSpace).trim();
+            const bool bConverted
+                = !msfilter::util::ParseCombinedChars(aEqCommand).sType.isEmpty()
+                  || aEqArgs.startsWith("\\s\\do") || aEqArgs.startsWith("\\* jc");
+            bEnclosedEq = aEqCommand.toAsciiLowerCase().indexOf("\\ac") >= 0 || !bConverted;
+        }
+        // Document information fields with a case switch (\* Upper, Lower, Caps, FirstCap):
+        // Writer fields can not change the case, so keep the code and Word's result the same way.
+        // FILENAME too: in the web office the Writer field would show the temporary file path.
+        else if (sType == "FILENAME")
+            bEnclosedEq = true;
+        else if (sType == "AUTHOR" || sType == "TITLE" || sType == "SUBJECT" || sType == "KEYWORDS"
+                 || sType == "COMMENTS" || sType == "USERNAME" || sType == "LASTSAVEDBY"
+                 || sType == "TEMPLATE")
+        {
+            const OUString aLower = pContext->GetCommand().toAsciiLowerCase();
+            for (std::u16string_view aSwitch : { u"\\* upper", u"\\* lower", u"\\* caps", u"\\* firstcap" })
+                if (aLower.indexOf(aSwitch) >= 0)
+                    bEnclosedEq = true;
+        }
+        // Reference and sequence switches that the Writer fields below can not keep, the same way:
+        // REF \p with \r, \n or \w (Word writes the number and "above"/"below"), PAGEREF \p (Word
+        // writes "on page N" for another page), REF with a case switch, SEQ \s (restart at a
+        // heading level) and \h (hidden number), STYLEREF \s.
+        else if (sType == "REF" || sType == "PAGEREF" || sType == "SEQ" || sType == "STYLEREF")
+        {
+            const OUString aCommand = pContext->GetCommand();
+            OUString aValue;
+            if (sType == "PAGEREF")
+                bEnclosedEq = lcl_FindInCommand(aCommand, 'p', aValue);
+            else if (sType == "REF")
+            {
+                bEnclosedEq = lcl_FindInCommand(aCommand, 'p', aValue)
+                              && (lcl_FindInCommand(aCommand, 'r', aValue)
+                                  || lcl_FindInCommand(aCommand, 'n', aValue)
+                                  || lcl_FindInCommand(aCommand, 'w', aValue));
+                const OUString aLower = aCommand.toAsciiLowerCase();
+                for (std::u16string_view aSwitch : { u"\\* upper", u"\\* lower", u"\\* caps", u"\\* firstcap" })
+                    if (aLower.indexOf(aSwitch) >= 0)
+                        bEnclosedEq = true;
+            }
+            else if (sType == "SEQ")
+                bEnclosedEq = lcl_FindInCommand(aCommand, 's', aValue)
+                              || lcl_FindInCommand(aCommand, 'h', aValue);
+            else
+                bEnclosedEq = lcl_FindInCommand(aCommand, 's', aValue);
+        }
         if (aIt != aFieldConversionMap.end() && !bEnclosedEq
             && (!m_bForceGenericFields
                 // these need to convert ffData to properties...
@@ -8708,7 +8801,17 @@ void DomainMapper_Impl::CloseFieldCommand()
                                 }
                             }
 
-                            if (!styleName.isEmpty())
+                            if (styleName.getLength() == 1 && '1' <= styleName[0] && styleName[0] <= '9')
+                            {
+                                // STYLEREF 1 refers to the heading level (Heading 1) in any UI
+                                // language; the export writes the level again, see
+                                // MSWordExportBase::GetStyleRefName().
+                                m_aStyleRefLevels.insert(styleName);
+                                xFieldInterface->setPropertyValue(
+                                    getPropertyName(PROP_SOURCE_NAME),
+                                    uno::Any(OUString("Heading " + styleName)));
+                            }
+                            else if (!styleName.isEmpty())
                             {
                                 uno::Any aStyleDisplayName;
                                 aStyleDisplayName <<= ConvertTOCStyleName(styleName);

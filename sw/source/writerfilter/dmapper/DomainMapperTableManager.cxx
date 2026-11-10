@@ -207,6 +207,9 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                             the final sizing of the table, but then must use the contents of each cell to determine final column widths.
                             (See 17.18.87 of the ISO/IEC 29500-1:2011.)
                             */
+                            // Writer tables always get a width: keep Word's automatic preferred
+                            // width for the DOCX export, see DocxAttributeOutput::TableDefinition()
+                            pPropMap->Insert(META_PROP_TABLE_WIDTH_AUTO, uno::Any(true));
                             IntVectorPtr pCellWidths = getCurrentCellWidths();
                             // Check whether all cells have fixed widths in the given row of table.
                             bool bFixed = std::find(pCellWidths->begin(), pCellWidths->end(), -1) == pCellWidths->end();
@@ -384,6 +387,21 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                             getCurrentCellWidths()->push_back(pMeasureHandler->getMeasureValue() ? pMeasureHandler->getValue() : sal_Int32(0));
                         if (getTableDepthDifference())
                             m_bPushCurrentWidth = true;
+                        // Writer cells only have absolute widths: keep Word's automatic and
+                        // percent preferred widths for the DOCX export, see
+                        // DocxAttributeOutput::TableCellProperties()
+                        const Id nUnit = sal::static_int_cast<Id>(pMeasureHandler->getUnit());
+                        if (nUnit == NS_ooxml::LN_Value_ST_TblWidth_auto
+                            || nUnit == NS_ooxml::LN_Value_ST_TblWidth_pct)
+                        {
+                            TablePropertyMapPtr pGrabBagMap(new TablePropertyMap);
+                            pGrabBagMap->Insert(PROP_CELL_PREFERRED_WIDTH,
+                                                uno::Any(nUnit == NS_ooxml::LN_Value_ST_TblWidth_auto
+                                                             ? u"auto"_ustr
+                                                             : "pct:" + OUString::number(pMeasureHandler->getValue())),
+                                                true, CELL_GRAB_BAG);
+                            cellProps(pGrabBagMap);
+                        }
                     }
                 }
                 break;
