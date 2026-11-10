@@ -46,13 +46,15 @@ OverlayStaticRectanglePrimitive::OverlayStaticRectanglePrimitive(
                                     const basegfx::BColor& rStrokeColor,
                                     const basegfx::BColor& rFillColor,
                                     double fTransparence,
-                                    double fRotation)
+                                    double fRotation,
+                                    bool bEllipse)
     : maPosition(rPosition)
     , maSize(rSize)
     , maStrokeColor(rStrokeColor)
     , maFillColor(rFillColor)
     , mfTransparence(fTransparence)
     , mfRotation(fRotation)
+    , mbEllipse(bEllipse)
 {}
 
 Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
@@ -67,8 +69,9 @@ Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(cons
     if (getDiscreteUnit() <= 0.0 || mfTransparence > 1.0)
         return nullptr;
 
-    basegfx::B2DPolygon aPolygon(
-        basegfx::utils::createPolygonFromRect(aRange));
+    basegfx::B2DPolygon aPolygon(mbEllipse
+        ? basegfx::utils::createPolygonFromEllipse(aRange.getCenter(), fHalfWidth, fHalfHeight)
+        : basegfx::utils::createPolygonFromRect(aRange));
 
     // create filled primitive
     basegfx::B2DPolyPolygon aPolyPolygon;
@@ -108,7 +111,8 @@ bool OverlayStaticRectanglePrimitive::operator==(const BasePrimitive2D& rPrimiti
             && maStrokeColor == rCompare.maStrokeColor
             && maFillColor == rCompare.maFillColor
             && mfTransparence == rCompare.mfTransparence
-            && mfRotation == rCompare.mfRotation);
+            && mfRotation == rCompare.mfRotation
+            && mbEllipse == rCompare.mbEllipse);
     }
 
     return false;

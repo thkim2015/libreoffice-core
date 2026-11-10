@@ -41,6 +41,9 @@ private:
     // the rotation of the primitive itself
     double mfRotation;
 
+    // zetaOffice: draw an ellipse inside the size instead of the rectangle (Office round handles)
+    bool mbEllipse;
+
     virtual Primitive2DReference create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const override;
 
 public:
@@ -50,7 +53,8 @@ public:
         const basegfx::BColor& rStrokeColor,
         const basegfx::BColor& rFillColor,
         double fTransparence,
-        double fRotation);
+        double fRotation,
+        bool bEllipse = false);
 
     // compare operator
     virtual bool operator==( const BasePrimitive2D& rPrimitive ) const override;

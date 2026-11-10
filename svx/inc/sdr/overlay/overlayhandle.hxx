@@ -21,6 +21,7 @@ class OverlayHandle final : public OverlayObjectWithBasePosition
 {
     basegfx::B2DSize maSize;
     Color maStrokeColor;
+    bool mbOffice; // zetaOffice: opaque round handle (Office look)
 
     // geometry creation for OverlayObject
     virtual drawinglayer::primitive2d::Primitive2DContainer createOverlayObjectPrimitive2DSequence() override;
@@ -29,7 +30,8 @@ public:
     OverlayHandle(const basegfx::B2DPoint& rBasePos,
                   const basegfx::B2DSize& rSize,
                   Color const & rStrokeColor,
-                  Color const & rFillColor);
+                  Color const & rFillColor,
+                  bool bOffice = false);
 
     virtual ~OverlayHandle() override;
 };
