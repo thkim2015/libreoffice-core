@@ -1169,10 +1169,7 @@ void ChartExport::WriteChartObj( const Reference< XShape >& xShape, sal_Int32 nI
             pFS->singleElementNS(mnXmlNamespace, XML_cNvSpPr);
     }
     else
-        pFS->singleElementNS(mnXmlNamespace, XML_cNvGraphicFramePr);
-
-    if( GetDocumentType() == DOCUMENT_PPTX )
-        pFS->singleElementNS(mnXmlNamespace, XML_nvPr);
+        WriteGraphicFrameNvPr(xShapeProps, mnXmlNamespace); // ZETA: keeps a placeholder's <p:ph>
 
     if (GetDocumentType() != DOCUMENT_DOCX)
         pFS->endElementNS( mnXmlNamespace, XML_nvGraphicFramePr );
