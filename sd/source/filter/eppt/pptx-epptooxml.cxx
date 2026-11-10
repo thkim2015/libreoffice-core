@@ -564,8 +564,17 @@ void PowerPointShapeExport::SetPageType(PageType ePageType)
     mePageType = ePageType;
 }
 
-ShapeExport& PowerPointShapeExport::WriteNonVisualProperties(const Reference< XShape >&)
+ShapeExport& PowerPointShapeExport::WriteNonVisualProperties(const Reference< XShape >& xShape)
 {
+    // ZETA: a picture that filled a PowerPoint picture or content placeholder on a slide keeps
+    // that <p:ph> (an empty one is written as the placeholder itself)
+    uno::Sequence<beans::PropertyValue> aPh;
+    if (!mbMaster && xShape.is() && xShape->getShapeType().endsWith("GraphicObjectShape")
+        && GetImportedPh(Reference<XPropertySet>(xShape, UNO_QUERY), aPh))
+    {
+        WritePhNvPr(aPh, XML_p);
+        return *this;
+    }
     GetFS()->singleElementNS(XML_p, XML_nvPr);
 
     return *this;
