@@ -572,7 +572,26 @@ void SdrHdl::CreateB2dIAObject()
             {
                 basegfx::B2DPoint aPosition(m_aPos.X(), m_aPos.Y());
                 std::unique_ptr<sdr::overlay::OverlayObject> pNewOverlayObject;
-                if (getenv ("SVX_DRAW_HANDLES") && (eKindOfMarker == BitmapMarkerKind::Rect_7x7 || eKindOfMarker == BitmapMarkerKind::Rect_9x9 || eKindOfMarker == BitmapMarkerKind::Rect_11x11))
+                // zetaOffice: ZETA_OFFICE_HANDLES draws the resize handles of a selected object as
+                // white circles with a grey outline and the custom shape adjustment handles as yellow
+                // circles, the way Microsoft Office does (the web app sets it; rotate mode keeps the
+                // LibreOffice markers).
+                static const bool bOfficeHandles = getenv("ZETA_OFFICE_HANDLES") != nullptr;
+                const bool bResizeKind = m_eKind == SdrHdlKind::UpperLeft || m_eKind == SdrHdlKind::Upper
+                    || m_eKind == SdrHdlKind::UpperRight || m_eKind == SdrHdlKind::Left
+                    || m_eKind == SdrHdlKind::Right || m_eKind == SdrHdlKind::LowerLeft
+                    || m_eKind == SdrHdlKind::Lower || m_eKind == SdrHdlKind::LowerRight;
+                const bool bAdjustKind = eKindOfMarker == BitmapMarkerKind::Customshape_7x7
+                    || eKindOfMarker == BitmapMarkerKind::Customshape_9x9
+                    || eKindOfMarker == BitmapMarkerKind::Customshape_11x11;
+                if (bOfficeHandles && m_pObj && !bRot && (bResizeKind || bAdjustKind))
+                {
+                    const double fSize = (m_b1PixMore ? 10.0 : 9.0) * rOutDev.GetDPIScaleFactor();
+                    const Color aFill = bAdjustKind ? Color(0xFF, 0xD3, 0x00) : COL_WHITE;
+                    pNewOverlayObject.reset(new sdr::overlay::OverlayHandle(
+                        aPosition, basegfx::B2DSize(fSize, fSize), Color(0x60, 0x60, 0x60), aFill, true));
+                }
+                else if (getenv ("SVX_DRAW_HANDLES") && (eKindOfMarker == BitmapMarkerKind::Rect_7x7 || eKindOfMarker == BitmapMarkerKind::Rect_9x9 || eKindOfMarker == BitmapMarkerKind::Rect_11x11))
                 {
                     double fSize = 7.0;
                     switch (eKindOfMarker)

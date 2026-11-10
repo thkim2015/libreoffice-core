@@ -31,7 +31,8 @@ primitive2d::Primitive2DContainer OverlayHandle::createOverlayObjectPrimitive2DS
     basegfx::BColor aFillColor = getBaseColor().getBColor();
 
     const primitive2d::Primitive2DReference aReference(
-        new primitive2d::OverlayStaticRectanglePrimitive(maBasePosition, maSize, aStrokeColor, aFillColor, 0.3f, 0.0f));
+        new primitive2d::OverlayStaticRectanglePrimitive(maBasePosition, maSize, aStrokeColor, aFillColor,
+                                                         mbOffice ? 0.0 : 0.3, 0.0, mbOffice));
 
     return primitive2d::Primitive2DContainer { aReference };
 }
@@ -39,10 +40,12 @@ primitive2d::Primitive2DContainer OverlayHandle::createOverlayObjectPrimitive2DS
 OverlayHandle::OverlayHandle(const B2DPoint& rBasePos,
                              const B2DSize& rSize,
                              Color const & rStrokeColor,
-                             Color const & rFillColor)
+                             Color const & rFillColor,
+                             bool bOffice)
     : OverlayObjectWithBasePosition(rBasePos, rFillColor)
     , maSize(rSize)
     , maStrokeColor(rStrokeColor)
+    , mbOffice(bOffice)
 {
 }
 
