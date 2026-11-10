@@ -4402,6 +4402,9 @@ bool DocxAttributeOutput::StartURL(const OUString& rUrl, const OUString& rTarget
         {
             m_pHyperlinkAttrList->add(FSNS(XML_w, XML_tooltip), rName);
         }
+        // Word writes w:history="1" for the hyperlinks it inserts; without it the field code of
+        // the hyperlink gets a \h switch in Word
+        m_pHyperlinkAttrList->add(FSNS(XML_w, XML_history), "1");
     }
 
     return true;
@@ -9279,6 +9282,22 @@ void DocxAttributeOutput::WriteField_Impl(const SwField *const pField,
     if (pField)
         infos.pField = pField->CopyField();
     infos.sCmd = rFieldCmd;
+    // Word switches of an imported field that Writer does not keep, see SwField::SetWordSwitches()
+    if (pField && !rFieldCmd.isEmpty())
+    {
+        auto lcl_Append = [&infos](const OUString& rSwitch)
+        {
+            if (!infos.sCmd.endsWith(" "))
+                infos.sCmd += " ";
+            infos.sCmd += rSwitch;
+        };
+        const OUString& rPicture = pField->GetWordNumberPicture();
+        if (!rPicture.isEmpty() && rFieldCmd.indexOf("\\#") < 0)
+            lcl_Append("\\# \"" + rPicture + "\" ");
+        if (pField->IsWordMergeFormat()
+            && infos.sCmd.toAsciiUpperCase().indexOf("MERGEFORMAT") < 0)
+            lcl_Append(u"\\* MERGEFORMAT "_ustr);
+    }
     infos.eType = eType;
     infos.bClose = bool(FieldFlags::Close & nMode);
     infos.bSep = bool(FieldFlags::CmdEnd & nMode);

@@ -1063,6 +1063,9 @@ struct SwFieldProperties_Impl
     bool        bBool2;
     bool        bBool3;
     bool        bBool4;
+    bool        bWordMergeFormat = false;
+    bool        bWordNoHyperlink = false;
+    OUString    sWordNumberPicture;
 
     SwFieldProperties_Impl():
         aDate( Date::EMPTY ),
@@ -1233,6 +1236,18 @@ SwXTextField::CreateXTextField(SwDoc *const pDoc, SwFormatField const* pFormat,
 SwServiceType SwXTextField::GetServiceId() const
 {
     return m_pImpl->m_nServiceId;
+}
+
+void SwXTextField::SetWordSwitches(bool bMergeFormat, bool bNoHyperlink, const OUString& rNumberPicture)
+{
+    if (m_pImpl->m_pProps)
+    {
+        m_pImpl->m_pProps->bWordMergeFormat = bMergeFormat;
+        m_pImpl->m_pProps->bWordNoHyperlink = bNoHyperlink;
+        m_pImpl->m_pProps->sWordNumberPicture = rNumberPicture;
+    }
+    if (const SwField* pField = m_pImpl->GetField())
+        const_cast<SwField*>(pField)->SetWordSwitches(bMergeFormat, bNoHyperlink, rNumberPicture);
 }
 
 /** Convert between SwSetExpField with InputFlag false and InputFlag true.
@@ -1953,6 +1968,9 @@ void SAL_CALL SwXTextField::attach(
             throw uno::RuntimeException(u"no SwField created?"_ustr);
 
         xField->SetAutomaticLanguage(!m_pImpl->m_pProps->bBool4);
+        xField->SetWordSwitches(m_pImpl->m_pProps->bWordMergeFormat,
+                                m_pImpl->m_pProps->bWordNoHyperlink,
+                                m_pImpl->m_pProps->sWordNumberPicture);
         SwFormatField aFormat(*xField);
 
         UnoActionContext aCont(pDoc);
