@@ -551,6 +551,29 @@ void PPTShape::addShape(
 
             Reference< XShape > xShape( createAndInsert( rFilterBase, sServiceName, pTheme, rxShapes, bClearText, mpPlaceholder, aTransformation, getFillProperties() ) );
 
+            // ZETA: a chart, table, SmartArt, online-image, media or picture placeholder without
+            // text shows PowerPoint's prompt for its kind, which Impress picks from the placeholder
+            // type in the grab bag - only there now that the shape is made, so empty it again
+            const bool bPromptByType = mnSubType == XML_chart || mnSubType == XML_tbl
+                                  || mnSubType == XML_dgm || mnSubType == XML_clipArt
+                                  || mnSubType == XML_media || mnSubType == XML_pic;
+            if (bPromptByType && (meShapeLocation == Layout || meShapeLocation == Slide)
+                && (!getTextBody() || getTextBody()->isEmpty()))
+            {
+                Reference<XPropertySet> xSet(xShape, UNO_QUERY);
+                if (xSet.is() && xSet->getPropertySetInfo()->hasPropertyByName(u"IsEmptyPresentationObject"_ustr))
+                {
+                    try
+                    {
+                        xSet->setPropertyValue(u"IsEmptyPresentationObject"_ustr, Any(false));
+                        xSet->setPropertyValue(u"IsEmptyPresentationObject"_ustr, Any(true));
+                    }
+                    catch (const Exception&)
+                    {
+                    }
+                }
+            }
+
             // Apply text properties on placeholder text inside this placeholder shape
             if (meShapeLocation == Slide && mpPlaceholder && getTextBody() && getTextBody()->isEmpty())
             {

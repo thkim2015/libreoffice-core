@@ -508,7 +508,11 @@ bool ViewOverlayManager::CreateTags()
 
         for( SdrObject* pShape : rShapes )
         {
-            if( pShape->IsEmptyPresObj() && (pShape->GetObjIdentifier() == SdrObjKind::OutlineText) && (pDrawView->GetTextEditObject() != pShape) )
+            // ZETA: the web UI draws PowerPoint's placeholder icons over the canvas - six on a content
+            // placeholder, one on a chart, table, SmartArt, online-image, media or picture one, none
+            // on a text one - so Impress's four are not drawn under them
+            constexpr bool bUiDrawsIcons = true;
+            if( !bUiDrawsIcons && pShape->IsEmptyPresObj() && (pShape->GetObjIdentifier() == SdrObjKind::OutlineText) && (pDrawView->GetTextEditObject() != pShape) )
             {
                 rtl::Reference< SmartTag > xTag( new ChangePlaceholderTag( *mrBase.GetMainViewShell()->GetView(), *pShape ) );
                 maTagVector.push_back(xTag);

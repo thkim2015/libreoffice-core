@@ -3357,8 +3357,24 @@ ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShap
             bContentOnlyOutline = aType == "chart" || aType == "tbl" || aType == "dgm"
                                   || aType == "clipArt" || aType == "media";
     }
-    WriteTextBox(xShape, XML_p, bUsePlaceholderIndex || bWritePropertiesAsLstStyles,
-                 /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt && !bContentOnlyOutline);
+    // ZETA: PowerPoint writes a slide's empty chart, table, SmartArt, online-image, media or
+    // picture placeholder without a text body at all
+    bool bNoTextBody = false;
+    if (mePageType == PageType::NORMAL && bIsEmptyPresObj && !bUseCustomPrompt)
+    {
+        OUString aType, aOrient, aSize;
+        sal_Int32 nIdx = -1;
+        if (isGraphicPlaceholder(ePlaceholder))
+            bNoTextBody = true;
+        else if (ePlaceholder == Outliner
+                 && (getImportedPlaceholder(xProps, ePlaceholder, aType, nIdx, aOrient, aSize)
+                     || getLayoutPlaceholderFor(xShape, ePlaceholder, aType, nIdx, aOrient, aSize)))
+            bNoTextBody = aType == "chart" || aType == "tbl" || aType == "dgm"
+                          || aType == "clipArt" || aType == "media";
+    }
+    if (!bNoTextBody)
+        WriteTextBox(xShape, XML_p, bUsePlaceholderIndex || bWritePropertiesAsLstStyles,
+                     /*bText=*/!bTextIsDefaultPrompt && !bInheritsItsPrompt && !bContentOnlyOutline);
 
     mpFS->endElementNS(XML_p, XML_sp);
 

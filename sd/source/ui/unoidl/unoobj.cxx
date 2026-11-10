@@ -883,7 +883,7 @@ OUString SdXShape::GetPlaceholderText() const
     if( pPage == nullptr )
         return OUString();
 
-    return pPage->GetPresObjText( pPage->GetPresObjKind(pObj) );
+    return pPage->GetPresObjText( pPage->GetPresObjKind(pObj), pObj );
 }
 
 /** sets/reset the empty status of a presentation object
@@ -964,7 +964,7 @@ void SdXShape::SetEmptyPresObj(bool bEmpty)
             pOutliner->SetVertical( bVertical );
             pOutliner->SetStyleSheetPool( static_cast<SfxStyleSheetPool*>(pDoc->GetStyleSheetPool()) );
             pOutliner->SetStyleSheet( 0, pPage->GetTextStyleSheetForObject( pObj ) );
-            pOutliner->Insert( pPage->GetPresObjText( pPage->GetPresObjKind(pObj) ) );
+            pOutliner->Insert( pPage->GetPresObjText( pPage->GetPresObjKind(pObj), pObj ) );
             pObj->SetOutlinerParaObject( pOutliner->CreateParaObject() );
             pOutliner->Clear();
         }
