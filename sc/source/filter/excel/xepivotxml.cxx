@@ -1437,6 +1437,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
     std::vector<tools::Long> aRowFields;
     std::vector<tools::Long> aColFields;
     std::vector<tools::Long> aPageFields;
+    // ZetaOffice: page field (cache position) -> position of its one selected item in <items>
+    std::map<tools::Long, size_t> aZetaPageItems;
     std::vector<DataField> aDataFields;
 
     RowOrColumnMemberResultData aRowMemberResultData;
@@ -1807,6 +1809,29 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                 aMemberSequence.emplace_back(nItem, true);
         }
 
+        // ZetaOffice: a page field showing one item is Excel's single selection - pageField item
+        // with no hidden items. Hidden items alone (no item) need multipleItemSelectionAllowed,
+        // else Excel reads the field as having every item hidden.
+        bool bZetaMultiPage = false;
+        if (eOrient == sheet::DataPilotFieldOrientation_PAGE)
+        {
+            size_t nVisible = 0, nVisibleAt = 0;
+            for (size_t n = 0; n < aMemberSequence.size(); ++n)
+                if (!aMemberSequence[n].second)
+                {
+                    ++nVisible;
+                    nVisibleAt = n;
+                }
+            if (nVisible == 1 && aMemberSequence.size() > 1)
+            {
+                aZetaPageItems[static_cast<tools::Long>(i)] = nVisibleAt;
+                for (auto& rMember : aMemberSequence)
+                    rMember.second = false;
+            }
+            else if (nVisible < aMemberSequence.size())
+                bZetaMultiPage = true;
+        }
+
         // tdf#125086: check if this field *also* appears in Data region
         bool bAppearsInData = false;
         {
@@ -1836,6 +1861,9 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         // subtotals below the group (outline or compact form); Excel's default is on top
         if (bDimSubtotalsBottom)
             pAttList->add(XML_subtotalTop, ToPsz10(false));
+
+        if (bZetaMultiPage)
+            pAttList->add(XML_multipleItemSelectionAllowed, ToPsz10(true));
 
         pAttList->add(XML_showAll, ToPsz10(false));
 
@@ -2034,9 +2062,16 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
         for (const auto& rPageField : aPageFields)
         {
-            pPivotStrm->singleElement(XML_pageField,
-                XML_fld, OString::number(rPageField),
-                XML_hier, OString::number(-1)); // TODO : handle this correctly.
+            auto itItem = aZetaPageItems.find(rPageField);
+            if (itItem != aZetaPageItems.end())
+                pPivotStrm->singleElement(XML_pageField,
+                    XML_fld, OString::number(rPageField),
+                    XML_item, OString::number(static_cast<sal_Int64>(itItem->second)),
+                    XML_hier, OString::number(-1));
+            else
+                pPivotStrm->singleElement(XML_pageField,
+                    XML_fld, OString::number(rPageField),
+                    XML_hier, OString::number(-1)); // TODO : handle this correctly.
         }
 
         pPivotStrm->endElement(XML_pageFields);
