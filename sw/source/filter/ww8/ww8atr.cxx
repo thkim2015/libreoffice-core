@@ -3074,12 +3074,13 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                     sStr = FieldString(ww::eSEQ) + "\"" + pField->GetTyp()->GetName().toString() +"\" ";
                 // the import writes SEQ \c as the formula "<name>" and \r N as "N", not "<name>+1"
                 const OUString sFormula = pSet->GetFormula().trim();
-                if (sFormula == pField->GetTyp()->GetName().toString())
-                    sStr += "\\c ";
-                else if (!sFormula.isEmpty()
-                         && std::all_of(sFormula.getStr(), sFormula.getStr() + sFormula.getLength(),
-                                        [](sal_Unicode c) { return '0' <= c && c <= '9'; }))
+                if (!sFormula.isEmpty()
+                    && std::all_of(sFormula.getStr(), sFormula.getStr() + sFormula.getLength(),
+                                   [](sal_Unicode c) { return '0' <= c && c <= '9'; }))
                     sStr += "\\r " + sFormula + " ";
+                // the name alone (no "+1"), maybe in another spelling of the sequence name
+                else if (!sFormula.isEmpty() && sFormula.indexOf('+') < 0)
+                    sStr += "\\c ";
                 GetNumberPara( sStr, *pField );
                 GetExport().OutputField(pField, ww::eSEQ, sStr);
             }
