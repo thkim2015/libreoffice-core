@@ -32,6 +32,7 @@
 #include <scextopt.hxx>
 #include <externalrefmgr.hxx>
 #include <tokenarray.hxx>
+#include <compiler.hxx>
 #include <xecontent.hxx>
 #include <xeformula.hxx>
 #include <xehelper.hxx>
@@ -1048,7 +1049,38 @@ void XclExpExtName::SaveXml(XclExpXmlStream& rStrm)
     to export it without the external document identifier. */
     if (mpArray->GetLen())
     {
-        const OUString aFormula = XclXmlUtils::ToOUString(GetCompileFormulaContext(), ScAddress(0, 0, 0), mpArray.get());
+        OUString aFormula;
+        // ZETA: a name that is one reference into the external book is written the way Excel
+        // writes it, with the sheet of that book and without a document part ("='Src'!$A$1:$A$5").
+        if (const formula::FormulaToken* p = mpArray->GetLen() == 1 ? mpArray->FirstToken() : nullptr;
+            p && (p->GetType() == formula::svExternalSingleRef || p->GetType() == formula::svExternalDoubleRef))
+        {
+            const ScAddress::Details aDetails(formula::FormulaGrammar::CONV_XL_OOX);
+            OUString aTab, aRefStr;
+            if (p->GetType() == formula::svExternalSingleRef)
+            {
+                const auto* pTok = static_cast<const ScExternalSingleRefToken*>(p);
+                const ScAddress aAddr = pTok->GetSingleRef().toAbs(GetDoc(), ScAddress());
+                aTab = pTok->GetTableName().getString();
+                if (aAddr.IsValid())
+                    aRefStr = aAddr.Format(ScRefFlags::ADDR_ABS, nullptr, aDetails);
+            }
+            else
+            {
+                const auto* pTok = static_cast<const ScExternalDoubleRefToken*>(p);
+                const ScRange aRange = pTok->GetDoubleRef().toAbs(GetDoc(), ScAddress());
+                aTab = pTok->GetTableName().getString();
+                if (aRange.IsValid())
+                    aRefStr = aRange.Format(GetDoc(), ScRefFlags::RANGE_ABS, aDetails);
+            }
+            if (!aTab.isEmpty() && !aRefStr.isEmpty())
+            {
+                ScCompiler::CheckTabQuotes(aTab, formula::FormulaGrammar::CONV_XL_OOX);
+                aFormula = "=" + aTab + "!" + aRefStr;
+            }
+        }
+        if (aFormula.isEmpty())
+            aFormula = XclXmlUtils::ToOUString(GetCompileFormulaContext(), ScAddress(0, 0, 0), mpArray.get());
         pExternalLink->startElement(XML_definedName,
             XML_name, maName.toUtf8(),
             XML_refersTo, aFormula.toUtf8(),
