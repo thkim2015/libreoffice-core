@@ -236,6 +236,17 @@ void DocxAttributeOutput::TableDefinition(
         GetTablePageSize(pTableTextNodeInfoInner.get(), nPageSize, bRelBoxSize);
         if (nPageSize == 0)
             widthType = "auto";
+
+        // A DOCX table had Word's automatic preferred width (w:tblW w:type="auto"): Writer tables
+        // always get a width, keep the automatic one, see DomainMapperTableManager::sprm()
+        const std::map<OUString, css::uno::Any>& rTableGrabBag
+            = pTableFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
+        auto itWidthAuto = rTableGrabBag.find(u"TableWidthAuto"_ustr);
+        if (itWidthAuto != rTableGrabBag.end() && itWidthAuto->second.get<bool>())
+        {
+            nPageSize = 0;
+            widthType = "auto";
+        }
     }
 
     // Output the table preferred width

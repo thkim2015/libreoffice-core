@@ -207,6 +207,9 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                             the final sizing of the table, but then must use the contents of each cell to determine final column widths.
                             (See 17.18.87 of the ISO/IEC 29500-1:2011.)
                             */
+                            // Writer tables always get a width: keep Word's automatic preferred
+                            // width for the DOCX export, see DocxAttributeOutput::TableDefinition()
+                            pPropMap->Insert(META_PROP_TABLE_WIDTH_AUTO, uno::Any(true));
                             IntVectorPtr pCellWidths = getCurrentCellWidths();
                             // Check whether all cells have fixed widths in the given row of table.
                             bool bFixed = std::find(pCellWidths->begin(), pCellWidths->end(), -1) == pCellWidths->end();
