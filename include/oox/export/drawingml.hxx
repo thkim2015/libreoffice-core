@@ -481,6 +481,11 @@ public:
                                css::uno::Reference<css::graphic::XGraphic> const& rxGraphic,
                                css::awt::Size const& rSize);
 
+    /// ZETA: <p:cNvGraphicFramePr> and <p:nvPr> of a PPTX graphic frame; a chart or table that took
+    /// the place of a PowerPoint placeholder (mso-ph in its grab bag) keeps that <p:ph>
+    OOX_DLLPUBLIC void WriteGraphicFrameNvPr(const css::uno::Reference<css::beans::XPropertySet>& rXPropSet,
+                                             sal_Int32 nXmlNamespace);
+
     OOX_DLLPUBLIC void WriteShapeTransformation(const css::uno::Reference< css::drawing::XShape >& rXShape,
                   sal_Int32 nXmlNamespace, bool bFlipH = false, bool bFlipV = false, bool bSuppressRotation = false, bool bSuppressFlipping = false, bool bFlippedBeforeRotation = false);
     void WriteTransformation(const css::uno::Reference< css::drawing::XShape >& xShape, const tools::Rectangle& rRectangle,

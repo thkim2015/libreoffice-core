@@ -2351,6 +2351,52 @@ void DrawingML::WriteTransformation(const Reference< XShape >& xShape, const too
     mpFS->endElementNS( nXmlNamespace, XML_xfrm );
 }
 
+void DrawingML::WriteGraphicFrameNvPr(const Reference<XPropertySet>& rXPropSet, sal_Int32 nXmlNamespace)
+{
+    // the <p:ph> PowerPoint wrote for the placeholder this frame filled (type, orient, sz, idx)
+    uno::Sequence<beans::PropertyValue> aPh;
+    if (GetDocumentType() == DOCUMENT_PPTX && rXPropSet.is()
+        && rXPropSet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+    {
+        uno::Sequence<beans::PropertyValue> aGrabBag;
+        rXPropSet->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+        for (auto const& it : aGrabBag)
+            if (it.Name == "mso-ph")
+                it.Value >>= aPh;
+    }
+    if (!aPh.hasElements())
+    {
+        mpFS->singleElementNS(nXmlNamespace, XML_cNvGraphicFramePr);
+        if (GetDocumentType() == DOCUMENT_PPTX)
+            mpFS->singleElementNS(nXmlNamespace, XML_nvPr);
+        return;
+    }
+    OUString aType, aOrient, aSize;
+    sal_Int32 nIdx = -1;
+    for (auto const& it : aPh)
+    {
+        if (it.Name == "type")
+            it.Value >>= aType;
+        else if (it.Name == "idx")
+            it.Value >>= nIdx;
+        else if (it.Name == "orient")
+            it.Value >>= aOrient;
+        else if (it.Name == "sz")
+            it.Value >>= aSize;
+    }
+    // PowerPoint locks grouping of a frame that fills a placeholder
+    mpFS->startElementNS(nXmlNamespace, XML_cNvGraphicFramePr);
+    mpFS->singleElementNS(XML_a, XML_graphicFrameLocks, XML_noGrp, "1");
+    mpFS->endElementNS(nXmlNamespace, XML_cNvGraphicFramePr);
+    mpFS->startElementNS(nXmlNamespace, XML_nvPr);
+    mpFS->singleElementNS(nXmlNamespace, XML_ph,
+        XML_type, sax_fastparser::UseIf(aType.toUtf8(), !aType.isEmpty()),
+        XML_orient, sax_fastparser::UseIf(aOrient.toUtf8(), !aOrient.isEmpty()),
+        XML_sz, sax_fastparser::UseIf(aSize.toUtf8(), !aSize.isEmpty()),
+        XML_idx, sax_fastparser::UseIf(OString::number(nIdx), nIdx >= 0));
+    mpFS->endElementNS(nXmlNamespace, XML_nvPr);
+}
+
 void DrawingML::WriteShapeTransformation( const Reference< XShape >& rXShape, sal_Int32 nXmlNamespace, bool bFlipH, bool bFlipV, bool bSuppressRotation, bool bSuppressFlipping, bool bFlippedBeforeRotation )
 {
     SAL_INFO("oox.shape",  "write shape transformation");

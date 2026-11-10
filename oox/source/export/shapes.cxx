@@ -2806,10 +2806,7 @@ ShapeExport& ShapeExport::WriteTableShape( const Reference< XShape >& xShape )
     AddExtLst(pFS, xShapeProps);
     pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
 
-    pFS->singleElementNS(mnXmlNamespace, XML_cNvGraphicFramePr);
-
-    if( GetDocumentType() == DOCUMENT_PPTX )
-        pFS->singleElementNS(mnXmlNamespace, XML_nvPr);
+    WriteGraphicFrameNvPr(xShapeProps, mnXmlNamespace); // ZETA: keeps a placeholder's <p:ph>
     pFS->endElementNS( mnXmlNamespace, XML_nvGraphicFramePr );
 
     WriteShapeTransformation( xShape, mnXmlNamespace );
