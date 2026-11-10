@@ -79,6 +79,7 @@
 #include <undoback.hxx>
 #include <DrawDocShell.hxx>
 #include <svl/undo.hxx>
+#include <svx/svdundo.hxx>
 #include <vcl/dibtools.hxx>
 #include <tools/debug.hxx>
 #include <tools/stream.hxx>
@@ -2471,6 +2472,15 @@ sal_Bool SAL_CALL SdDrawPage::hasElements()
 void SAL_CALL SdDrawPage::add( const Reference< drawing::XShape >& xShape )
 {
     SdGenericDrawPage::add( xShape );
+
+    // ZETA: a shape a script adds inside its undo context (XUndoManager::enterUndoContext) is
+    // undone with the rest of that step, as an insert from the UI is
+    ::SolarMutexGuard aGuard;
+    SdDrawDocument* pDoc = GetModel() ? GetModel()->GetDoc() : nullptr;
+    SdrObject* pObj = SdrObject::getSdrObjectFromXShape( xShape );
+    if (pDoc && pObj && pObj->IsInserted() && pDoc->IsUndoEnabled() && pDoc->GetSdrUndoManager()
+        && pDoc->GetSdrUndoManager()->IsInListAction())
+        pDoc->AddUndo(pDoc->GetSdrUndoFactory().CreateUndoNewObject(*pObj));
 }
 
 void SAL_CALL SdDrawPage::remove( const Reference< drawing::XShape >& xShape )
@@ -2479,14 +2489,17 @@ void SAL_CALL SdDrawPage::remove( const Reference< drawing::XShape >& xShape )
 
     throwIfDisposed();
 
-    SdrObject* pObj = SdrObject::getSdrObjectFromXShape( xShape );
-    if( pObj )
-    {
-        GetPage()->RemovePresObj(pObj);
-        pObj->SetUserCall(nullptr);
-    }
+    // ZETA: the delete undo action records a placeholder as one only while it still is one, so it
+    // leaves the presentation object list after it has left the page - undo brings back the placeholder
+    rtl::Reference<SdrObject> xObj( SdrObject::getSdrObjectFromXShape( xShape ) );
 
     SdGenericDrawPage::remove( xShape );
+
+    if( xObj )
+    {
+        GetPage()->RemovePresObj(xObj.get());
+        xObj->SetUserCall(nullptr);
+    }
 }
 
 void SdDrawPage::setBackground( const Any& rValue )
