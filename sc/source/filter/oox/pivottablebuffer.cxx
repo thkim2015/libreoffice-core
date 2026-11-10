@@ -1583,8 +1583,21 @@ void PivotTable::finalizeFieldsImport()
         assert(pDPCollection != nullptr);
         const ScDPDimensionSaveData* pGroups = nullptr;
         bool bRefFound = pDPCollection->GetReferenceGroups(*pDPObj, &pGroups);
+        // ZetaOffice: only a table whose own Excel cache has group fields takes the groups of
+        // another table of the same source range. The sheets are imported in parallel, so a
+        // table without groups (another Excel cache) could get the date groups of a table that
+        // happened to be finished first - and then shared the cache with it when saving.
+        bool bOwnCacheGroups = false;
+        for (sal_Int32 nCF = 0; mpPivotCache && !bOwnCacheGroups; ++nCF)
+        {
+            const PivotCacheField* pCF = mpPivotCache->getCacheField(nCF);
+            if (!pCF)
+                break;
+            bOwnCacheGroups = pCF->hasGroupItems() || pCF->hasNumericGrouping()
+                              || pCF->hasDateGrouping() || pCF->hasParentGrouping();
+        }
         // Apply reference groups on this table.
-        if (bRefFound && pGroups && pGroups->HasGroupDimensions()) {
+        if (bRefFound && pGroups && pGroups->HasGroupDimensions() && bOwnCacheGroups) {
             ScDPSaveData* pSaveData = pDPObj->GetSaveData();
             if (pSaveData) {
                 pSaveData->SetDimensionData(pGroups);
