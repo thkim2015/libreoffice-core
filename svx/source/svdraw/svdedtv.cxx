@@ -39,6 +39,8 @@
 #include <comphelper/dispatchcommand.hxx>
 
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <algorithm>
 
 using namespace com::sun::star;
 
@@ -1074,6 +1076,27 @@ void SdrEditView::ReplaceObjectAtView(SdrObject* pOldObj, SdrPageView& rPV, SdrO
         SdrView *pSdrView = dynamic_cast<SdrView*>(this);
         if (pSdrView)
             pSdrView->SdrEndTextEdit();
+    }
+
+    // ZETA: what takes the place of a PowerPoint placeholder (a table, chart or picture put into it)
+    // keeps the <p:ph> it was imported with, so PPTX export links it to its layout placeholder again
+    {
+        css::uno::Any aOld, aNew;
+        pOldObj->GetGrabBagItem(aOld);
+        pNewObj->GetGrabBagItem(aNew);
+        css::uno::Sequence<css::beans::PropertyValue> aOldBag, aNewBag;
+        aOld >>= aOldBag;
+        aNew >>= aNewBag;
+        auto itPh = std::find_if(aOldBag.begin(), aOldBag.end(),
+                                 [](const css::beans::PropertyValue& r) { return r.Name == "mso-ph"; });
+        const bool bHasPh = std::any_of(aNewBag.begin(), aNewBag.end(),
+                                        [](const css::beans::PropertyValue& r) { return r.Name == "mso-ph"; });
+        if (itPh != aOldBag.end() && !bHasPh)
+        {
+            aNewBag.realloc(aNewBag.getLength() + 1);
+            aNewBag.getArray()[aNewBag.getLength() - 1] = *itPh;
+            pNewObj->SetGrabBagItem(css::uno::Any(aNewBag));
+        }
     }
 
     SdrObjList* pOL=pOldObj->getParentSdrObjListFromSdrObject();
