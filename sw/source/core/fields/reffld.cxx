@@ -701,6 +701,36 @@ void SwGetRefField::UpdateField(const SwTextField* pFieldTextAttr, SwFrame* pFra
 
                 if (!m_sSetReferenceLanguage.isEmpty())
                     lcl_formatReferenceLanguage(rText, false, GetLanguage(), m_sSetReferenceLanguage);
+
+                // Word PAGEREF \p: "above"/"below" when the target is on the page of the
+                // field, else "on page N" (Word writes these English words in any language)
+                if (IsWordPageRelative() && pFieldTextAttr && pFieldTextAttr->GetpTextNode())
+                {
+                    const SwTextNode& rFieldNode = *pFieldTextAttr->GetpTextNode();
+                    SwTextFrame const* pFieldFrame = static_cast<SwTextFrame const*>(
+                        rFieldNode.getLayoutFrame(pLayout, nullptr, nullptr));
+                    if (pFieldFrame)
+                    {
+                        TextFrameIndex const nFieldIndex(
+                            pFieldFrame->MapModelToView(&rFieldNode, pFieldTextAttr->GetStart()));
+                        SwTextFrame const* pFollow = pFieldFrame;
+                        while (pFollow && !pFollow->IsInside(nFieldIndex))
+                            pFollow = pFollow->GetFollow();
+                        if (pFollow)
+                            pFieldFrame = pFollow;
+                    }
+                    if (pFieldFrame && pFieldFrame->GetVirtPageNum() == nPageNo)
+                    {
+                        const bool bAbove
+                            = &rFieldNode == pTextNd
+                                  ? nNumStart < pFieldTextAttr->GetStart()
+                                  : ::IsFrameBehind(rFieldNode, pFieldTextAttr->GetStart(),
+                                                    *pTextNd, nNumStart);
+                        rText = bAbove ? u"above"_ustr : u"below"_ustr;
+                    }
+                    else
+                        rText = "on page " + rText;
+                }
             }
         }
         break;

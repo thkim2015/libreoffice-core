@@ -8272,15 +8272,13 @@ void DomainMapper_Impl::CloseFieldCommand()
                     bEnclosedEq = true;
         }
         // Reference switches that the Writer fields below can not keep, the same way:
-        // REF \p with \r, \n or \w (Word writes the number and "above"/"below"), PAGEREF \p (Word
-        // writes "on page N" for another page), REF with a case switch, STYLEREF \s.
-        else if (sType == "REF" || sType == "PAGEREF" || sType == "STYLEREF")
+        // REF \p with \r, \n or \w (Word writes the number and "above"/"below"), REF with a
+        // case switch, STYLEREF \s.
+        else if (sType == "REF" || sType == "STYLEREF")
         {
             const OUString aCommand = pContext->GetCommand();
             OUString aValue;
-            if (sType == "PAGEREF")
-                bEnclosedEq = lcl_FindInCommand(aCommand, 'p', aValue);
-            else if (sType == "REF")
+            if (sType == "REF")
             {
                 bEnclosedEq = lcl_FindInCommand(aCommand, 'p', aValue)
                               && (lcl_FindInCommand(aCommand, 'r', aValue)
@@ -9207,8 +9205,12 @@ void DomainMapper_Impl::CloseFieldCommand()
                      || eId == FIELD_PAGE)
                     && lcl_FindInCommand(aCommand, '#', aPicture))
                     aPicture = aPicture.replaceAll("\"", "").trim();
-                if (bMergeFormat || bNoHyperlink || !aPicture.isEmpty())
-                    xFieldInterface->SetWordSwitches(bMergeFormat, bNoHyperlink, aPicture);
+                // PAGEREF \p: "above"/"below" on the same page, else "on page N"
+                const bool bPageRelative
+                    = eId == FIELD_PAGEREF && lcl_FindInCommand(aCommand, 'p', aValue);
+                if (bMergeFormat || bNoHyperlink || !aPicture.isEmpty() || bPageRelative)
+                    xFieldInterface->SetWordSwitches(bMergeFormat, bNoHyperlink, aPicture,
+                                                     bPageRelative);
             }
 
             if (!bCreateEnhancedField)

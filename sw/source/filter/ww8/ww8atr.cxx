@@ -3456,6 +3456,8 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
 
             // by default, include a hyperlink, unless the imported Word field had none
             OUString sExtraFlags = pField->IsWordNoHyperlink() ? OUString() : u"\\h "_ustr;
+            if (eField == ww::ePAGEREF && pField->IsWordPageRelative())
+                sExtraFlags = "\\p " + sExtraFlags;
 
             switch (eField)
             {

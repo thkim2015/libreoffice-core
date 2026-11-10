@@ -1066,6 +1066,7 @@ struct SwFieldProperties_Impl
     bool        bWordMergeFormat = false;
     bool        bWordNoHyperlink = false;
     OUString    sWordNumberPicture;
+    bool        bWordPageRelative = false;
 
     SwFieldProperties_Impl():
         aDate( Date::EMPTY ),
@@ -1238,16 +1239,19 @@ SwServiceType SwXTextField::GetServiceId() const
     return m_pImpl->m_nServiceId;
 }
 
-void SwXTextField::SetWordSwitches(bool bMergeFormat, bool bNoHyperlink, const OUString& rNumberPicture)
+void SwXTextField::SetWordSwitches(bool bMergeFormat, bool bNoHyperlink, const OUString& rNumberPicture,
+                                   bool bPageRelative)
 {
     if (m_pImpl->m_pProps)
     {
         m_pImpl->m_pProps->bWordMergeFormat = bMergeFormat;
         m_pImpl->m_pProps->bWordNoHyperlink = bNoHyperlink;
         m_pImpl->m_pProps->sWordNumberPicture = rNumberPicture;
+        m_pImpl->m_pProps->bWordPageRelative = bPageRelative;
     }
     if (const SwField* pField = m_pImpl->GetField())
-        const_cast<SwField*>(pField)->SetWordSwitches(bMergeFormat, bNoHyperlink, rNumberPicture);
+        const_cast<SwField*>(pField)->SetWordSwitches(bMergeFormat, bNoHyperlink, rNumberPicture,
+                                                      bPageRelative);
 }
 
 /** Convert between SwSetExpField with InputFlag false and InputFlag true.
@@ -1970,7 +1974,8 @@ void SAL_CALL SwXTextField::attach(
         xField->SetAutomaticLanguage(!m_pImpl->m_pProps->bBool4);
         xField->SetWordSwitches(m_pImpl->m_pProps->bWordMergeFormat,
                                 m_pImpl->m_pProps->bWordNoHyperlink,
-                                m_pImpl->m_pProps->sWordNumberPicture);
+                                m_pImpl->m_pProps->sWordNumberPicture,
+                                m_pImpl->m_pProps->bWordPageRelative);
         SwFormatField aFormat(*xField);
 
         UnoActionContext aCont(pDoc);
