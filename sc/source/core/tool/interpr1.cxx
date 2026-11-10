@@ -3587,15 +3587,8 @@ void ScInterpreter::ScLower()
 
 void ScInterpreter::ScLen()
 {
-    OUString aStr = GetString().getString();
-    sal_Int32 nIdx = 0;
-    sal_Int32 nCnt = 0;
-    while ( nIdx < aStr.getLength() )
-    {
-        aStr.iterateCodePoints( &nIdx );
-        ++nCnt;
-    }
-    PushDouble( nCnt );
+    // weboffice: Excel counts UTF-16 units here (LEN("a\U0001F600b")=4, MID can split a surrogate pair; measured)
+    PushDouble( GetString().getString().getLength() );
 }
 
 void ScInterpreter::ScT()
@@ -4155,7 +4148,11 @@ void ScInterpreter::ScUnicode()
             PushIllegalParameter();
         else
         {
-            PushDouble(aStr.iterateCodePoints(&o3tl::temporary(sal_Int32(0))));
+            // weboffice: like Excel, a lone high surrogate (MID("\U0001F600",1,1)) is #VALUE!; a lone low one is its value
+            if (rtl::isHighSurrogate(aStr[0]) && (aStr.getLength() < 2 || !rtl::isLowSurrogate(aStr[1])))
+                PushIllegalArgument();
+            else
+                PushDouble(aStr.iterateCodePoints(&o3tl::temporary(sal_Int32(0))));
         }
     }
 }
@@ -14516,19 +14513,9 @@ void ScInterpreter::ScReplace()
             nPos = nLen + 1;
         if (nCount > nLen - nPos + 1)
             nCount = nLen - nPos + 1;
-        sal_Int32 nIdx = 0;
-        sal_Int32 nCnt = 0;
-        while ( nIdx < nLen && nPos > nCnt + 1 )
-        {
-            aOldStr.iterateCodePoints( &nIdx );
-            ++nCnt;
-        }
-        sal_Int32 nStart = nIdx;
-        while ( nIdx < nLen && nPos + nCount - 1 > nCnt )
-        {
-            aOldStr.iterateCodePoints( &nIdx );
-            ++nCnt;
-        }
+        // weboffice: Excel counts UTF-16 units here (LEN("a\U0001F600b")=4, MID can split a surrogate pair; measured)
+        sal_Int32 nStart = nPos - 1;
+        sal_Int32 nIdx = nStart + nCount;
         if ( CheckStringResultLen( aOldStr, aNewStr.getLength() - (nIdx - nStart) ) )
             aOldStr = aOldStr.replaceAt( nStart, nIdx - nStart, aNewStr );
         PushString( aOldStr );
@@ -14611,16 +14598,7 @@ void ScInterpreter::ScFind()
         if (nPos == -1)
             PushNoValue();
         else
-        {
-            sal_Int32 nIdx = 0;
-            nCnt = 0;
-            while ( nIdx < nPos )
-            {
-                sStr.iterateCodePoints( &nIdx );
-                ++nCnt;
-            }
-            PushDouble( static_cast<double>(nCnt + 1) );
-        }
+            PushDouble( static_cast<double>(nPos + 1) ); // weboffice: Excel counts UTF-16 units here (LEN("a\U0001F600b")=4, MID can split a surrogate pair; measured)
     }
 }
 
@@ -14960,16 +14938,7 @@ void ScInterpreter::ScSearch()
         if (!bBool)
             PushNoValue();
         else
-        {
-            sal_Int32 nIdx = 0;
-            sal_Int32 nCnt = 0;
-            while ( nIdx < nPos )
-            {
-                sStr.iterateCodePoints( &nIdx );
-                ++nCnt;
-            }
-            PushDouble( static_cast<double>(nCnt + 1) );
-        }
+            PushDouble( static_cast<double>(nPos + 1) ); // weboffice: Excel counts UTF-16 units here (LEN("a\U0001F600b")=4, MID can split a surrogate pair; measured)
     }
 }
 
@@ -15476,21 +15445,10 @@ void ScInterpreter::ScMid()
         PushError(FormulaError::StringOverflow);
     else
     {
-        sal_Int32 nLen = aStr.getLength();
-        sal_Int32 nIdx = 0;
-        sal_Int32 nCnt = 0;
-        while ( nIdx < nLen && nStart - 1 > nCnt )
-        {
-            aStr.iterateCodePoints( &nIdx );
-            ++nCnt;
-        }
-        sal_Int32 nIdx0 = nIdx;  //start position
-
-        while ( nIdx < nLen && nStart + nSubLen - 1 > nCnt )
-        {
-            aStr.iterateCodePoints( &nIdx );
-            ++nCnt;
-        }
+        // weboffice: Excel counts UTF-16 units here (LEN("a\U0001F600b")=4, MID can split a surrogate pair; measured)
+        const sal_Int32 nLen = aStr.getLength();
+        const sal_Int32 nIdx0 = std::min(nStart - 1, nLen);
+        const sal_Int32 nIdx = static_cast<sal_Int32>(std::min<sal_Int64>(static_cast<sal_Int64>(nIdx0) + nSubLen, nLen));
         aStr = aStr.copy( nIdx0, nIdx - nIdx0 );
         PushString( aStr );
     }
