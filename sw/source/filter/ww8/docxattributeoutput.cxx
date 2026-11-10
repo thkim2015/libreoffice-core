@@ -5028,9 +5028,30 @@ void DocxAttributeOutput::TableCellProperties( ww8::WW8TableNodeInfoInner::Point
     SwTwips nWidth = GetGridCols( pTableTextNodeInfoInner )->at( nCell );
     if ( nCell )
         nWidth = nWidth - GetGridCols( pTableTextNodeInfoInner )->at( nCell - 1 );
+    // Word's automatic ("auto") or percent ("pct:<fiftieths>") preferred width of an imported
+    // cell, see DomainMapperTableManager::sprm()
+    const char* pWidthType = "dxa";
+    if (const SfxGrabBagItem* pItem = pTableBox->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
+    {
+        auto it = pItem->GetGrabBag().find(u"CellPreferredWidth"_ustr);
+        OUString sPreferred;
+        if (it != pItem->GetGrabBag().end() && (it->second >>= sPreferred))
+        {
+            if (sPreferred == "auto")
+            {
+                nWidth = 0;
+                pWidthType = "auto";
+            }
+            else if (sPreferred.startsWith("pct:"))
+            {
+                nWidth = o3tl::toInt32(sPreferred.subView(4));
+                pWidthType = "pct";
+            }
+        }
+    }
     m_pSerializer->singleElementNS( XML_w, XML_tcW,
            FSNS( XML_w, XML_w ), OString::number(nWidth),
-           FSNS( XML_w, XML_type ), "dxa" );
+           FSNS( XML_w, XML_type ), pWidthType );
 
     // Horizontal spans
     const SwWriteTableRows& rRows = m_xTableWrt->GetRows( );

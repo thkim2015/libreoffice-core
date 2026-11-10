@@ -387,6 +387,21 @@ bool DomainMapperTableManager::sprm(Sprm & rSprm)
                             getCurrentCellWidths()->push_back(pMeasureHandler->getMeasureValue() ? pMeasureHandler->getValue() : sal_Int32(0));
                         if (getTableDepthDifference())
                             m_bPushCurrentWidth = true;
+                        // Writer cells only have absolute widths: keep Word's automatic and
+                        // percent preferred widths for the DOCX export, see
+                        // DocxAttributeOutput::TableCellProperties()
+                        const Id nUnit = sal::static_int_cast<Id>(pMeasureHandler->getUnit());
+                        if (nUnit == NS_ooxml::LN_Value_ST_TblWidth_auto
+                            || nUnit == NS_ooxml::LN_Value_ST_TblWidth_pct)
+                        {
+                            TablePropertyMapPtr pGrabBagMap(new TablePropertyMap);
+                            pGrabBagMap->Insert(PROP_CELL_PREFERRED_WIDTH,
+                                                uno::Any(nUnit == NS_ooxml::LN_Value_ST_TblWidth_auto
+                                                             ? u"auto"_ustr
+                                                             : "pct:" + OUString::number(pMeasureHandler->getValue())),
+                                                true, CELL_GRAB_BAG);
+                            cellProps(pGrabBagMap);
+                        }
                     }
                 }
                 break;
