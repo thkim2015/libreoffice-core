@@ -177,6 +177,8 @@ public:
     void SetSheetCount( SCTAB nSheets );
 
     void addDataTable(const ScRange& rRange) { maDataTables.push_back(rRange); }
+    /// ZetaOffice: the file has data tables (multiple operations)
+    bool zetaHasDataTables() const { return !maDataTables.empty(); }
 };
 
 } // namespace oox::xls
