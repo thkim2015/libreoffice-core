@@ -404,6 +404,18 @@ public:
     void SetPageNumberType( sal_Int32 nSet ) { m_nPageNumberType = nSet; }
     void SetPageNumberChapStyle(const OUString& rSet) { m_sPageNumberChapStyle = rSet; }
     void SetPageNumberChapSep(const OUString& rSet) { m_sPageNumberChapSep = rSet; }
+
+    /// Numbering of w:footnotePr / w:endnotePr in this sectPr (-1: not set). Writer only has
+    /// document-wide note numbering, see DomainMapper::~DomainMapper().
+    struct NoteNumbering
+    {
+        sal_Int16 nType = -1; // css::style::NumberingType
+        sal_Int16 nStartAt = -1; // offset, numStart - 1
+        sal_Int16 nCounting = -1; // css::text::FootnoteNumbering
+        bool operator==(const NoteNumbering&) const = default;
+    };
+    NoteNumbering m_aFootnoteNumbering;
+    NoteNumbering m_aEndnoteNumbering;
     void SetBreakType( sal_Int32 nSet )      { m_nBreakType = nSet; }
 
     void SetLeftMargin( sal_Int32 nSet )   { m_nLeftMargin = nSet; }

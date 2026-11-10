@@ -164,6 +164,7 @@
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/drawing/ShadingPattern.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
+#include <com/sun/star/text/FootnoteNumbering.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/text/ControlCharacter.hpp>
@@ -7853,6 +7854,27 @@ static OString lcl_ConvertNumberingType(sal_Int16 nNumberingType, const SfxItemS
 }
 
 
+/// A value that the DOCX import kept for the page style being exported: rKey is a document grab
+/// bag entry that maps page style (programmatic) names to values.
+static bool lcl_GetPageStyleGrabBagValue(const MSWordExportBase& rExport, const OUString& rKey,
+                                         uno::Any& rValue)
+{
+    const SwPageDesc* pPd = rExport.m_pCurrentPageDesc;
+    const SwDocShell* pDocShell = rExport.m_rDoc.GetDocShell();
+    if (!pPd || !pDocShell)
+        return false;
+    rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
+    uno::Sequence<beans::PropertyValue> aGrabBag;
+    uno::Sequence<beans::PropertyValue> aByStyle;
+    if (!xProps.is() || !(xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
+        || !(comphelper::SequenceAsHashMap(aGrabBag).getValue(rKey) >>= aByStyle))
+        return false;
+    const OUString sProgName
+        = SwStyleNameMapper::GetProgName(pPd->GetName(), SwGetPoolIdFromName::PageDesc).toString();
+    rValue = comphelper::SequenceAsHashMap(aByStyle).getValue(sProgName);
+    return rValue.hasValue();
+}
+
 void DocxAttributeOutput::SectionPageNumbering( sal_uInt16 nNumType, const ::std::optional<sal_uInt16>& oPageRestartNumber )
 {
     // FIXME Not called properly with page styles like "First Page"
@@ -7871,32 +7893,18 @@ void DocxAttributeOutput::SectionPageNumbering( sal_uInt16 nNumType, const ::std
 
     // w:chapStyle/w:chapSep kept from DOCX import for this page style, see
     // SectionPropertyMap::CloseSectionGroup()
-    const SwPageDesc* pPd = m_rExport.m_pCurrentPageDesc;
-    const SwDocShell* pDocShell = m_rExport.m_rDoc.GetDocShell();
-    if (pPd && pDocShell)
+    uno::Any aChapter;
+    OUString sValue;
+    if (lcl_GetPageStyleGrabBagValue(m_rExport, u"OoxmlPageNumberChapters"_ustr, aChapter)
+        && (aChapter >>= sValue))
     {
-        rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
-        uno::Sequence<beans::PropertyValue> aGrabBag;
-        uno::Sequence<beans::PropertyValue> aChapters;
-        if (xProps.is() && (xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
-            && (comphelper::SequenceAsHashMap(aGrabBag).getValue(u"OoxmlPageNumberChapters"_ustr)
-                >>= aChapters))
-        {
-            const OUString sProgName
-                = SwStyleNameMapper::GetProgName(pPd->GetName(), SwGetPoolIdFromName::PageDesc)
-                      .toString();
-            OUString sValue;
-            if (comphelper::SequenceAsHashMap(aChapters).getValue(sProgName) >>= sValue)
-            {
-                const sal_Int32 nBar = sValue.indexOf('|');
-                const OUString sStyle = nBar < 0 ? sValue : sValue.copy(0, nBar);
-                const OUString sSep = nBar < 0 ? OUString() : sValue.copy(nBar + 1);
-                if (!sStyle.isEmpty())
-                    pAttr->add(FSNS(XML_w, XML_chapStyle), sStyle.toUtf8());
-                if (!sSep.isEmpty())
-                    pAttr->add(FSNS(XML_w, XML_chapSep), sSep.toUtf8());
-            }
-        }
+        const sal_Int32 nBar = sValue.indexOf('|');
+        const OUString sStyle = nBar < 0 ? sValue : sValue.copy(0, nBar);
+        const OUString sSep = nBar < 0 ? OUString() : sValue.copy(nBar + 1);
+        if (!sStyle.isEmpty())
+            pAttr->add(FSNS(XML_w, XML_chapStyle), sStyle.toUtf8());
+        if (!sSep.isEmpty())
+            pAttr->add(FSNS(XML_w, XML_chapSep), sSep.toUtf8());
     }
 
     m_pSerializer->singleElementNS( XML_w, XML_pgNumType, pAttr );
@@ -9572,10 +9580,46 @@ void DocxAttributeOutput::WriteFootnoteEndnotePr( ::sax_fastparser::FSHelperPtr 
 
 void DocxAttributeOutput::SectFootnoteEndnotePr()
 {
+    // Writer has document-wide note numbering only: the DOCX import keeps the numbering of
+    // sections that differ from it per page style, see lcl_ApplySectionNoteNumberings().
+    auto lcl_Override = [this](const OUString& rKey, SwEndNoteInfo& rInfo, SwFootnoteInfo* pFootnoteInfo)
+    {
+        uno::Any aValue;
+        uno::Sequence<sal_Int16> aNumbering;
+        if (!lcl_GetPageStyleGrabBagValue(m_rExport, rKey, aValue) || !(aValue >>= aNumbering)
+            || aNumbering.getLength() < 3)
+            return false;
+        SvxNumberType aFormat(rInfo.m_aFormat);
+        aFormat.SetNumberingType(static_cast<SvxNumType>(aNumbering[0]));
+        rInfo.m_aFormat = aFormat;
+        rInfo.m_nFootnoteOffset = aNumbering[1];
+        if (pFootnoteInfo)
+        {
+            switch (aNumbering[2])
+            {
+                case text::FootnoteNumbering::PER_PAGE: pFootnoteInfo->m_eNum = FTNNUM_PAGE; break;
+                case text::FootnoteNumbering::PER_CHAPTER: pFootnoteInfo->m_eNum = FTNNUM_CHAPTER; break;
+                default: pFootnoteInfo->m_eNum = FTNNUM_DOC; break;
+            }
+        }
+        return true;
+    };
     if( HasFootnotes())
-        WriteFootnoteEndnotePr( m_pSerializer, XML_footnotePr, m_rExport.m_rDoc.GetFootnoteInfo(), 0 );
+    {
+        SwFootnoteInfo aInfo(m_rExport.m_rDoc.GetFootnoteInfo());
+        if (lcl_Override(u"OoxmlSectionFootnoteNumbering"_ustr, aInfo, &aInfo))
+            WriteFootnoteEndnotePr(m_pSerializer, XML_footnotePr, aInfo, 0);
+        else
+            WriteFootnoteEndnotePr( m_pSerializer, XML_footnotePr, m_rExport.m_rDoc.GetFootnoteInfo(), 0 );
+    }
     if( HasEndnotes())
-        WriteFootnoteEndnotePr( m_pSerializer, XML_endnotePr, m_rExport.m_rDoc.GetEndNoteInfo(), 0 );
+    {
+        SwEndNoteInfo aInfo(m_rExport.m_rDoc.GetEndNoteInfo());
+        if (lcl_Override(u"OoxmlSectionEndnoteNumbering"_ustr, aInfo, nullptr))
+            WriteFootnoteEndnotePr(m_pSerializer, XML_endnotePr, aInfo, 0);
+        else
+            WriteFootnoteEndnotePr( m_pSerializer, XML_endnotePr, m_rExport.m_rDoc.GetEndNoteInfo(), 0 );
+    }
 }
 
 void DocxAttributeOutput::ParaLineSpacing_Impl( short nSpace, short nMulti )

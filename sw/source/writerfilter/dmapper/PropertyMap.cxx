@@ -1774,6 +1774,12 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
 {
     SectionPropertyMap* pPrevSection = rDM_Impl.GetLastSectionContext();
 
+    // Remember the note numbering of this section, see DomainMapper::~DomainMapper()
+    const bool bRecordNoteNumbering = rDM_Impl.IsNewDoc() && !rDM_Impl.IsAltChunk();
+    if (bRecordNoteNumbering)
+        rDM_Impl.m_aSectionNoteNumberings.push_back(
+            { OUString(), m_aFootnoteNumbering, m_aEndnoteNumbering });
+
     // The default section type is nextPage.
     if ( m_nBreakType == -1 )
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_nextPage;
@@ -2207,6 +2213,8 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
             if (!m_sPageNumberChapStyle.isEmpty() || !m_sPageNumberChapSep.isEmpty())
                 rDM_Impl.m_aPageNumberChapters[m_sPageStyleName]
                     = m_sPageNumberChapStyle + "|" + m_sPageNumberChapSep;
+            if (bRecordNoteNumbering && !rDM_Impl.m_aSectionNoteNumberings.empty())
+                rDM_Impl.m_aSectionNoteNumberings.back().sPageStyle = m_sPageStyleName;
 
             if (rDM_Impl.m_xAltChunkStartingRange.is())
             {

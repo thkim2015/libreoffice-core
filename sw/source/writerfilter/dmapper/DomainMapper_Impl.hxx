@@ -1211,6 +1211,15 @@ public:
     /// Page style name -> "chapStyle|chapSep" of w:pgNumType, written back by the DOCX export.
     std::map<OUString, OUString> m_aPageNumberChapters;
 
+    /// Footnote/endnote numbering of each sectPr and the page style it ended up using.
+    struct SectionNoteNumbering
+    {
+        OUString sPageStyle;
+        SectionPropertyMap::NoteNumbering aFootnote;
+        SectionPropertyMap::NoteNumbering aEndnote;
+    };
+    std::vector<SectionNoteNumbering> m_aSectionNoteNumberings;
+
     /// If we're importing into a new document, or just pasting to an existing one.
     bool IsNewDoc() const { return m_bIsNewDoc;}
 
