@@ -269,6 +269,19 @@ static svl::SharedString lcl_LogicalString( ScInterpreterContext& rContext, svl:
     return rPool.intern(aStr);
 }
 
+void ScInterpreter::GetCellStringExcel( svl::SharedString& rStr, const ScAddress& rPos, const ScRefCellValue& rCell )
+{
+    if (IsLogicalCell(rPos, rCell))
+        rStr = lcl_LogicalString(mrContext, mrStrPool, GetCellValue(rPos, rCell));
+    else
+        GetCellString(rStr, rCell);
+}
+
+OUString ScInterpreter::LogicalString( double fVal )
+{
+    return lcl_LogicalString(mrContext, mrStrPool, fVal).getString();
+}
+
 void ScInterpreter::GetCellString( svl::SharedString& rStr, const ScRefCellValue& rCell )
 {
     FormulaError nErr = FormulaError::NONE;
@@ -2798,6 +2811,10 @@ svl::SharedString ScInterpreter::GetString()
             return svl::SharedString::getEmptyString();
         case svDouble:
         {
+            // weboffice: TRUE/FALSE (TRUE, 1>0) as text is TRUE/FALSE in Excel (TRUE&"x", CONCAT(TRUE))
+            if (static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                == static_cast<sal_Int16>(SvNumFormatType::LOGICAL))
+                return lcl_LogicalString(mrContext, mrStrPool, PopDouble());
             return GetStringFromDouble( PopDouble() );
         }
         case svString:

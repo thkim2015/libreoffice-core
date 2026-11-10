@@ -322,6 +322,9 @@ private:
     double GetCellValueOrZero( const ScAddress&, const ScRefCellValue& rCell );
     double GetValueCellValue( const ScAddress&, double fOrig );
     void GetCellString( svl::SharedString& rStr, const ScRefCellValue& rCell );
+    // weboffice: like GetCellString, but a TRUE/FALSE cell is the text TRUE/FALSE (Excel CONCAT, TEXTJOIN)
+    void GetCellStringExcel( svl::SharedString& rStr, const ScAddress& rPos, const ScRefCellValue& rCell );
+    OUString LogicalString( double fVal );
     formula::FormulaCallableRef GetCellCallable( const ScRefCellValue& rCell );
     static FormulaError GetCellErrCode( const ScRefCellValue& rCell );
 
@@ -768,6 +771,10 @@ private:
     void ScSumIf();
     void ScAverageIf();
     void IterateParametersIfs( double(*ResultFunc)( const sc::ParamIfsResult& rRes ) );
+    // weboffice: Excel's criteria rules for COUNTIFS/SUMIF(S)/AVERAGEIF(S)/MAXIFS/MINIFS
+    bool ExcelCriteriaApplies( sal_uInt8 nCritParams, sal_uInt8 nAbove, bool bAllowArrayRange );
+    bool ExcelCriteriaMask( sal_uInt8 nCritParams, std::vector<char>& rMask, ScRange& rFirst );
+    bool ExcelIfsValues( sal_uInt8 nCritParams, int eValues, bool bResize, sc::ParamIfsResult& rRes );
     void ScSumIfs();
     void ScAverageIfs();
     void ScCountIfs();

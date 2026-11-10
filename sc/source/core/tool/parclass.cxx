@@ -292,6 +292,7 @@ const ScParameterClassification::RawData ScParameterClassification::pRawData[] =
     { ocTrend,           {{ Reference, Reference, Reference, Value               }, 0, Value }},
     { ocTrimMean,        {{ Reference, Value                                     }, 0, Value }},
     { ocTrue,            {{ Bounds                                               }, 0, Value }},
+    { ocType,            {{ Reference                                            }, 0, Value }}, // weboffice: TYPE(A1:A2) is 64 like Excel
     { ocUnion,           {{ Reference, Reference                                 }, 0, Reference }},
     { ocUnique,          {{ ReferenceOrRefArray, Value, Value,                   }, 0, ForceArrayReturn } },
     { ocValueToText,     {{ ReferenceOrRefArray, Value                           }, 0, Value }},
