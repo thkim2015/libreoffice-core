@@ -332,7 +332,7 @@ static std::unordered_set<const SwTextFormatColl*> lcl_UnusedDefaultColls(SwDoc&
     uno::Sequence<OUString> aNames;
     try
     {
-        uno::Reference<beans::XPropertySet> xProps(pShell->GetBaseModel(), uno::UNO_QUERY);
+        uno::Reference<beans::XPropertySet> xProps(pShell->GetModel(), uno::UNO_QUERY);
         uno::Sequence<beans::PropertyValue> aGrabBag;
         if (xProps.is())
             xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
