@@ -217,6 +217,34 @@ void lclZetaRestoreGroups( const ScDPCache& rCache )
 
 }
 
+/// ZetaOffice: how many calculated fields a cache entry writes. Calculated fields live in the
+/// shared cache, so a per-group-set entry would get the calculated fields of every table of the
+/// range (Excel: only those of its own cache). Unused trailing ones are left out; earlier unused
+/// ones stay so that the field indices of the written ones do not move.
+static size_t lclZetaCalcFieldsToWrite( const XclExpXmlPivotCaches::Entry& rEntry, const ScDPCache& rCache )
+{
+    const size_t nCalc = rCache.GetCalculatedFieldCount();
+    if (!rEntry.mpGroupOwner || rEntry.maZetaTables.empty())
+        return nCalc;
+    const size_t nBase = rCache.GetFieldCount() + rCache.GetGroupFieldCount();
+    size_t nKeep = 0;
+    for (size_t k = 0; k < nCalc; ++k)
+    {
+        for (const ScDPObject* pObj : rEntry.maZetaTables)
+        {
+            const OUString aName = const_cast<ScDPObject*>(pObj)->GetDimName(nBase + k, o3tl::temporary(bool()));
+            const ScDPSaveData* pSave = pObj->GetSaveData();
+            const ScDPSaveDimension* pDim = pSave && !aName.isEmpty() ? pSave->GetExistingDimensionByName(aName) : nullptr;
+            if (pDim && pDim->GetOrientation() != sheet::DataPilotFieldOrientation_HIDDEN)
+            {
+                nKeep = k + 1;
+                break;
+            }
+        }
+    }
+    return nKeep;
+}
+
 void XclExpXmlPivotCaches::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& pWorkbookStrm = rStrm.GetCurrentStream();
@@ -383,7 +411,7 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
 
     size_t nCount = rCache.GetFieldCount();
     const size_t nGroupFieldCount = rCache.GetGroupFieldCount();
-    const size_t nCalculatedFieldCount = rCache.GetCalculatedFieldCount();
+    const size_t nCalculatedFieldCount = lclZetaCalcFieldsToWrite(rEntry, rCache);
     pDefStrm->startElement(XML_cacheFields,
         XML_count, OString::number(static_cast<tools::Long>(nCount + nGroupFieldCount + nCalculatedFieldCount)));
 
@@ -958,6 +986,7 @@ void XclExpXmlPivotTableManager::Initialize()
                 aEntry.mpCache = pCache;
                 aEntry.maSrcRange = rRange;
                 aEntry.mpGroupOwner = rObjs.front();
+                aEntry.maZetaTables = rObjs;
                 aCaches.push_back(aEntry);
             }
             continue;
@@ -1392,7 +1421,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
     const ScDPSaveData& rSaveData = *rDPObj.GetSaveData();
 
-    size_t nFieldCount = rCache.GetFieldCount() + rCache.GetGroupFieldCount() + rCache.GetCalculatedFieldCount();
+    size_t nFieldCount = rCache.GetFieldCount() + rCache.GetGroupFieldCount() + lclZetaCalcFieldsToWrite(*pCacheEntry, rCache);
     std::vector<const ScDPSaveDimension*> aCachedDims;
     NameToIdMapType aNameToIdMap;
 
