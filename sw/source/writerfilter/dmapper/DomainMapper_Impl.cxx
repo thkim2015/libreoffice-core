@@ -7143,7 +7143,7 @@ void DomainMapper_Impl::handleFieldFormula
     sal_Int32 nNumberFormat = 0;
     if (!sPicture.isEmpty() && m_xTextDocument
         && std::all_of(sPicture.getStr(), sPicture.getStr() + sPicture.getLength(),
-                       [](sal_Unicode c) { return OUString(u"0#,.;%$+-() ").indexOf(c) >= 0; }))
+                       [](sal_Unicode c) { return std::u16string_view(u"0#,.;%$+-() ").find(c) != std::u16string_view::npos; }))
     {
         try
         {
