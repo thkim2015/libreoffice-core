@@ -3635,7 +3635,7 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                 if (!sPicture.isEmpty()
                     && (pEntry->GetType() & (SvNumFormatType::NUMBER | SvNumFormatType::PERCENT))
                     && std::all_of(sPicture.getStr(), sPicture.getStr() + sPicture.getLength(),
-                                   [](sal_Unicode c) { return OUString(u"0#,.;%$+-() ").indexOf(c) >= 0; }))
+                                   [](sal_Unicode c) { return std::u16string_view(u"0#,.;%$+-() ").find(c) != std::u16string_view::npos; }))
                     aExpand += " \\# \"" + sPicture + "\"";
             }
             GetExport().OutputField(pField, eField, aExpand);
