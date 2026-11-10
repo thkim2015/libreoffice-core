@@ -5804,9 +5804,19 @@ CHARS_CYRILLIC_LOWER_LETTER_N_UK*/
         if( /*sCommand*/sNumber.equalsAscii(rNumberingPair.cWordName ))
         {
             nRet = rNumberingPair.nType;
-            break;
+            return nRet;
         }
     }
+
+    // Number-as-text switches, case does not matter here (\* Caps etc. sets the case)
+    if (sNumber.equalsIgnoreAsciiCase("Ordinal"))
+        nRet = style::NumberingType::TEXT_NUMBER;
+    else if (sNumber.equalsIgnoreAsciiCase("OrdText"))
+        nRet = style::NumberingType::TEXT_ORDINAL;
+    else if (sNumber.equalsIgnoreAsciiCase("CardText"))
+        nRet = style::NumberingType::TEXT_CARDINAL;
+    else if (sNumber.equalsIgnoreAsciiCase("Arabic"))
+        nRet = style::NumberingType::ARABIC;
 
     return nRet;
 }
@@ -8186,8 +8196,20 @@ void DomainMapper_Impl::CloseFieldCommand()
         // Word enclosed characters (Home > Font > Enclose Characters) are EQ \o\ac(sym,text):
         // there is no Writer equivalent, so keep them as a generic fieldmark (code round-trips,
         // the web shell paints a visible result) instead of dropping them.
-        bool const bEnclosedEq = sType == "EQ"
-            && pContext->GetCommand().toAsciiLowerCase().indexOf("\\ac") >= 0;
+        // The same for the other EQ forms that the FIELD_EQ import below can not convert
+        // (fractions, radicals, brackets, integrals, arrays...): it would drop them.
+        bool bEnclosedEq = false;
+        if (sType == "EQ")
+        {
+            const OUString aEqCommand = pContext->GetCommand().trim();
+            OUString aEqArgs;
+            if (sal_Int32 nSpace = aEqCommand.indexOf(' '); nSpace > 0)
+                aEqArgs = aEqCommand.copy(nSpace).trim();
+            const bool bConverted
+                = !msfilter::util::ParseCombinedChars(aEqCommand).sType.isEmpty()
+                  || aEqArgs.startsWith("\\s\\do") || aEqArgs.startsWith("\\* jc");
+            bEnclosedEq = aEqCommand.toAsciiLowerCase().indexOf("\\ac") >= 0 || !bConverted;
+        }
         if (aIt != aFieldConversionMap.end() && !bEnclosedEq
             && (!m_bForceGenericFields
                 // these need to convert ffData to properties...
