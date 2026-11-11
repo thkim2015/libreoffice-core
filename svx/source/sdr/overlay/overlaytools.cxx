@@ -19,6 +19,7 @@
 
 
 #include <sdr/overlay/overlaytools.hxx>
+#include <cmath>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <drawinglayer/primitive2d/bitmapprimitive2d.hxx>
@@ -57,14 +58,29 @@ OverlayStaticRectanglePrimitive::OverlayStaticRectanglePrimitive(
     , mbEllipse(bEllipse)
 {}
 
-Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
+Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
 {
     const double fHalfWidth = maSize.getWidth() * getDiscreteUnit() / 2.0;
     const double fHalfHeight = maSize.getHeight() * getDiscreteUnit() / 2.0;
 
+    // zetaOffice: put the round Office handle on a pixel centre. Off the pixel grid the 9px circle
+    // with its 2px ring is smeared by anti-aliasing to about 10px with a 6px white middle; on the
+    // centre it is 11px across with a 7px white middle like PowerPoint 2021.
+    basegfx::B2DPoint aPosition(maPosition);
+    if (mbEllipse)
+    {
+        const basegfx::B2DHomMatrix& rToView = rViewInformation.getObjectToViewTransformation();
+        basegfx::B2DHomMatrix aToLogic(rToView);
+        if (aToLogic.invert())
+        {
+            const basegfx::B2DPoint aDiscrete(rToView * maPosition);
+            aPosition = aToLogic * basegfx::B2DPoint(std::floor(aDiscrete.getX()) + 0.5, std::floor(aDiscrete.getY()) + 0.5);
+        }
+    }
+
     basegfx::B2DRange aRange(
-        maPosition.getX() - fHalfWidth, maPosition.getY() - fHalfHeight,
-        maPosition.getX() + fHalfWidth, maPosition.getY() + fHalfHeight);
+        aPosition.getX() - fHalfWidth, aPosition.getY() - fHalfHeight,
+        aPosition.getX() + fHalfWidth, aPosition.getY() + fHalfHeight);
 
     if (getDiscreteUnit() <= 0.0 || mfTransparence > 1.0)
         return nullptr;
