@@ -19,6 +19,7 @@
 
 
 #include <sdr/overlay/overlaytools.hxx>
+#include <cmath>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <drawinglayer/primitive2d/bitmapprimitive2d.hxx>
@@ -57,14 +58,30 @@ OverlayStaticRectanglePrimitive::OverlayStaticRectanglePrimitive(
     , mbEllipse(bEllipse)
 {}
 
-Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(const geometry::ViewInformation2D& /*rViewInformation*/) const
+Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(const geometry::ViewInformation2D& rViewInformation) const
 {
     const double fHalfWidth = maSize.getWidth() * getDiscreteUnit() / 2.0;
     const double fHalfHeight = maSize.getHeight() * getDiscreteUnit() / 2.0;
 
+    // zetaOffice: put the round Office handle on a pixel centre (whole discrete coordinates here —
+    // x.5 lands between pixels and gives an even 10px handle). Off the pixel grid the 9px circle
+    // with its 2px ring is smeared by anti-aliasing to about 10px with a 6px white middle; on the
+    // centre it is 11px across with a 7px white middle like PowerPoint 2021.
+    basegfx::B2DPoint aPosition(maPosition);
+    if (mbEllipse)
+    {
+        const basegfx::B2DHomMatrix& rToView = rViewInformation.getObjectToViewTransformation();
+        basegfx::B2DHomMatrix aToLogic(rToView);
+        if (aToLogic.invert())
+        {
+            const basegfx::B2DPoint aDiscrete(rToView * maPosition);
+            aPosition = aToLogic * basegfx::B2DPoint(std::round(aDiscrete.getX()), std::round(aDiscrete.getY()));
+        }
+    }
+
     basegfx::B2DRange aRange(
-        maPosition.getX() - fHalfWidth, maPosition.getY() - fHalfHeight,
-        maPosition.getX() + fHalfWidth, maPosition.getY() + fHalfHeight);
+        aPosition.getX() - fHalfWidth, aPosition.getY() - fHalfHeight,
+        aPosition.getX() + fHalfWidth, aPosition.getY() + fHalfHeight);
 
     if (getDiscreteUnit() <= 0.0 || mfTransparence > 1.0)
         return nullptr;
@@ -77,10 +94,10 @@ Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(cons
     basegfx::B2DPolyPolygon aPolyPolygon;
     aPolyPolygon.append(aPolygon);
 
-    // zetaOffice: the round Office handles take a one pixel outline. A width of 1.0 is in logic
-    // units, which is far thinner than a pixel and vanishes under the opaque fill (Calc, Impress
-    // and Writer all showed white dots without the grey ring).
-    const attribute::LineAttribute aLineAttribute(maStrokeColor, mbEllipse ? getDiscreteUnit() : 1.0);
+    // zetaOffice: the round Office handles take a two pixel outline centred on the 9px circle, so
+    // they measure 11px across with a 7px white middle like PowerPoint 2021 at 96 DPI. A width of
+    // 1.0 is in logic units, which is far thinner than a pixel and vanishes under the opaque fill.
+    const attribute::LineAttribute aLineAttribute(maStrokeColor, mbEllipse ? 2.0 * getDiscreteUnit() : 1.0);
 
     // create data
     const Primitive2DReference aStroke(
