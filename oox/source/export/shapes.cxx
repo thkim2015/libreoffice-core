@@ -952,8 +952,10 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
 
     FSHelperPtr pFS = GetFS();
 
-    // PowerPoint "Crop to Shape": <p:pic> with <p:blipFill> and <a:prstGeom> in <p:spPr>
-    if (GetDocumentType() == DOCUMENT_PPTX && !mbUserShapes && !sPresetShape.isEmpty()
+    // PowerPoint/Excel "Crop to Shape": <p:pic> (<xdr:pic> in XLSX) with <p:blipFill> and
+    // <a:prstGeom> in <p:spPr>, so that Office still sees a picture and not a filled shape
+    if ((GetDocumentType() == DOCUMENT_PPTX || GetDocumentType() == DOCUMENT_XLSX)
+        && !mbUserShapes && !sPresetShape.isEmpty()
         && sShapeType != "non-primitive" && sShapeType != "ooxml-non-primitive"
         && !IsNonEmptySimpleText(xShape) && lcl_IsCropToShapePicture(rXPropSet))
     {
@@ -974,7 +976,8 @@ ShapeExport& ShapeExport::WriteCustomShape( const Reference< XShape >& xShape )
             XML_name, GetShapeName(xShape), XML_hidden, sax_fastparser::UseIf("1", !bVisible),
             XML_descr, sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()), XML_title,
             sax_fastparser::UseIf(sTitle, !sTitle.isEmpty()));
-        lcl_WriteClickAction(pFS, mpFB, rXPropSet);
+        if (GetDocumentType() == DOCUMENT_PPTX) // ppaction:// links are PowerPoint only
+            lcl_WriteClickAction(pFS, mpFB, rXPropSet);
         AddExtLst(pFS, rXPropSet);
         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);
         pFS->singleElementNS(mnXmlNamespace, XML_cNvPicPr);
