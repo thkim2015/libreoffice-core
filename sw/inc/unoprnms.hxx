@@ -169,6 +169,9 @@ inline constexpr OUString UNO_NAME_CHAR_BACK_COLOR = u"CharBackColor"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_BACKGROUND_COMPLEX_COLOR
     = u"CharBackgroundComplexColor"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_BACK_TRANSPARENT = u"CharBackTransparent"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_BACK_COLOR_THEME = u"CharBackColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_BACK_COLOR_TINT_OR_SHADE
+    = u"CharBackColorTintOrShade"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_COMBINE_IS_ON = u"CharCombineIsOn"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_COMBINE_PREFIX = u"CharCombinePrefix"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_COMBINE_SUFFIX = u"CharCombineSuffix"_ustr;
