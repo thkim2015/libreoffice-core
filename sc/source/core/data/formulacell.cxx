@@ -2368,6 +2368,12 @@ void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTa
         // a date or currency of the top left cell is not spread as hard format
         const bool bMatrixLogical = cMatrixFlag == ScMatrixMode::Reference
             && (pInterpreter->GetRetFormatType() == SvNumFormatType::LOGICAL || nFormatType == SvNumFormatType::LOGICAL);
+        if (bMatrixLogical && !mbNeedsNumberFormat)
+        {
+            // A reference cell created by spilling may have inherited the cached type of the
+            // top left cell without its hard format - compare with the format the cell has.
+            nFormatType = rContext.GetFormatTable()->GetType( rDocument.GetNumberFormat( rContext, aPos));
+        }
         bool bForceNumberFormat = ((mbAllowNumberFormatChange || bMatrixLogical) && !mbNeedsNumberFormat &&
                 !SvNumberFormatter::IsCompatible( nFormatType, pInterpreter->GetRetFormatType()));
 
