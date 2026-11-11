@@ -77,7 +77,10 @@ Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(cons
     basegfx::B2DPolyPolygon aPolyPolygon;
     aPolyPolygon.append(aPolygon);
 
-    const attribute::LineAttribute aLineAttribute(maStrokeColor, 1.0);
+    // zetaOffice: the round Office handles take a one pixel outline. A width of 1.0 is in logic
+    // units, which is far thinner than a pixel and vanishes under the opaque fill (Calc, Impress
+    // and Writer all showed white dots without the grey ring).
+    const attribute::LineAttribute aLineAttribute(maStrokeColor, mbEllipse ? getDiscreteUnit() : 1.0);
 
     // create data
     const Primitive2DReference aStroke(
