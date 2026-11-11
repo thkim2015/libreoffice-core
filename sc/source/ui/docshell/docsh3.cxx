@@ -69,6 +69,7 @@
 #include <scresid.hxx>
 #include <markdata.hxx>
 #include <memory>
+#include <cstdlib>
 #include <formulaopt.hxx>
 
 #include <comphelper/lok.hxx>
@@ -387,6 +388,16 @@ void ScDocShell::CalcOutputFactor()
 
     bool bTextWysiwyg = ScModule::get()->GetInputOptions().GetTextWysiwyg();
     if (bTextWysiwyg)
+    {
+        m_nPrtToScreenFactor = 1.0;
+        return;
+    }
+
+    // zetaOffice: ZETA_CALC_SCREEN_PX draws columns at their true 96 dpi pixel width (no printer/screen text
+    // width factor), like Excel and the web app's HTML grid, so the canvas shown while an object is selected
+    // lines up with the grid (column A 72px instead of 69px).
+    static const bool bZetaScreenPx = getenv("ZETA_CALC_SCREEN_PX") != nullptr;
+    if (bZetaScreenPx)
     {
         m_nPrtToScreenFactor = 1.0;
         return;
