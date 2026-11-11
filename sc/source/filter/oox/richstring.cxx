@@ -23,6 +23,8 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/text/XText.hpp>
 #include <rtl/ustrbuf.hxx>
+#include <rtl/character.hxx>
+#include <o3tl/string_view.hxx>
 #include <editeng/editobj.hxx>
 #include <osl/diagnose.h>
 #include <oox/helper/binaryinputstream.hxx>
@@ -57,9 +59,31 @@ RichStringPortion::RichStringPortion() :
 {
 }
 
+OUString decodeExcelXString( const OUString& rValue )
+{
+    if (rValue.indexOf(u"_x") < 0)
+        return rValue;
+    const sal_Int32 nLen = rValue.getLength();
+    OUStringBuffer aBuf(nLen);
+    sal_Int32 i = 0;
+    while (i < nLen)
+    {
+        if (i + 7 <= nLen && rValue[i] == '_' && rValue[i + 1] == 'x' && rValue[i + 6] == '_'
+            && rtl::isAsciiHexDigit(rValue[i + 2]) && rtl::isAsciiHexDigit(rValue[i + 3])
+            && rtl::isAsciiHexDigit(rValue[i + 4]) && rtl::isAsciiHexDigit(rValue[i + 5]))
+        {
+            aBuf.append(static_cast<sal_Unicode>(o3tl::toUInt32(rValue.subView(i + 2, 4), 16)));
+            i += 7;
+        }
+        else
+            aBuf.append(rValue[i++]);
+    }
+    return aBuf.makeStringAndClear();
+}
+
 void RichStringPortion::setText( const OUString& rText )
 {
-    maText = AttributeConversion::decodeXString(rText);
+    maText = decodeExcelXString(rText);
 }
 
 FontRef const & RichStringPortion::createFont(const WorkbookHelper& rHelper)

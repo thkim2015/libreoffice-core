@@ -34,6 +34,10 @@ namespace oox { class SequenceInputStream; }
 
 namespace oox::xls {
 
+/** weboffice: decodes _xHHHH_ like Excel and keeps a lone surrogate (_xD83D_, an emoji half from MID), where
+    AttributeConversion::decodeXString cuts the text at it. */
+OUString decodeExcelXString( const OUString& rValue );
+
 /** Contains text data and font attributes for a part of a rich formatted string. */
 class RichStringPortion
 {

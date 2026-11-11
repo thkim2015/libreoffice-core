@@ -81,6 +81,35 @@ namespace sax_fastparser {
 
     void FastSaxSerializer::write( std::u16string_view sOutput, bool bEscape )
     {
+        // weboffice: like Excel, write a lone surrogate (an emoji half from MID) as _xD83D_; UTF-8 would turn it
+        // into '?' or drop it
+        if (bEscape)
+        {
+            size_t nStart = 0;
+            for (size_t i = 0; i < sOutput.size(); ++i)
+            {
+                const sal_Unicode c = sOutput[i];
+                if (rtl::isHighSurrogate(c) && i + 1 < sOutput.size() && rtl::isLowSurrogate(sOutput[i + 1]))
+                {
+                    ++i;
+                    continue;
+                }
+                if (!rtl::isSurrogate(c))
+                    continue;
+                if (i > nStart)
+                    write( OUStringToOString(sOutput.substr(nStart, i - nStart), RTL_TEXTENCODING_UTF8), true );
+                char aEscape[8];
+                snprintf( aEscape, sizeof aEscape, "_x%04X_", static_cast<unsigned>(c) );
+                write( aEscape, 7, false );
+                nStart = i + 1;
+            }
+            if (nStart > 0)
+            {
+                if (nStart < sOutput.size())
+                    write( OUStringToOString(sOutput.substr(nStart), RTL_TEXTENCODING_UTF8), true );
+                return;
+            }
+        }
         write( OUStringToOString(sOutput, RTL_TEXTENCODING_UTF8), bEscape );
 
     }

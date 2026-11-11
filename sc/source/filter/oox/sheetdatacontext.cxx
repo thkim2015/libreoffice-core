@@ -112,7 +112,7 @@ void SheetDataContext::onCharacters( const OUString& rChars )
     switch( getCurrentElement() )
     {
         case XLS_TOKEN( v ):
-            maCellValue = rChars;
+            maCellValue = decodeExcelXString(rChars); // weboffice: _xD83D_ as Excel writes a lone surrogate
         break;
         case XLS_TOKEN( f ):
             if( maFmlaData.mnFormulaType != XML_TOKEN_INVALID )
