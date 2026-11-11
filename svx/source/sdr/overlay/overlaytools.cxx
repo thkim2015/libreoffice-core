@@ -63,7 +63,8 @@ Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(cons
     const double fHalfWidth = maSize.getWidth() * getDiscreteUnit() / 2.0;
     const double fHalfHeight = maSize.getHeight() * getDiscreteUnit() / 2.0;
 
-    // zetaOffice: put the round Office handle on a pixel centre. Off the pixel grid the 9px circle
+    // zetaOffice: put the round Office handle on a pixel centre (whole discrete coordinates here —
+    // x.5 lands between pixels and gives an even 10px handle). Off the pixel grid the 9px circle
     // with its 2px ring is smeared by anti-aliasing to about 10px with a 6px white middle; on the
     // centre it is 11px across with a 7px white middle like PowerPoint 2021.
     basegfx::B2DPoint aPosition(maPosition);
@@ -74,7 +75,7 @@ Primitive2DReference OverlayStaticRectanglePrimitive::create2DDecomposition(cons
         if (aToLogic.invert())
         {
             const basegfx::B2DPoint aDiscrete(rToView * maPosition);
-            aPosition = aToLogic * basegfx::B2DPoint(std::floor(aDiscrete.getX()) + 0.5, std::floor(aDiscrete.getY()) + 0.5);
+            aPosition = aToLogic * basegfx::B2DPoint(std::round(aDiscrete.getX()), std::round(aDiscrete.getY()));
         }
     }
 
