@@ -2911,6 +2911,18 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                     if (pThemeColorHandler->mnShade > 0)
                         m_pImpl->appendGrabBag(m_pImpl->m_aSubInteropGrabBag, u"themeShade"_ustr, aThemeColorShade.get<OUString>());
                 }
+                else
+                {
+                    // a plain colour too: table style conditional formats are written back
+                    // from this grab bag only
+                    OUString aVal(u"auto"_ustr);
+                    if (pThemeColorHandler->mnColor != sal_Int32(COL_AUTO))
+                    {
+                        auto aBuf = OUString::number(pThemeColorHandler->mnColor & 0xffffff, 16);
+                        aVal = OUString(RepeatedUChar('0', 6 - aBuf.length) + aBuf).toAsciiUpperCase();
+                    }
+                    m_pImpl->appendGrabBag(m_pImpl->m_aSubInteropGrabBag, u"val"_ustr, aVal);
+                }
                 m_pImpl->appendGrabBag(m_pImpl->m_aInteropGrabBag, u"color"_ustr, m_pImpl->m_aSubInteropGrabBag);
             }
         }
