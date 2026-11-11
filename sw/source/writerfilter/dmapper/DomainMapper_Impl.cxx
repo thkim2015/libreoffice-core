@@ -8859,7 +8859,7 @@ void DomainMapper_Impl::CloseFieldCommand()
 
                         sal_Int16 nFieldPart = (bPageRef ? text::ReferenceFieldPart::PAGE : text::ReferenceFieldPart::TEXT);
                         OUString sValue;
-                        if( lcl_FindInCommand( pContext->GetCommand(), 'p', sValue ))
+                        if (!bPageRef && lcl_FindInCommand(pContext->GetCommand(), 'p', sValue))
                         {
                             //above-below
                             nFieldPart = text::ReferenceFieldPart::UP_DOWN;
@@ -8902,6 +8902,9 @@ void DomainMapper_Impl::CloseFieldCommand()
                     // find the sequence name, e.g. "SEQ"
                     std::u16string_view sSeqName = msfilter::util::findQuotedText(sCmd, u"SEQ ", '\\');
                     sSeqName = o3tl::trim(sSeqName);
+                    // " SEQ Table " without any switch has no backslash to end the name
+                    if (sSeqName.empty())
+                        sSeqName = sFirstParam;
 
                     // create a sequence field master using the sequence name
                     rtl::Reference<SwXFieldMaster> xMaster = FindOrCreateFieldMaster(
