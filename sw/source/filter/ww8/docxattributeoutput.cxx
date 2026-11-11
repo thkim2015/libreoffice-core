@@ -438,6 +438,19 @@ void lclAddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttribute
     lclAddThemeValuesToCustomAttributes(pAttrList, rComplexColor, XML_themeFill, XML_themeFillTint, XML_themeFillShade);
 }
 
+} // namespace
+
+// Used by docxtableexport.cxx for table cell shading (w:themeFill).
+void DocxAddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                     model::ComplexColor const& rComplexColor);
+void DocxAddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                     model::ComplexColor const& rComplexColor)
+{
+    lclAddThemeFillColorAttributes(pAttrList, rComplexColor);
+}
+
+namespace {
+
 void lclAddThemeColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList, model::ComplexColor const& rComplexColor)
 {
     lclAddThemeValuesToCustomAttributes(pAttrList, rComplexColor, XML_themeColor, XML_themeTint, XML_themeShade);

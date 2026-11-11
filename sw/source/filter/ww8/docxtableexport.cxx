@@ -564,8 +564,8 @@ void DocxAttributeOutput::TableDefaultCellMargins(
 }
 
 // defined in docxattributeoutput.cxx
-void lclAddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
-                                    model::ComplexColor const& rComplexColor);
+void DocxAddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                     model::ComplexColor const& rComplexColor);
 
 void DocxAttributeOutput::TableBackgrounds(
     const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner)
@@ -613,7 +613,7 @@ void DocxAttributeOutput::TableBackgrounds(
             pAttrList->add(FSNS(XML_w, XML_val), "clear");
             pAttrList->add(FSNS(XML_w, XML_color), "auto");
             pAttrList->add(FSNS(XML_w, XML_fill), sColor);
-            lclAddThemeFillColorAttributes(pAttrList, pColorProp->getComplexColor());
+            DocxAddThemeFillColorAttributes(pAttrList, pColorProp->getComplexColor());
             m_pSerializer->singleElementNS(XML_w, XML_shd, pAttrList);
         }
         else if (sColor != "auto")
