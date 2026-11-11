@@ -8623,9 +8623,26 @@ void ScInterpreter::ScLookup()
     rEntry.nField = nCol1;
     // weboffice: Excel applies wildcards only to an exact-match lookup (LOOKUP never is)
 
+    SCCOL nC = nCol1;
+    SCROW nR = nRow1;
+    // weboffice: Excel's binary search also over cells that are not sorted (see ExcelRangeLookup)
+    const sal_Int32 nExcelIdx = ExcelRangeLookup(aParam.nCol1, aParam.nRow1, aParam.nCol2, aParam.nRow2,
+                                                 nTab1, rEntry.GetQueryItem(), false, 0);
+    if (nExcelIdx == -1)
+    {
+        PushNA();
+        return;
+    }
+    if (nExcelIdx >= 0)
+    {
+        if (bVertical)
+            nR = nRow1 + nExcelIdx;
+        else
+            nC = nCol1 + nExcelIdx;
+    }
+    else
+    {
     ScQueryCellIteratorDirect aCellIter(mrDoc, mrContext, nTab1, aParam, false, false);
-    SCCOL nC;
-    SCROW nR;
     // Advance Entry.nField in iterator upon switching columns if
     // lookup in row.
     aCellIter.SetAdvanceQueryParamEntryField(!bVertical);
@@ -8633,6 +8650,7 @@ void ScInterpreter::ScLookup()
     {
         PushNA();
         return;
+    }
     }
 
     SCCOLROW nDelta = bVertical ? static_cast<SCSIZE>(nR-nRow1) : static_cast<SCSIZE>(nC-nCol1);
@@ -8815,6 +8833,84 @@ sal_Int32 lcl_ExcelApproximateSearch( sal_Int32 nSize, const Cmp& rCmp )
             nLow = nMid;
     }
 }
+}
+
+// weboffice: MATCH(;;1/-1), LOOKUP and the binary modes of XLOOKUP/XMATCH over a cell range search
+// like Excel also when the cells are not sorted (Excel 365 measured, 74 cases). nMode: 0 = the
+// position the binary search ends at (the next smaller one ascending, the next larger one
+// descending), 1 = only an equal value, 2 = an equal value or the one after the end position,
+// 3 = MATCH(;;-1): Excel walks from the first cell and stops at the first cell less than the
+// value (an equal one is taken at once). Returns the 0-based position, -1 when not found, or -2
+// when the item is not a number or a text (the caller searches as before).
+sal_Int32 ScInterpreter::ExcelRangeLookup( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, SCTAB nTab,
+                                           const ScQueryEntry::Item& rItem, bool bDescending, int nMode )
+{
+    if (rItem.meType != ScQueryEntry::ByValue && rItem.meType != ScQueryEntry::ByString)
+        return -2;
+    const bool bVertical = (nCol1 == nCol2);
+    const bool bByString = rItem.meType == ScQueryEntry::ByString;
+    const double fLookup = bByString ? 0.0 : rItem.mfVal;
+    const OUString aLookupStr = bByString ? rItem.maString.getString() : OUString();
+    CollatorWrapper& rCollator = ScGlobal::GetCollator();
+    SCCOL nLastCol = nCol2;
+    SCROW nLastRow = nRow2;
+    if (bVertical)
+        nLastRow = std::max<SCROW>(nRow1, std::min<SCROW>(nRow2, mrDoc.GetLastDataRow(nTab, nCol1, nCol1, nRow2)));
+    else
+        while (nLastCol > nCol1 && ScRefCellValue(mrDoc, ScAddress(nLastCol, nRow1, nTab)).isEmpty())
+            --nLastCol;
+    const sal_Int32 nSize = bVertical ? (nLastRow - nRow1 + 1) : (nLastCol - nCol1 + 1);
+    auto aCmp = [&](sal_Int32 i) -> int
+    {
+        const ScAddress aAdr = bVertical ? ScAddress(nCol1, nRow1 + i, nTab) : ScAddress(nCol1 + i, nRow1, nTab);
+        ScRefCellValue aCell(mrDoc, aAdr);
+        if (aCell.isEmpty() || aCell.hasEmptyValue() || aCell.hasError())
+            return -2;
+        int nRes;
+        if (bByString)
+        {
+            if (!aCell.hasString())
+                return -2;
+            const sal_Int32 n = rCollator.compareString(aLookupStr, aCell.getString(mrDoc));
+            nRes = n < 0 ? -1 : (n > 0 ? 1 : 0);
+        }
+        else
+        {
+            if (!aCell.hasNumeric() || IsLogicalCell(aAdr, aCell))
+                return -2;
+            const double f = aCell.getValue();
+            nRes = fLookup < f ? -1 : (fLookup > f ? 1 : 0);
+        }
+        return bDescending ? -nRes : nRes;
+    };
+    if (nMode == 3)
+    {
+        sal_Int32 nBest = -1;
+        for (sal_Int32 i = 0; i < nSize; ++i)
+        {
+            const int nRes = aCmp(i);  // negated: -1 means the cell is less than the value
+            if (nRes == -2)
+                continue;
+            if (nRes == 0)
+                return i;
+            if (nRes == -1)
+                break;
+            nBest = i;
+        }
+        return nBest;
+    }
+    const sal_Int32 nIdx = lcl_ExcelApproximateSearch(nSize, aCmp);
+    switch (nMode)
+    {
+        case 1:
+            return (nIdx >= 0 && aCmp(nIdx) == 0) ? nIdx : -1;
+        case 2:
+            if (nIdx >= 0 && aCmp(nIdx) == 0)
+                return nIdx;
+            return (nIdx + 1 < nSize) ? nIdx + 1 : -1;
+        default:
+            return nIdx;
+    }
 }
 
 void ScInterpreter::CalculateLookup(bool bHLookup)
@@ -16238,6 +16334,39 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
     {
         rItem.mfVal = vsa.fSearchVal;
         rItem.meType = ScQueryEntry::ByValue;
+    }
+
+    // weboffice: the approximate MATCH and the binary XLOOKUP/XMATCH modes over a cell range
+    // search like Excel (see ExcelRangeLookup)
+    const bool bBinary = vsa.eSearchMode == LookupSearchMode::BinaryAscending
+        || vsa.eSearchMode == LookupSearchMode::BinaryDescending;
+    if (!vsa.pMatSrc && bBinary && !vsa.isEmptySearch
+        && (vsa.eMatchMode == exactorNA || vsa.eMatchMode == exactorS || vsa.eMatchMode == exactorG)
+        && (vsa.nCol1 == vsa.nCol2 || vsa.nRow1 == vsa.nRow2))
+    {
+        const bool bDescending = vsa.eSearchMode == LookupSearchMode::BinaryDescending;
+        int nMode;
+        if (vsa.eMatchMode == exactorNA)
+            nMode = 1;
+        else if (vsa.nSearchOpCode == ocMatch && bDescending)
+            nMode = 3;
+        else if ((vsa.eMatchMode == exactorS) != bDescending)
+            nMode = 0;
+        else
+            nMode = 2;
+        const sal_Int32 nIdx = ExcelRangeLookup(vsa.nCol1, vsa.nRow1, vsa.nCol2, vsa.nRow2, vsa.nTab1,
+                                                rItem, bDescending, nMode);
+        if (nIdx != -2)
+        {
+            vsa.bVLookup = ( vsa.nCol1 == vsa.nCol2 );
+            if (nIdx < 0)
+            {
+                vsa.isResultNA = true;
+                return false;
+            }
+            vsa.nIndex = vsa.nSearchOpCode == ocXLookup ? nIdx : nIdx + 1;
+            return true;
+        }
     }
 
     // execute search
