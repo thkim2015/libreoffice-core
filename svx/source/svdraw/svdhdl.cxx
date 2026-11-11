@@ -589,7 +589,7 @@ void SdrHdl::CreateB2dIAObject()
                     const double fSize = (m_b1PixMore ? 10.0 : 9.0) * rOutDev.GetDPIScaleFactor();
                     const Color aFill = bAdjustKind ? Color(0xFF, 0xD3, 0x00) : COL_WHITE;
                     pNewOverlayObject.reset(new sdr::overlay::OverlayHandle(
-                        aPosition, basegfx::B2DSize(fSize, fSize), Color(0x60, 0x60, 0x60), aFill, true));
+                        aPosition, basegfx::B2DSize(fSize, fSize), Color(0x61, 0x61, 0x61), aFill, true));
                 }
                 else if (getenv ("SVX_DRAW_HANDLES") && (eKindOfMarker == BitmapMarkerKind::Rect_7x7 || eKindOfMarker == BitmapMarkerKind::Rect_9x9 || eKindOfMarker == BitmapMarkerKind::Rect_11x11))
                 {
