@@ -595,6 +595,13 @@ void applyArrayFormulas(
                 if (pMaster)
                     pMaster->SetDynamicArrayMaster(true);
             }
+            // weboffice: a cached TRUE/FALSE (t="b") on the array master shows as TRUE/FALSE like
+            // a plain formula cell does (applyCellFormulas), not 1/0 - =INDEX(A1:A3>1,2) or
+            // =AND(A1:A3>1) saved by Excel 365 as a dynamic array formula
+            if (rAddressItem.mnCachedType == XML_b
+                && (rDoc.getDoc().GetNumberFormat(aPos.Col(), aPos.Row(), aPos.Tab()) % SV_COUNTRY_LANGUAGE_OFFSET) == 0)
+                rDoc.getDoc().SetNumberFormat(aPos,
+                        rDoc.getDoc().GetFormatTable()->GetStandardFormat(SvNumFormatType::LOGICAL));
             if (pCache)
                 lcl_applyArrayCache(rDoc, rAddressItem.maRange, aPos, pCache);
         }

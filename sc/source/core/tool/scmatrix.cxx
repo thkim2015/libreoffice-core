@@ -300,6 +300,7 @@ public:
     bool IsValue( SCSIZE nC, SCSIZE nR ) const;
     bool IsValueOrEmpty( SCSIZE nC, SCSIZE nR ) const;
     bool IsBoolean( SCSIZE nC, SCSIZE nR ) const;
+    bool HasBoolean() const;
     bool IsNumeric() const;
 
     void MatCopy(ScMatrixImpl& mRes) const;
@@ -954,6 +955,25 @@ bool ScMatrixImpl::IsBoolean( SCSIZE nC, SCSIZE nR ) const
         return false;
 
     return maMat.get_type(nR, nC) == mdds::mtm::element_boolean;
+}
+
+namespace {
+struct HasBooleanFunc
+{
+    bool mbFound = false;
+    void operator() (const MatrixImplType::element_block_node_type& node)
+    {
+        if (node.type == mdds::mtm::element_boolean)
+            mbFound = true;
+    }
+};
+}
+
+bool ScMatrixImpl::HasBoolean() const
+{
+    HasBooleanFunc aFunc;
+    aFunc = maMat.walk(std::move(aFunc));
+    return aFunc.mbFound;
 }
 
 bool ScMatrixImpl::IsNumeric() const
@@ -1632,15 +1652,8 @@ public:
             }
             break;
             case mdds::mtm::element_boolean:
-            {
-                typedef MatrixImplType::boolean_block_type block_type;
-
-                block_type::const_iterator it = block_type::begin(*node.data);
-                block_type::const_iterator itEnd = block_type::end(*node.data);
-                double fVal = Op::boolValue(it, itEnd);
-                mfVal = Op::compare(mfVal, fVal);
-                mbHasValue = true;
-            }
+                // weboffice: like Excel, TRUE/FALSE inside an array are ignored by MAX/MIN and
+                // MAXA/MINA too (MAX(A1:A3>1) is 0, MAXA({TRUE;0.5}) is 0.5)
             break;
             case mdds::mtm::element_string:
             case mdds::mtm::element_empty:
@@ -3482,6 +3495,20 @@ bool ScMatrix::IsValueOrEmpty( SCSIZE nC, SCSIZE nR ) const
 bool ScMatrix::IsBoolean( SCSIZE nC, SCSIZE nR ) const
 {
     return pImpl->IsBoolean(nC, nR);
+}
+
+bool ScMatrix::IsBoolean( SCSIZE nIndex ) const
+{
+    SCSIZE nC, nR;
+    pImpl->GetDimensions(nC, nR);
+    if (!nR)
+        return false;
+    return pImpl->IsBoolean(nIndex / nR, nIndex % nR);
+}
+
+bool ScMatrix::HasBoolean() const
+{
+    return pImpl->HasBoolean();
 }
 
 bool ScMatrix::IsNumeric() const

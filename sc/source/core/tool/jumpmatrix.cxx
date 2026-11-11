@@ -222,6 +222,13 @@ void ScJumpMatrix::PutResultDouble( double fVal, SCSIZE nC, SCSIZE nR )
     }
 }
 
+void ScJumpMatrix::PutResultBoolean( bool bVal, SCSIZE nC, SCSIZE nR )
+{
+    if (nResMatRows >= kBufferThreshold)
+        FlushBufferOtherThan( BUFFER_NONE, 0, 0);
+    pMat->PutBoolean( bVal, nC, nR);
+}
+
 void ScJumpMatrix::PutResultString( const svl::SharedString& rStr, SCSIZE nC, SCSIZE nR )
 {
     if (nResMatRows < kBufferThreshold)

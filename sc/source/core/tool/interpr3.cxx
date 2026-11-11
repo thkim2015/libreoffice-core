@@ -2984,7 +2984,7 @@ void ScInterpreter::ScHarMean()
                 if (pMat)
                 {
                     SCSIZE nCount = pMat->GetElementCount();
-                    if (pMat->IsNumeric())
+                    if (pMat->IsNumeric() && !pMat->HasBoolean()) // weboffice: TRUE/FALSE elements are ignored
                     {
                         for (SCSIZE nElem = 0; nElem < nCount; nElem++)
                         {
@@ -3001,7 +3001,7 @@ void ScInterpreter::ScHarMean()
                     else
                     {
                         for (SCSIZE nElem = 0; nElem < nCount; nElem++)
-                            if (!pMat->IsStringOrEmpty(nElem))
+                            if ((!pMat->IsStringOrEmpty(nElem) && !pMat->IsBoolean(nElem)))
                             {
                                 double x = pMat->GetDouble(nElem);
                                 if (x > 0.0)
@@ -3139,7 +3139,7 @@ void ScInterpreter::ScGeoMean()
                 if (pMat)
                 {
                     SCSIZE nCount = pMat->GetElementCount();
-                    if (pMat->IsNumeric())
+                    if (pMat->IsNumeric() && !pMat->HasBoolean()) // weboffice: TRUE/FALSE elements are ignored
                     {
                         for (SCSIZE ui = 0; ui < nCount; ui++)
                         {
@@ -3165,7 +3165,7 @@ void ScInterpreter::ScGeoMean()
                     {
                         for (SCSIZE ui = 0; ui < nCount; ui++)
                         {
-                            if (!pMat->IsStringOrEmpty(ui))
+                            if ((!pMat->IsStringOrEmpty(ui) && !pMat->IsBoolean(ui)))
                             {
                                 double x = pMat->GetDouble(ui);
                                 if (x > 0.0)
@@ -3281,7 +3281,7 @@ bool ScInterpreter::CalculateSkew(KahanSum& fSum, double& fCount, std::vector<do
                 if (pMat)
                 {
                     SCSIZE nCount = pMat->GetElementCount();
-                    if (pMat->IsNumeric())
+                    if (pMat->IsNumeric() && !pMat->HasBoolean()) // weboffice: TRUE/FALSE elements are ignored
                     {
                         for (SCSIZE nElem = 0; nElem < nCount; nElem++)
                         {
@@ -3294,7 +3294,7 @@ bool ScInterpreter::CalculateSkew(KahanSum& fSum, double& fCount, std::vector<do
                     else
                     {
                         for (SCSIZE nElem = 0; nElem < nCount; nElem++)
-                            if (!pMat->IsStringOrEmpty(nElem))
+                            if ((!pMat->IsStringOrEmpty(nElem) && !pMat->IsBoolean(nElem)))
                             {
                                 fVal = pMat->GetDouble(nElem);
                                 fSum += fVal;
@@ -3920,7 +3920,7 @@ std::vector<double> ScInterpreter::GetRankNumberArray( SCSIZE& rCol, SCSIZE& rRo
             aArray.reserve(nCount);
             // Do not propagate errors from matrix elements as global error.
             pMat->SetErrorInterpreter(nullptr);
-            if (pMat->IsNumeric())
+            if (pMat->IsNumeric() && !pMat->HasBoolean()) // weboffice: TRUE/FALSE elements are ignored
             {
                 for (SCSIZE i = 0; i < nCount; ++i)
                     aArray.push_back(pMat->GetDouble(i));
@@ -4021,7 +4021,7 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
 
                 SCSIZE nCount = pMat->GetElementCount();
                 rArray.reserve( rArray.size() + nCount);
-                if (pMat->IsNumeric())
+                if (pMat->IsNumeric() && !pMat->HasBoolean()) // weboffice: TRUE/FALSE elements are ignored
                 {
                     if (bIgnoreErrVal)
                     {
@@ -4044,7 +4044,7 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
                 {
                     for (SCSIZE i = 0; i < nCount; ++i)
                     {
-                        if ( pMat->IsValue( i ) )
+                        if ( (pMat->IsValue(i) && !pMat->IsBoolean(i)) )
                         {
                             if (bIgnoreErrVal)
                             {
@@ -4095,7 +4095,7 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
                     {
                         for (SCSIZE i = 0; i < nCount; ++i)
                         {
-                            if (pMat->IsValue(i))
+                            if ((pMat->IsValue(i) && !pMat->IsBoolean(i)))
                             {
                                 const double fVal = pMat->GetDouble(i);
                                 if (nGlobalError == FormulaError::NONE)
@@ -4109,7 +4109,7 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
                     {
                         for (SCSIZE i = 0; i < nCount; ++i)
                         {
-                            if (pMat->IsValue(i))
+                            if ((pMat->IsValue(i) && !pMat->IsBoolean(i)))
                                 rArray.push_back( pMat->GetDouble(i));
                         }
                     }
@@ -4804,7 +4804,7 @@ void ScInterpreter::ScAveDev()
                 if (pMat)
                 {
                     SCSIZE nCount = pMat->GetElementCount();
-                    if (pMat->IsNumeric())
+                    if (pMat->IsNumeric() && !pMat->HasBoolean()) // weboffice: TRUE/FALSE elements are ignored
                     {
                         for (SCSIZE nElem = 0; nElem < nCount; nElem++)
                         {
@@ -4815,7 +4815,7 @@ void ScInterpreter::ScAveDev()
                     else
                     {
                         for (SCSIZE nElem = 0; nElem < nCount; nElem++)
-                            if (!pMat->IsStringOrEmpty(nElem))
+                            if ((!pMat->IsStringOrEmpty(nElem) && !pMat->IsBoolean(nElem)))
                             {
                                 rVal += pMat->GetDouble(nElem);
                                 rValCount++;
