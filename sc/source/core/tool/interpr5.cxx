@@ -3950,6 +3950,13 @@ void ScInterpreter::ScMatRef()
             {
                 // Determine nFuncFmtType type before PushDouble().
                 mrDoc.GetNumberFormatInfo(mrContext, nCurFmtType, nCurFmtIndex, aAdr);
+                // weboffice: a TRUE/FALSE element of the result shows as TRUE/FALSE in every cell of
+                // the (spilled) array like Excel, not only in the top left one (=A1:A3>1 gave FALSE;1;1)
+                if (ScMatrix::IsBooleanType(nMatValType))
+                {
+                    nCurFmtType = SvNumFormatType::LOGICAL;
+                    nCurFmtIndex = 0;
+                }
                 nFuncFmtType = nCurFmtType;
                 nFuncFmtIndex = nCurFmtIndex;
                 PushDouble(nMatVal.fVal);  // handles DoubleError
