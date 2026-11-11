@@ -138,7 +138,8 @@ public:
     static void TransmuteLeadToInputField(SwSetExpField & rField, std::optional<SwGetSetExpType> oSubType);
 
     /// Word field switches without a Writer equivalent, see SwField::SetWordSwitches()
-    void SetWordSwitches(bool bMergeFormat, bool bNoHyperlink, const OUString& rNumberPicture);
+    void SetWordSwitches(bool bMergeFormat, bool bNoHyperlink, const OUString& rNumberPicture,
+                         bool bPageRelative = false);
 
     /// @return an SwXTextField, either an already existing one or a new one
     static rtl::Reference<SwXTextField>

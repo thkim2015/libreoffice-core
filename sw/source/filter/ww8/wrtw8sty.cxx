@@ -74,6 +74,10 @@
 #include "rtfattributeoutput.hxx"
 
 #include <unordered_set>
+#include <docsh.hxx>
+#include <SwStyleNameMapper.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
 
 using namespace css;
 using namespace sw::util;
@@ -317,6 +321,72 @@ sal_uInt16 MSWordStyles::GetWWId( const SwFormat& rFormat )
     return nRet;
 }
 
+/// Unused Writer default paragraph styles (Heading, Text Body, List, Caption, Index...)
+/// of a DOCX-imported document that its styles.xml did not define.
+static std::unordered_set<const SwTextFormatColl*> lcl_UnusedDefaultColls(SwDoc& rDoc)
+{
+    std::unordered_set<const SwTextFormatColl*> aSkip;
+    SwDocShell* pShell = rDoc.GetDocShell();
+    if (!pShell)
+        return aSkip;
+    uno::Sequence<OUString> aNames;
+    try
+    {
+        uno::Reference<beans::XPropertySet> xProps(pShell->GetModel(), uno::UNO_QUERY);
+        uno::Sequence<beans::PropertyValue> aGrabBag;
+        if (xProps.is())
+            xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+        for (const auto& rProp : aGrabBag)
+            if (rProp.Name == "OoxmlParaStyleNames")
+                rProp.Value >>= aNames;
+    }
+    catch (const uno::Exception&)
+    {
+        return aSkip;
+    }
+    if (!aNames.hasElements())
+        return aSkip;
+    const std::unordered_set<OUString> aDefined(aNames.begin(), aNames.end());
+    const SwTextFormatColls& rColls = *rDoc.GetTextFormatColls();
+    for (size_t n = 1; n < rColls.size(); ++n)
+    {
+        const SwTextFormatColl* pColl = rColls[n];
+        const SwPoolFormatId nId = pColl->GetPoolFormatId();
+        if (nId == SwPoolFormatId::UNKNOWN || IsPoolUserFormat(nId))
+            continue;
+        const ProgName aProgName
+            = SwStyleNameMapper::GetProgName(pColl->GetName(), SwGetPoolIdFromName::TxtColl);
+        if (aDefined.count(aProgName.toString()) || aDefined.count(pColl->GetName().toString()))
+            continue;
+        if (rDoc.IsUsed(*pColl))
+            continue;
+        aSkip.insert(pColl);
+    }
+    // Keep the styles that an exported style derives from or follows.
+    bool bChanged = true;
+    while (bChanged && !aSkip.empty())
+    {
+        bChanged = false;
+        for (size_t n = 1; n < rColls.size(); ++n)
+        {
+            const SwTextFormatColl* pColl = rColls[n];
+            if (aSkip.count(pColl))
+                continue;
+            const SwFormat* aRefs[] = { pColl->DerivedFrom(), &pColl->GetNextTextFormatColl() };
+            for (const SwFormat* pRef : aRefs)
+            {
+                auto it = aSkip.find(static_cast<const SwTextFormatColl*>(pRef));
+                if (it != aSkip.end())
+                {
+                    aSkip.erase(it);
+                    bChanged = true;
+                }
+            }
+        }
+    }
+    return aSkip;
+}
+
 void MSWordStyles::BuildStylesTable()
 {
     assert(m_aStyles.empty());
@@ -344,12 +414,18 @@ void MSWordStyles::BuildStylesTable()
     }
 
     const SwTextFormatColls& rArr2 = *m_rExport.m_rDoc.GetTextFormatColls();   // then TextFormatColls
+    const std::unordered_set<const SwTextFormatColl*> aSkipColls
+        = m_rExport.GetExportFormat() == MSWordExportBase::DOCX
+              ? lcl_UnusedDefaultColls(m_rExport.m_rDoc)
+              : std::unordered_set<const SwTextFormatColl*>();
     // the default paragraph style ( 0 ) will not be outputted !
     for (size_t n = 1; n < rArr2.size(); ++n)
     {
         SwTextFormatColl* pFormat = rArr2[n];
 
         sal_uInt16 nSlot = BuildGetSlot(*pFormat);
+        if (nSlot == 0xfff && aSkipColls.count(pFormat))
+            continue;
         if (nSlot != 0xfff)
         {
             m_aStyles[nSlot] = { pFormat };

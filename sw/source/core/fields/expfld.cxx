@@ -523,6 +523,7 @@ std::unique_ptr<SwFieldType> SwSetExpFieldType::Copy() const
     pNew->m_bDeleted = m_bDeleted;
     pNew->m_sDelim = m_sDelim;
     pNew->m_nLevel = m_nLevel;
+    pNew->m_bWordRestartOnly = m_bWordRestartOnly;
 
     return pNew;
 }
@@ -644,6 +645,8 @@ size_t SwSetExpFieldType::GetSeqFieldList(SwSeqFieldList& rList,
 void SwSetExpFieldType::SetChapter(SwSetExpField& rField, const SwNode& rNd,
         SwRootFrame const*const pLayout)
 {
+    if (m_bWordRestartOnly)
+        return;
     const SwTextNode* pTextNd = rNd.FindOutlineNodeOfLevel(m_nLevel, pLayout);
     if( !pTextNd )
         return;
@@ -687,6 +690,9 @@ void SwSetExpFieldType::QueryValue( uno::Any& rAny, sal_uInt16 nWhichId ) const
             rAny <<= nRet;
         }
         break;
+    case FIELD_PROP_BOOL1:
+        rAny <<= m_bWordRestartOnly;
+        break;
     default:
         assert(false);
     }
@@ -722,6 +728,9 @@ void SwSetExpFieldType::PutValue( const uno::Any& rAny, sal_uInt16 nWhichId )
             else
                 SetOutlineLvl(nLvl);
         }
+        break;
+    case FIELD_PROP_BOOL1:
+        rAny >>= m_bWordRestartOnly;
         break;
     default:
         assert(false);

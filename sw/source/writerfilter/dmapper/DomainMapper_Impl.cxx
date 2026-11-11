@@ -6531,7 +6531,24 @@ rtl::Reference<SwXFieldMaster> DomainMapper_Impl::FindOrCreateFieldMaster(const 
     {
         aFieldMasterName.append(sDatabaseDataSourceName + ".");
     }
-    aFieldMasterName.append(rFieldMasterName);
+    OUString sMasterName = rFieldMasterName;
+    if (sFieldMasterService == "com.sun.star.text.FieldMaster.SetExpression")
+    {
+        // The caption sequences (Table, Figure, ...) exist in every document under their
+        // programmatic names; their UI names (e.g. the Korean one) can not name a new
+        // master, so use the existing one.
+        const UIName aUIName(rFieldMasterName);
+        const SwPoolFormatId nPoolId
+            = SwStyleNameMapper::GetPoolIdFromUIName(aUIName, SwGetPoolIdFromName::TxtColl);
+        if (nPoolId != SwPoolFormatId::UNKNOWN)
+        {
+            const OUString sProgName = SwStyleNameMapper::GetProgName(nPoolId, aUIName).toString();
+            if (sProgName != rFieldMasterName
+                && xFieldMasterAccess->hasByName(sFieldMasterService + "." + sProgName))
+                sMasterName = sProgName;
+        }
+    }
+    aFieldMasterName.append(sMasterName);
     OUString sFieldMasterName = aFieldMasterName.makeStringAndClear();
     if(xFieldMasterAccess->hasByName(sFieldMasterName))
     {
@@ -6547,7 +6564,7 @@ rtl::Reference<SwXFieldMaster> DomainMapper_Impl::FindOrCreateFieldMaster(const 
             //set the master's name
             xMaster->setPropertyValue(
                     getPropertyName(PROP_NAME),
-                    uno::Any(rFieldMasterName));
+                    uno::Any(sMasterName));
         } else {
            // set database data, based on the "databasename.tablename" of sDatabaseDataSourceName
            xMaster->setPropertyValue(
@@ -8254,17 +8271,14 @@ void DomainMapper_Impl::CloseFieldCommand()
                 if (aLower.indexOf(aSwitch) >= 0)
                     bEnclosedEq = true;
         }
-        // Reference and sequence switches that the Writer fields below can not keep, the same way:
-        // REF \p with \r, \n or \w (Word writes the number and "above"/"below"), PAGEREF \p (Word
-        // writes "on page N" for another page), REF with a case switch, SEQ \s (restart at a
-        // heading level) and \h (hidden number), STYLEREF \s.
-        else if (sType == "REF" || sType == "PAGEREF" || sType == "SEQ" || sType == "STYLEREF")
+        // Reference switches that the Writer fields below can not keep, the same way:
+        // REF \p with \r, \n or \w (Word writes the number and "above"/"below"), REF with a
+        // case switch, STYLEREF \s.
+        else if (sType == "REF" || sType == "STYLEREF")
         {
             const OUString aCommand = pContext->GetCommand();
             OUString aValue;
-            if (sType == "PAGEREF")
-                bEnclosedEq = lcl_FindInCommand(aCommand, 'p', aValue);
-            else if (sType == "REF")
+            if (sType == "REF")
             {
                 bEnclosedEq = lcl_FindInCommand(aCommand, 'p', aValue)
                               && (lcl_FindInCommand(aCommand, 'r', aValue)
@@ -8275,9 +8289,6 @@ void DomainMapper_Impl::CloseFieldCommand()
                     if (aLower.indexOf(aSwitch) >= 0)
                         bEnclosedEq = true;
             }
-            else if (sType == "SEQ")
-                bEnclosedEq = lcl_FindInCommand(aCommand, 's', aValue)
-                              || lcl_FindInCommand(aCommand, 'h', aValue);
             else
                 bEnclosedEq = lcl_FindInCommand(aCommand, 's', aValue);
         }
@@ -8848,7 +8859,7 @@ void DomainMapper_Impl::CloseFieldCommand()
 
                         sal_Int16 nFieldPart = (bPageRef ? text::ReferenceFieldPart::PAGE : text::ReferenceFieldPart::TEXT);
                         OUString sValue;
-                        if( lcl_FindInCommand( pContext->GetCommand(), 'p', sValue ))
+                        if (!bPageRef && lcl_FindInCommand(pContext->GetCommand(), 'p', sValue))
                         {
                             //above-below
                             nFieldPart = text::ReferenceFieldPart::UP_DOWN;
@@ -8891,6 +8902,9 @@ void DomainMapper_Impl::CloseFieldCommand()
                     // find the sequence name, e.g. "SEQ"
                     std::u16string_view sSeqName = msfilter::util::findQuotedText(sCmd, u"SEQ ", '\\');
                     sSeqName = o3tl::trim(sSeqName);
+                    // " SEQ Table " without any switch has no backslash to end the name
+                    if (sSeqName.empty())
+                        sSeqName = sFirstParam;
 
                     // create a sequence field master using the sequence name
                     rtl::Reference<SwXFieldMaster> xMaster = FindOrCreateFieldMaster(
@@ -8919,11 +8933,24 @@ void DomainMapper_Impl::CloseFieldCommand()
                     {
                         sFormula = sValue;
                     }
-                    // TODO \s isn't handled, but the spec isn't easy to understand without
-                    // an example for this one.
                     xFieldInterface->setPropertyValue(
                             getPropertyName(PROP_CONTENT),
                             uno::Any(sFormula));
+                    // \h: hidden number that still counts
+                    if (lcl_FindInCommand(pContext->GetCommand(), 'h', sValue))
+                        xFieldInterface->setPropertyValue(u"IsVisible"_ustr, uno::Any(false));
+                    // \s N: restart after each heading of level N, without the chapter number
+                    // in front (Word puts a STYLEREF field there)
+                    if (lcl_FindInCommand(pContext->GetCommand(), 's', sValue))
+                    {
+                        const sal_Int32 nLevel = o3tl::toInt32(sValue);
+                        if (1 <= nLevel && nLevel <= 9)
+                        {
+                            xMaster->setPropertyValue(u"ChapterNumberingLevel"_ustr,
+                                                      uno::Any(sal_Int8(nLevel - 1)));
+                            xMaster->setPropertyValue(u"WordRestartOnly"_ustr, uno::Any(true));
+                        }
+                    }
 
                     // Take care of the numeric formatting definition, default is Arabic
                     sal_Int16 nNumberingType = lcl_ParseNumberingType(pContext->GetCommand());
@@ -9181,8 +9208,12 @@ void DomainMapper_Impl::CloseFieldCommand()
                      || eId == FIELD_PAGE)
                     && lcl_FindInCommand(aCommand, '#', aPicture))
                     aPicture = aPicture.replaceAll("\"", "").trim();
-                if (bMergeFormat || bNoHyperlink || !aPicture.isEmpty())
-                    xFieldInterface->SetWordSwitches(bMergeFormat, bNoHyperlink, aPicture);
+                // PAGEREF \p: "above"/"below" on the same page, else "on page N"
+                const bool bPageRelative
+                    = eId == FIELD_PAGEREF && lcl_FindInCommand(aCommand, 'p', aValue);
+                if (bMergeFormat || bNoHyperlink || !aPicture.isEmpty() || bPageRelative)
+                    xFieldInterface->SetWordSwitches(bMergeFormat, bNoHyperlink, aPicture,
+                                                     bPageRelative);
             }
 
             if (!bCreateEnhancedField)
