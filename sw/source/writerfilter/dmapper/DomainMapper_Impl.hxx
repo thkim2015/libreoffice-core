@@ -1210,6 +1210,9 @@ public:
     /// heading levels ("1".."9") referred to as STYLEREF 1 etc.
     o3tl::sorted_vector<OUString> m_aStyleRefLevels;
 
+    /// w:eastAsianLayout w:vert was seen: horizontal-in-vertical runs get their direction at the end.
+    bool m_bHasEastAsianVert = false;
+
     /// Page style name -> "chapStyle|chapSep" of w:pgNumType, written back by the DOCX export.
     std::map<OUString, OUString> m_aPageNumberChapters;
 
