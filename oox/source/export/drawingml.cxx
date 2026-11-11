@@ -4073,6 +4073,9 @@ void DrawingML::WriteParagraph( const Reference< XTextContent >& rParagraph,
     Reference< XPropertySet > rXPropSet( rParagraph, UNO_QUERY );
 
     WriteRunInput aInput;
+    // weboffice: write the paragraph-end East Asian font (a:ea) when the paragraph attributes carry it
+    // directly, like runs do - PowerPoint applies a font picked for a whole shape to endParaRPr too.
+    aInput.bCheckDirect = true;
     aInput.xShapePropSet = rXShapePropSet;
     aInput.bOverridingCharHeight = rbOverridingCharHeight;
     aInput.nCharHeight = rnCharHeight;
