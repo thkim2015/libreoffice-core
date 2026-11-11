@@ -60,6 +60,8 @@
 #include <com/sun/star/style/CaseMap.hpp>
 #include <com/sun/star/style/LineSpacing.hpp>
 #include <com/sun/star/style/LineSpacingMode.hpp>
+#include <com/sun/star/style/NumberingType.hpp>
+#include <algorithm>
 #include <com/sun/star/text/FootnoteNumbering.hpp>
 #include <com/sun/star/text/TextGridMode.hpp>
 #include <com/sun/star/text/XDocumentIndexesSupplier.hpp>
@@ -79,6 +81,7 @@
 #include <comphelper/storagehelper.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
+#include <comphelper/propertyvalue.hxx>
 #include <editeng/escapementitem.hxx>
 #include <filter/msfilter/util.hxx>
 #include <sfx2/DocumentMetadataAccess.hxx>
@@ -94,6 +97,9 @@
 #include <sal/log.hxx>
 #include <tools/UnitConversion.hxx>
 #include <unotxdoc.hxx>
+#include <docsh.hxx>
+#include <doc.hxx>
+#include <ftnidx.hxx>
 #include <unostyle.hxx>
 #include <unosett.hxx>
 #include <SwXTextDefaults.hxx>
@@ -218,6 +224,89 @@ void DomainMapper::setDocumentReference(writerfilter::ooxml::OOXMLDocument* pDoc
     m_pImpl->setDocumentReference(pDocument);
 }
 
+namespace
+{
+/// Word's numbering of the footnotes/endnotes of a section, with the defaults filled in.
+SectionPropertyMap::NoteNumbering lcl_EffectiveNoteNumbering(SectionPropertyMap::NoteNumbering aNumbering,
+                                                             bool bFootnote)
+{
+    if (aNumbering.nType < 0)
+        aNumbering.nType = bFootnote ? style::NumberingType::ARABIC : style::NumberingType::ROMAN_LOWER;
+    if (aNumbering.nStartAt < 0)
+        aNumbering.nStartAt = 0;
+    if (!bFootnote)
+        aNumbering.nCounting = -1;
+    else if (aNumbering.nCounting < 0)
+        aNumbering.nCounting = text::FootnoteNumbering::PER_DOCUMENT;
+    return aNumbering;
+}
+
+/// Writer only has document-wide footnote/endnote numbering. When the sections differ, use the
+/// most common numbering for the document, and keep the other ones per page style for the DOCX
+/// export, see DocxAttributeOutput::SectFootnoteEndnotePr().
+void lcl_ApplySectionNoteNumberings(DomainMapper_Impl& rImpl, comphelper::SequenceAsHashMap& rGrabBag)
+{
+    const auto& rSections = rImpl.m_aSectionNoteNumberings;
+    if (rSections.size() < 2 || !rImpl.GetTextDocument())
+        return;
+    for (const bool bFootnote : { true, false })
+    {
+        std::vector<SectionPropertyMap::NoteNumbering> aEffective;
+        for (const auto& rSection : rSections)
+            aEffective.push_back(lcl_EffectiveNoteNumbering(
+                bFootnote ? rSection.aFootnote : rSection.aEndnote, bFootnote));
+        if (std::all_of(aEffective.begin(), aEffective.end(),
+                        [&aEffective](const auto& r) { return r == aEffective.front(); }))
+            continue;
+
+        // The most common numbering, the first one on a tie.
+        size_t nBest = 0;
+        std::ptrdiff_t nBestCount = 0;
+        for (size_t i = 0; i < aEffective.size(); ++i)
+        {
+            const std::ptrdiff_t nCount = std::count(aEffective.begin(), aEffective.end(), aEffective[i]);
+            if (nCount > nBestCount)
+            {
+                nBest = i;
+                nBestCount = nCount;
+            }
+        }
+        const SectionPropertyMap::NoteNumbering aBest = aEffective[nBest];
+        try
+        {
+            uno::Reference<beans::XPropertySet> xSettings
+                = bFootnote ? rImpl.GetTextDocument()->getFootnoteSettings()
+                            : rImpl.GetTextDocument()->getEndnoteSettings();
+            xSettings->setPropertyValue(getPropertyName(PROP_NUMBERING_TYPE), uno::Any(aBest.nType));
+            xSettings->setPropertyValue(getPropertyName(PROP_START_AT), uno::Any(aBest.nStartAt));
+            if (bFootnote)
+                xSettings->setPropertyValue(getPropertyName(PROP_FOOTNOTE_COUNTING),
+                                            uno::Any(aBest.nCounting));
+        }
+        catch (const uno::Exception&)
+        {
+        }
+
+        std::vector<beans::PropertyValue> aOverrides;
+        for (size_t i = 0; i < rSections.size(); ++i)
+        {
+            const OUString& rStyle = rSections[i].sPageStyle;
+            if (rStyle.isEmpty() || aEffective[i] == aBest
+                || std::any_of(aOverrides.begin(), aOverrides.end(),
+                               [&rStyle](const beans::PropertyValue& r) { return r.Name == rStyle; }))
+                continue;
+            aOverrides.push_back(comphelper::makePropertyValue(
+                rStyle, uno::Sequence<sal_Int16>{ aEffective[i].nType, aEffective[i].nStartAt,
+                                                  aEffective[i].nCounting }));
+        }
+        if (!aOverrides.empty())
+            rGrabBag[bFootnote ? u"OoxmlSectionFootnoteNumbering"_ustr
+                               : u"OoxmlSectionEndnoteNumbering"_ustr]
+                <<= comphelper::containerToSequence(aOverrides);
+    }
+}
+}
+
 DomainMapper::~DomainMapper()
 {
     try
@@ -260,6 +349,8 @@ DomainMapper::~DomainMapper()
         // Grab-bag handling
         comphelper::SequenceAsHashMap aProperties;
 
+        lcl_ApplySectionNoteNumberings(*m_pImpl, aProperties);
+
         // Add the saved w:themeFontLang setting
         aProperties[u"ThemeFontLangProps"_ustr] <<= m_pImpl->GetSettingsTable()->GetThemeFontLangProperties();
 
@@ -287,12 +378,36 @@ DomainMapper::~DomainMapper()
             std::copy(m_pImpl->m_aStyleRefUINames.begin(), m_pImpl->m_aStyleRefUINames.end(), aNames.getArray());
             aProperties[u"StyleRefUINames"_ustr] <<= aNames;
         }
+        // heading levels referred to as STYLEREF 1 etc., see MSWordExportBase::GetStyleRefName()
+        if (!m_pImpl->m_aStyleRefLevels.empty())
+        {
+            uno::Sequence<OUString> aLevels(m_pImpl->m_aStyleRefLevels.size());
+            std::copy(m_pImpl->m_aStyleRefLevels.begin(), m_pImpl->m_aStyleRefLevels.end(), aLevels.getArray());
+            aProperties[u"StyleRefLevels"_ustr] <<= aLevels;
+        }
+
+        // w:pgNumType chapStyle/chapSep per page style, see DocxAttributeOutput::SectionPageNumbering()
+        if (!m_pImpl->m_aPageNumberChapters.empty())
+        {
+            uno::Sequence<beans::PropertyValue> aChapters(m_pImpl->m_aPageNumberChapters.size());
+            auto pChapters = aChapters.getArray();
+            for (const auto& [rStyle, rValue] : m_pImpl->m_aPageNumberChapters)
+                *pChapters++ = comphelper::makePropertyValue(rStyle, rValue);
+            aProperties[u"OoxmlPageNumberChapters"_ustr] <<= aChapters;
+        }
 
         if (m_pImpl->GetTextDocument())
         {
             comphelper::SequenceAsHashMap aGrabBag(m_pImpl->GetTextDocument()->getPropertyValue(u"InteropGrabBag"_ustr));
             aGrabBag.update(aProperties);
             m_pImpl->GetTextDocument()->setPropertyValue(u"InteropGrabBag"_ustr, uno::Any(aGrabBag.getAsConstPropertyValueList()));
+            // number the notes of the sections with their own numbering, see
+            // lcl_UpdateWordSectionNumbering() in sw/source/core/doc/ftnidx.cxx
+            if (aProperties.contains(u"OoxmlSectionFootnoteNumbering"_ustr)
+                || aProperties.contains(u"OoxmlSectionEndnoteNumbering"_ustr))
+                if (SwDocShell* pDocShell = m_pImpl->GetTextDocument()->GetDocShell())
+                    if (SwDoc* pDoc = pDocShell->GetDoc())
+                        pDoc->GetFootnoteIdxs().UpdateAllFootnote();
         }
     }
     catch(const uno::Exception&)
@@ -433,12 +548,15 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                 m_pImpl->m_aCurrentTabStop.bDeleted = false;
                 m_pImpl->m_aCurrentTabStop.Alignment = getTabAlignFromValue(nIntValue);
             }
+            // Bar tabs only draw a vertical line, they are not tab stops: keep them aside.
+            m_pImpl->m_bCurrentTabBar = sal::static_int_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_TabJc_bar;
             break;
         case NS_ooxml::LN_CT_TabStop_leader:
             m_pImpl->m_aCurrentTabStop.FillChar = getFillCharFromValue(nIntValue);
             break;
         case NS_ooxml::LN_CT_TabStop_pos:
             m_pImpl->m_aCurrentTabStop.Position = ConversionHelper::convertTwipToMm100_Limited(nIntValue);
+            m_pImpl->m_nCurrentTabPosTwip = nIntValue;
             break;
 
         case NS_ooxml::LN_CT_Fonts_ascii:
@@ -1460,6 +1578,26 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                     pSectionContext->SetPageNumberType(nNumberType);
             }
         break;
+        case NS_ooxml::LN_CT_PageNumber_chapStyle:
+            if (pSectionContext)
+                pSectionContext->SetPageNumberChapStyle(OUString::number(nIntValue));
+        break;
+        case NS_ooxml::LN_CT_PageNumber_chapSep:
+            if (pSectionContext)
+            {
+                OUString sSep;
+                switch (nIntValue)
+                {
+                    case NS_ooxml::LN_Value_ST_ChapterSep_hyphen: sSep = u"hyphen"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_period: sSep = u"period"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_colon: sSep = u"colon"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_emDash: sSep = u"emDash"_ustr; break;
+                    case NS_ooxml::LN_Value_ST_ChapterSep_enDash: sSep = u"enDash"_ustr; break;
+                    default: break;
+                }
+                pSectionContext->SetPageNumberChapSep(sSep);
+            }
+        break;
         case NS_ooxml::LN_CT_FtnEdn_type:
             // This is the "separator" footnote, ignore its linebreaks/text.
             if (static_cast<sal_uInt32>(nIntValue) == NS_ooxml::LN_Value_doc_ST_FtnEdn_separator)
@@ -1599,6 +1737,10 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                 if (xFtnEdnSettings.is())
                 {
                     sal_Int16 nNumType = ConversionHelper::ConvertNumberingType(nIntValue);
+                    if (SectionPropertyMap* pSect = m_pImpl->GetSectionContext())
+                        (m_pImpl->IsInFootnoteProperties() ? pSect->m_aFootnoteNumbering
+                                                           : pSect->m_aEndnoteNumbering)
+                            .nType = nNumType;
                     xFtnEdnSettings->setPropertyValue(getPropertyName(PROP_NUMBERING_TYPE),
                                                       uno::Any(nNumType));
                 }
@@ -2087,6 +2229,10 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         // overflowPunct = "allow punctuation to extend past text extents", i.e. hanging punctuation;
         // the export (DocxAttributeOutput::ParaHangingPunctuation) writes the value as is.
         rContext->Insert(PROP_PARA_IS_HANGING_PUNCTUATION, uno::Any( nIntValue != 0 ));
+        break;
+    case NS_ooxml::LN_CT_PPrBase_kinsoku:
+        // East Asian line breaking rules; the export (ParaForbiddenRules) writes it back.
+        rContext->Insert(PROP_PARA_IS_FORBIDDEN_RULES, uno::Any( nIntValue != 0 ));
         break;
     case NS_ooxml::LN_CT_PPrBase_topLinePunct:
         break;
@@ -2623,8 +2769,13 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         // the following are not part of the official documentation
     case NS_ooxml::LN_CT_Tabs_tab:
         resolveSprmProps(*this, rSprm);
-        m_pImpl->IncorporateTabStop(m_pImpl->m_aCurrentTabStop);
+        if (m_pImpl->m_bCurrentTabBar)
+            m_pImpl->m_aCurrentBarTabs.push_back(m_pImpl->m_nCurrentTabPosTwip);
+        else
+            m_pImpl->IncorporateTabStop(m_pImpl->m_aCurrentTabStop);
         m_pImpl->m_aCurrentTabStop = DeletableTabStop();
+        m_pImpl->m_bCurrentTabBar = false;
+        m_pImpl->m_nCurrentTabPosTwip = 0;
     break;
     case NS_ooxml::LN_CT_PPrBase_tabs:
     {
@@ -2643,6 +2794,14 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         }
         resolveSprmProps(*this, rSprm);
         rContext->Insert(PROP_PARA_TAB_STOPS, uno::Any( m_pImpl->GetCurrentTabStopAndClear()));
+        // bar tabs (positions in twips) are kept in the paragraph grab bag for DOCX export
+        if (!m_pImpl->m_aCurrentBarTabs.empty())
+        {
+            rContext->Insert(PROP_PARA_BAR_TABS,
+                             uno::Any(comphelper::containerToSequence(m_pImpl->m_aCurrentBarTabs)),
+                             true, PARA_GRAB_BAG);
+            m_pImpl->m_aCurrentBarTabs.clear();
+        }
     }
     break;
 
@@ -3213,8 +3372,14 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                 else
                     xFtnEdnSettings = m_pImpl->GetTextDocument()->getEndnoteSettings();
             }
+            SectionPropertyMap::NoteNumbering* pSectNumbering = nullptr;
+            if (SectionPropertyMap* pSect = m_pImpl->GetSectionContext())
+                pSectNumbering = m_pImpl->IsInFootnoteProperties() ? &pSect->m_aFootnoteNumbering
+                                                                   : &pSect->m_aEndnoteNumbering;
             if( NS_ooxml::LN_EG_FtnEdnNumProps_numStart == nSprmId && xFtnEdnSettings.is())
             {
+                if (pSectNumbering)
+                    pSectNumbering->nStartAt = sal_Int16(nIntValue - 1);
                 xFtnEdnSettings->setPropertyValue(
                     getPropertyName( PROP_START_AT),
                                                                     uno::Any( sal_Int16( nIntValue - 1 )));
@@ -3229,6 +3394,8 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                     case NS_ooxml::LN_Value_ST_RestartNumber_eachSect: nFootnoteCounting = text::FootnoteNumbering::PER_CHAPTER; break;
                     default: break;
                 }
+                if (pSectNumbering)
+                    pSectNumbering->nCounting = nFootnoteCounting;
                 xFtnEdnSettings->setPropertyValue(
                         getPropertyName( PROP_FOOTNOTE_COUNTING ),
                         uno::Any( nFootnoteCounting ));
@@ -3236,6 +3403,8 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
             else if (xFtnEdnSettings.is())
             {
                 sal_Int16 nNumType = ConversionHelper::ConvertNumberingType( nIntValue );
+                if (pSectNumbering)
+                    pSectNumbering->nType = nNumType;
                 xFtnEdnSettings->setPropertyValue(
                     getPropertyName( PROP_NUMBERING_TYPE),
                                                                     uno::Any( nNumType ));
@@ -4441,6 +4610,7 @@ void DomainMapper::lcl_text(const sal_uInt8 * data_, size_t len)
         if (pContext && pContext->GetFootnote().is() && m_pImpl->IsInCustomFootnote())
         {
             pContext->GetFootnote()->setLabel(sText);
+            m_pImpl->RemoveCustomNoteMarkText(pContext->GetFootnote(), sText);
             m_pImpl->EndCustomFootnote();
             //otherwise ignore sText
         }
@@ -4680,6 +4850,7 @@ void DomainMapper::lcl_utext(const sal_Unicode *const data_, size_t len)
                     {
                         auto xFootnote = pFootnoteContext->GetFootnote();
                         xFootnote->setLabel(xFootnote->getLabel() + sText);
+                        m_pImpl->RemoveCustomNoteMarkText(xFootnote, xFootnote->getLabel());
                     }
                 }
                 return;
@@ -5338,8 +5509,10 @@ sal_Unicode DomainMapper::getFillCharFromValue(const sal_Int32 nIntValue)
     case NS_ooxml::LN_Value_ST_TabTlc_hyphen:
         return u'-';
     case NS_ooxml::LN_Value_ST_TabTlc_underscore:
-    case NS_ooxml::LN_Value_ST_TabTlc_heavy: // FIXME ???
         return u'_';
+    case NS_ooxml::LN_Value_ST_TabTlc_heavy:
+        // heavy line: a heavy box drawing line as fill, written back as "heavy" on DOCX export
+        return u'\x2501';
     case NS_ooxml::LN_Value_ST_TabTlc_middleDot: // middleDot
         return u'\x00b7';
     case NS_ooxml::LN_Value_ST_TabTlc_none:

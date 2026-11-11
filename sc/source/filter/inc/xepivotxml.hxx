@@ -26,6 +26,11 @@ public:
     {
         const ScDPCache* mpCache;
         ScRange maSrcRange;
+        /// ZetaOffice: set when tables of one source range have different groups - the cache
+        /// entry is written with the groups of this table (Excel keeps a cache per group set).
+        const ScDPObject* mpGroupOwner = nullptr;
+        /// ZetaOffice: the tables written against this entry (set with mpGroupOwner)
+        std::vector<const ScDPObject*> maZetaTables;
     };
 
     XclExpXmlPivotCaches(const XclExpRoot& rRoot);

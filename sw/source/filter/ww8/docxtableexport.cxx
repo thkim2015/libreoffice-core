@@ -236,18 +236,37 @@ void DocxAttributeOutput::TableDefinition(
         GetTablePageSize(pTableTextNodeInfoInner.get(), nPageSize, bRelBoxSize);
         if (nPageSize == 0)
             widthType = "auto";
+
+        // A DOCX table had Word's automatic preferred width (w:tblW w:type="auto"): Writer tables
+        // always get a width, keep the automatic one, see DomainMapperTableManager::sprm()
+        const std::map<OUString, css::uno::Any>& rTableGrabBag
+            = pTableFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
+        auto itWidthAuto = rTableGrabBag.find(u"TableWidthAuto"_ustr);
+        if (itWidthAuto != rTableGrabBag.end() && itWidthAuto->second.get<bool>())
+        {
+            nPageSize = 0;
+            widthType = "auto";
+        }
     }
 
     // Output the table preferred width
     m_pSerializer->singleElementNS(XML_w, XML_tblW, FSNS(XML_w, XML_w), OString::number(nPageSize),
                                    FSNS(XML_w, XML_type), widthType);
 
-    // Disable layout autofit, as it does not exist in LibreOffice yet
-    m_pSerializer->singleElementNS(XML_w, XML_tblLayout, FSNS(XML_w, XML_type), "fixed");
-
     // Look for the table style property in the table grab bag
     const std::map<OUString, css::uno::Any>& rGrabBag
         = pTableFormat->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG)->GetGrabBag();
+
+    // Layout autofit does not exist in LibreOffice yet, so tables are fixed, except DOCX tables
+    // that were autofit (or got the layout from their style): keep that, see
+    // DomainMapperTableHandler::endTableGetTableStyle().
+    OUString sTableLayout;
+    if (auto it = rGrabBag.find(u"TableLayout"_ustr); it != rGrabBag.end())
+        it->second >>= sTableLayout;
+    if (sTableLayout == "autofit")
+        m_pSerializer->singleElementNS(XML_w, XML_tblLayout, FSNS(XML_w, XML_type), "autofit");
+    else if (sTableLayout != "inherit")
+        m_pSerializer->singleElementNS(XML_w, XML_tblLayout, FSNS(XML_w, XML_type), "fixed");
 
     // We should clear the TableStyle map. In case of Table inside multiple tables it contains the
     // table border style of the previous table.
@@ -416,6 +435,10 @@ void DocxAttributeOutput::TableDefinition(
         else if (rGrabBagElement.first == "TableCellSpacing")
         {
             WriteTableCellSpacing(rGrabBagElement.second);
+        }
+        else if (rGrabBagElement.first == "TableLayout")
+        {
+            // written above
         }
         else if (rGrabBagElement.first == "TableCaption" || rGrabBagElement.first == "TableDescription")
         {

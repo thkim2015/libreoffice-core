@@ -616,7 +616,10 @@ void WorkbookFragment::finalizeImport()
 
     // ZetaOffice: calcMode autoNoTable - data table formulas are created after the
     // calculation settings, so calculate them once before they are kept as they are.
-    if (sc::zeta::IsNoTableAutoCalc(&getScDocument()))
+    // Also when the data tables are left to calculate on demand: the cells calculated first by the
+    // view got the base value in some cells (a two-variable table: the last column showed the
+    // formula's own result 15 instead of 30, 60, 90), until the next recalculation.
+    if (sc::zeta::IsNoTableAutoCalc(&getScDocument()) || getFormulaBuffer().zetaHasDataTables())
         sc::zeta::CalcTables(getScDocument());
 
     OUString aRevHeadersPath = getFragmentPathFromFirstType(CREATE_OFFICEDOC_RELATION_TYPE("revisionHeaders"));

@@ -17,6 +17,7 @@
 #include <dpsave.hxx>
 #include <dpgroup.hxx>
 #include <tuple>
+#include <algorithm>
 #include <dptabdat.hxx>
 #include <dpfilteredcache.hxx>
 #include <dputil.hxx>
@@ -152,6 +153,98 @@ const char* toOOXMLSubtotalType(ScGeneralFunction eFunc)
 XclExpXmlPivotCaches::XclExpXmlPivotCaches( const XclExpRoot& rRoot ) :
     XclExpRoot(rRoot) {}
 
+namespace {
+
+// ZetaOffice: LibreOffice shares one cache per source range and its group fields are those of
+// the table that loaded it last; Excel keeps a cache per group set. A text of a table's
+// groups tells tables with different groups apart (ScDPDimensionSaveData has no real ==).
+OUString lclZetaGroupSignature( const ScDPObject& rObj, const ScDPCache& rCache )
+{
+    const ScDPSaveData* pSave = rObj.GetSaveData();
+    const ScDPDimensionSaveData* pDims = pSave ? pSave->GetExistingDimensionData() : nullptr;
+    if (!pDims)
+        return OUString();
+    OUStringBuffer aBuf;
+    for (tools::Long i = 0, n = rCache.GetColumnCount(); i < n; ++i)
+    {
+        const OUString& rName = rCache.GetDimensionName(i);
+        if (const ScDPSaveNumGroupDimension* pNum = pDims->GetNumGroupDim(rName))
+        {
+            for (const ScDPNumGroupInfo* pInfo : { &pNum->GetInfo(), &pNum->GetDateInfo() })
+                aBuf.append("N:" + rName + ":" + OUString::number(pNum->GetDatePart()) + ":"
+                            + OUString::number(sal_Int32(pInfo->mbEnable)) + ":"
+                            + OUString::number(sal_Int32(pInfo->mbDateValues)) + ":"
+                            + OUString::number(sal_Int32(pInfo->mbAutoStart)) + ":"
+                            + OUString::number(sal_Int32(pInfo->mbAutoEnd)) + ":"
+                            + OUString::number(pInfo->mfStart) + ":"
+                            + OUString::number(pInfo->mfEnd) + ":"
+                            + OUString::number(pInfo->mfStep) + ";");
+        }
+        for (const ScDPSaveGroupDimension* pGrp = pDims->GetFirstNamedGroupDim(rName); pGrp;
+             pGrp = pDims->GetNextNamedGroupDim(pGrp->GetGroupDimName()))
+        {
+            aBuf.append("G:" + rName + ":" + pGrp->GetGroupDimName() + ":"
+                        + OUString::number(pGrp->GetDatePart()));
+            for (tools::Long g = 0, nG = pGrp->GetGroupCount(); g < nG; ++g)
+                aBuf.append("|" + pGrp->GetGroupByIndex(g).GetGroupName());
+            aBuf.append(";");
+        }
+    }
+    if (pDims->ZetaHasCalcItems())
+        aBuf.append("C");
+    return aBuf.makeStringAndClear();
+}
+
+/// Writes the groups of rObj (or none) into the shared cache.
+void lclZetaLoadGroups( const ScDPCache& rCache, const ScDPObject* pObj )
+{
+    ScDPCache& rMutable = const_cast<ScDPCache&>(rCache);
+    rMutable.ClearAllFields();
+    const ScDPSaveData* pSave = pObj ? pObj->GetSaveData() : nullptr;
+    if (const ScDPDimensionSaveData* pDims = pSave ? pSave->GetExistingDimensionData() : nullptr)
+        pDims->WriteToCache(rMutable);
+}
+
+/// Puts back groups of a table that has some (as after loading it last).
+void lclZetaRestoreGroups( const ScDPCache& rCache )
+{
+    const ScDPObject* pLast = nullptr;
+    for (const ScDPObject* pRef : rCache.GetAllReferences())
+        if (!lclZetaGroupSignature(*pRef, rCache).isEmpty())
+            pLast = pRef;
+    lclZetaLoadGroups(rCache, pLast);
+}
+
+}
+
+/// ZetaOffice: how many calculated fields a cache entry writes. Calculated fields live in the
+/// shared cache, so a per-group-set entry would get the calculated fields of every table of the
+/// range (Excel: only those of its own cache). Unused trailing ones are left out; earlier unused
+/// ones stay so that the field indices of the written ones do not move.
+static size_t lclZetaCalcFieldsToWrite( const XclExpXmlPivotCaches::Entry& rEntry, const ScDPCache& rCache )
+{
+    const size_t nCalc = rCache.GetCalculatedFieldCount();
+    if (!rEntry.mpGroupOwner || rEntry.maZetaTables.empty())
+        return nCalc;
+    const size_t nBase = rCache.GetFieldCount() + rCache.GetGroupFieldCount();
+    size_t nKeep = 0;
+    for (size_t k = 0; k < nCalc; ++k)
+    {
+        for (const ScDPObject* pObj : rEntry.maZetaTables)
+        {
+            const OUString aName = const_cast<ScDPObject*>(pObj)->GetDimName(nBase + k, o3tl::temporary(bool()));
+            const ScDPSaveData* pSave = pObj->GetSaveData();
+            const ScDPSaveDimension* pDim = pSave && !aName.isEmpty() ? pSave->GetExistingDimensionByName(aName) : nullptr;
+            if (pDim && pDim->GetOrientation() != sheet::DataPilotFieldOrientation_HIDDEN)
+            {
+                nKeep = k + 1;
+                break;
+            }
+        }
+    }
+    return nKeep;
+}
+
 void XclExpXmlPivotCaches::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& pWorkbookStrm = rStrm.GetCurrentStream();
@@ -160,6 +253,8 @@ void XclExpXmlPivotCaches::SaveXml( XclExpXmlStream& rStrm )
     for (sal_Int32 nCacheId = 0; const auto& rEntry : maCaches)
     {
         const ScDPCache& rCache = *rEntry.mpCache;
+        if (rEntry.mpGroupOwner)
+            lclZetaLoadGroups(rCache, rEntry.mpGroupOwner);
 
         size_t nFieldCount = rCache.GetFieldCount() + rCache.GetGroupFieldCount();
         if (nFieldCount == 0)
@@ -188,6 +283,8 @@ void XclExpXmlPivotCaches::SaveXml( XclExpXmlStream& rStrm )
         rStrm.PushStream(pPCStrm);
         SavePivotCacheXml(rStrm, rEntry, nCacheId);
         rStrm.PopStream();
+        if (rEntry.mpGroupOwner)
+            lclZetaRestoreGroups(rCache);
     }
 
     if (bStartedPivotCaches)
@@ -314,7 +411,7 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
 
     size_t nCount = rCache.GetFieldCount();
     const size_t nGroupFieldCount = rCache.GetGroupFieldCount();
-    const size_t nCalculatedFieldCount = rCache.GetCalculatedFieldCount();
+    const size_t nCalculatedFieldCount = lclZetaCalcFieldsToWrite(rEntry, rCache);
     pDefStrm->startElement(XML_cacheFields,
         XML_count, OString::number(static_cast<tools::Long>(nCount + nGroupFieldCount + nCalculatedFieldCount)));
 
@@ -359,6 +456,9 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
             }
         }
     }
+    // ZetaOffice: a cache written for the group set of one table
+    if (rEntry.mpGroupOwner)
+        pDPObject = const_cast<ScDPObject*>(rEntry.mpGroupOwner);
 
     // Build a map: base source field index → parent group cacheField index.
     // This is needed to write the "par" attribute on base fields (e.g. <fieldGroup par="3"/>).
@@ -442,10 +542,12 @@ void XclExpXmlPivotCaches::SavePivotCacheXml( XclExpXmlStream& rStrm, const Entr
     };
 
     // ZetaOffice: calculated items (Excel: per cache) from the first table that has them
-    auto zetaCalcItemsOf = [&rCache](const OUString& rFieldName) -> const ScDPDimensionSaveData::ZetaCalcItemList*
+    auto zetaCalcItemsOf = [&rCache, &rEntry](const OUString& rFieldName) -> const ScDPDimensionSaveData::ZetaCalcItemList*
     {
-        for (ScDPObject* pRef : rCache.GetAllReferences())
+        for (const ScDPObject* pRef : rCache.GetAllReferences())
         {
+            if (rEntry.mpGroupOwner && pRef != rEntry.mpGroupOwner)
+                continue;
             const ScDPSaveData* pSave = pRef ? pRef->GetSaveData() : nullptr;
             const ScDPDimensionSaveData* pDimData = pSave ? pSave->GetExistingDimensionData() : nullptr;
             if (const auto* pList = pDimData ? pDimData->ZetaGetCalcItems(rFieldName) : nullptr)
@@ -857,6 +959,39 @@ void XclExpXmlPivotTableManager::Initialize()
         // Get all pivot objects that reference this cache, and set up an
         // object to cache ID mapping.
         const ScDPCache::ScDPObjectSet& rRefs = pCache->GetAllReferences();
+
+        // ZetaOffice: tables of one source range with different groups get a cache entry per
+        // group set, in table order (Excel: each such table has its own cache).
+        std::vector<std::pair<OUString, std::vector<const ScDPObject*>>> aGroupSets;
+        for (size_t i = 0; i < pDPColl->GetCount(); ++i)
+        {
+            const ScDPObject* pObj = &(*pDPColl)[i];
+            if (rRefs.find(const_cast<ScDPObject*>(pObj)) == rRefs.end())
+                continue;
+            OUString aSig = lclZetaGroupSignature(*pObj, *pCache);
+            auto it = std::find_if(aGroupSets.begin(), aGroupSets.end(),
+                                   [&aSig](const auto& r) { return r.first == aSig; });
+            if (it == aGroupSets.end())
+                aGroupSets.emplace_back(aSig, std::vector<const ScDPObject*>{ pObj });
+            else
+                it->second.push_back(pObj);
+        }
+        if (aGroupSets.size() > 1)
+        {
+            for (const auto& [rSig, rObjs] : aGroupSets)
+            {
+                for (const ScDPObject* pObj : rObjs)
+                    maCacheIdMap.emplace(pObj, aCaches.size()+1);
+                XclExpXmlPivotCaches::Entry aEntry;
+                aEntry.mpCache = pCache;
+                aEntry.maSrcRange = rRange;
+                aEntry.mpGroupOwner = rObjs.front();
+                aEntry.maZetaTables = rObjs;
+                aCaches.push_back(aEntry);
+            }
+            continue;
+        }
+
         for (const auto& rRef : rRefs)
             maCacheIdMap.emplace(rRef, aCaches.size()+1);
 
@@ -929,6 +1064,9 @@ void XclExpXmlPivotTables::SaveXml( XclExpXmlStream& rStrm )
                 continue;
 
         const ScDPCache& rCache = *pCacheEntry->mpCache;
+        // ZetaOffice: the table is written against the groups of its own cache entry
+        if (pCacheEntry->mpGroupOwner)
+            lclZetaLoadGroups(rCache, &rObj);
 
         size_t nFieldCount = rCache.GetFieldCount() + rCache.GetGroupFieldCount();
         if (nFieldCount == 0)
@@ -944,6 +1082,8 @@ void XclExpXmlPivotTables::SaveXml( XclExpXmlStream& rStrm )
         rStrm.PushStream(pPivotStrm);
         SavePivotTableXml(rStrm, rObj, nCacheId);
         rStrm.PopStream();
+        if (pCacheEntry->mpGroupOwner)
+            lclZetaRestoreGroups(rCache);
     }
 }
 
@@ -1281,7 +1421,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
     const ScDPSaveData& rSaveData = *rDPObj.GetSaveData();
 
-    size_t nFieldCount = rCache.GetFieldCount() + rCache.GetGroupFieldCount() + rCache.GetCalculatedFieldCount();
+    size_t nFieldCount = rCache.GetFieldCount() + rCache.GetGroupFieldCount() + lclZetaCalcFieldsToWrite(*pCacheEntry, rCache);
     std::vector<const ScDPSaveDimension*> aCachedDims;
     NameToIdMapType aNameToIdMap;
 
@@ -1297,6 +1437,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
     std::vector<tools::Long> aRowFields;
     std::vector<tools::Long> aColFields;
     std::vector<tools::Long> aPageFields;
+    // ZetaOffice: page field (cache position) -> position of its one selected item in <items>
+    std::map<tools::Long, size_t> aZetaPageItems;
     std::vector<DataField> aDataFields;
 
     RowOrColumnMemberResultData aRowMemberResultData;
@@ -1667,6 +1809,29 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                 aMemberSequence.emplace_back(nItem, true);
         }
 
+        // ZetaOffice: a page field showing one item is Excel's single selection - pageField item
+        // with no hidden items. Hidden items alone (no item) need multipleItemSelectionAllowed,
+        // else Excel reads the field as having every item hidden.
+        bool bZetaMultiPage = false;
+        if (eOrient == sheet::DataPilotFieldOrientation_PAGE)
+        {
+            size_t nVisible = 0, nVisibleAt = 0;
+            for (size_t n = 0; n < aMemberSequence.size(); ++n)
+                if (!aMemberSequence[n].second)
+                {
+                    ++nVisible;
+                    nVisibleAt = n;
+                }
+            if (nVisible == 1 && aMemberSequence.size() > 1)
+            {
+                aZetaPageItems[static_cast<tools::Long>(i)] = nVisibleAt;
+                for (auto& rMember : aMemberSequence)
+                    rMember.second = false;
+            }
+            else if (nVisible < aMemberSequence.size())
+                bZetaMultiPage = true;
+        }
+
         // tdf#125086: check if this field *also* appears in Data region
         bool bAppearsInData = false;
         {
@@ -1696,6 +1861,9 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         // subtotals below the group (outline or compact form); Excel's default is on top
         if (bDimSubtotalsBottom)
             pAttList->add(XML_subtotalTop, ToPsz10(false));
+
+        if (bZetaMultiPage)
+            pAttList->add(XML_multipleItemSelectionAllowed, ToPsz10(true));
 
         pAttList->add(XML_showAll, ToPsz10(false));
 
@@ -1894,9 +2062,16 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
 
         for (const auto& rPageField : aPageFields)
         {
-            pPivotStrm->singleElement(XML_pageField,
-                XML_fld, OString::number(rPageField),
-                XML_hier, OString::number(-1)); // TODO : handle this correctly.
+            auto itItem = aZetaPageItems.find(rPageField);
+            if (itItem != aZetaPageItems.end())
+                pPivotStrm->singleElement(XML_pageField,
+                    XML_fld, OString::number(rPageField),
+                    XML_item, OString::number(static_cast<sal_Int64>(itItem->second)),
+                    XML_hier, OString::number(-1));
+            else
+                pPivotStrm->singleElement(XML_pageField,
+                    XML_fld, OString::number(rPageField),
+                    XML_hier, OString::number(-1)); // TODO : handle this correctly.
         }
 
         pPivotStrm->endElement(XML_pageFields);

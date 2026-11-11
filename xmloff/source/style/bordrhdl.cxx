@@ -338,7 +338,9 @@ bool XMLBorderHdl::exportXML( OUString& rStrExpValue, const uno::Any& rValue, co
         }
         aOut.append( GetXMLToken( eStyleToken ) + " " );
 
-        ::sax::Converter::convertColor( aOut, aBorderLine.Color );
+        // ODF has no automatic border color: write the black it is painted with
+        ::sax::Converter::convertColor(
+            aOut, aBorderLine.Color == sal_Int32(0xFFFFFFFF) ? 0 : aBorderLine.Color);
     }
 
     rStrExpValue = aOut.makeStringAndClear();

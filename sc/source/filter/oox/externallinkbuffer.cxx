@@ -103,10 +103,54 @@ void ExternalName::importDefinedName( const AttributeList& rAttribs )
         return;
     }
 
+    // ZETA: refersTo names sheets of the external book ("='Src'!$A$1:$A$5"), not of this document.
+    // Compiled as is, 'Src' is an unknown sheet, the name's tokens carry an error, and every cell
+    // using the name (=SUM([1]!SrcTotal)) loses its formula on xlsx export (only the value is kept).
+    // A plain sheet reference is rewritten as an external reference of this link ("'[1]Src'!...").
+    OUString aFormula = maModel.maFormula;
+    {
+        sal_Int32 nLinkIdx = 0;
+        for (sal_Int32 i = 1; ; ++i)
+        {
+            ExternalLinkRef xLink = getExternalLinks().getExternalLink(i, false);
+            if (!xLink)
+                break;
+            if (xLink.get() == &mrParentLink)
+            {
+                nLinkIdx = i;
+                break;
+            }
+        }
+        std::u16string_view aBody = aFormula;
+        if (!aBody.empty() && aBody[0] == '=')
+            aBody = aBody.substr(1);
+        const size_t nExcl = aBody.rfind('!');
+        bool bPlainRef = nLinkIdx > 0 && nExcl != std::u16string_view::npos && nExcl > 0
+            && aBody.find('[') == std::u16string_view::npos;
+        if (bPlainRef)
+        {
+            // the part after '!' must be an A1 cell or range reference only
+            for (size_t k = nExcl + 1; k < aBody.size() && bPlainRef; ++k)
+            {
+                sal_Unicode c = aBody[k];
+                bPlainRef = c == '$' || c == ':' || (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+            }
+            bPlainRef = bPlainRef && nExcl + 1 < aBody.size();
+        }
+        if (bPlainRef)
+        {
+            const OUString aIdx = "[" + OUString::number(nLinkIdx) + "]";
+            if (aBody[0] == '\'')
+                aFormula = OUString::Concat(u"'") + aIdx + aBody.substr(1);
+            else
+                aFormula = aIdx + aBody;
+        }
+    }
+
     // cache external defined names and formulas
     ScCompiler aComp(getScDocument(), ScAddress(0, 0, maModel.mnSheet), formula::FormulaGrammar::GRAM_OOXML);
     aComp.SetExternalLinks(getExternalLinks().getLinkInfos());
-    std::unique_ptr<ScTokenArray> pArray = aComp.CompileString(maModel.maFormula);
+    std::unique_ptr<ScTokenArray> pArray = aComp.CompileString(aFormula);
     FormulaError nErr = pArray->GetCodeError();
     aComp.CompileTokenArray();
     getScDocument().CheckLinkFormulaNeedingCheck(*pArray);

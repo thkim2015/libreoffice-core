@@ -47,6 +47,8 @@ public:
 
     virtual bool IsRestart() const override;
 
+    virtual bool IsContinueAcrossParent() const override;
+
     virtual SwNumberTree::tSwNumTreeNumber GetStartValue() const override;
 
     SwPosition GetPosition() const;

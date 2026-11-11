@@ -255,8 +255,9 @@ void MakeBorderLine( sal_Int32 nLineThickness,   sal_Int32 nLineToken,
     };
     if(!bIsOOXML && sal::static_int_cast<sal_uInt32>(nLineColor) < SAL_N_ELEMENTS(aBorderDefColor))
         nLineColor = sal_Int32(aBorderDefColor[nLineColor]);
-    //no auto color for borders
-    if (nLineColor == sal_Int32(COL_AUTO))
+    // No auto color for borders, except in OOXML: keep w:color="auto" so that
+    // export writes it back; SvxBorderLine paints COL_AUTO as black.
+    if (!bIsOOXML && nLineColor == sal_Int32(COL_AUTO))
         nLineColor = sal_Int32(COL_BLACK);
 
     sal_Int32 nLineType = lcl_convertBorderStyleFromToken(nLineToken);
@@ -313,7 +314,8 @@ bool IsNextPM(std::u16string_view rParams, sal_Int32 nPos)
 
 // See also sw::ms::MSDateTimeFormatToSwFormat
 OUString ConvertMSFormatStringToSO(
-        const OUString& rFormat, lang::Locale& rLocale, bool bHijri)
+        const OUString& rFormat, lang::Locale& rLocale, bool bHijri,
+        const lang::Locale* pAsianLocale)
 {
     OUString sFormat(rFormat);
     lcl_SwapQuotesInField(sFormat);
@@ -321,6 +323,7 @@ OUString ConvertMSFormatStringToSO(
     //#102782#, #102815#, #108341# & #111944# have to work at the same time :-)
     bool bForceJapanese(false);
     bool bForceNatNum(false);
+    bool bAsianDayName(false);
     const sal_Int32 nLen = sFormat.getLength();
     sal_Int32 nI = 0;
     sal_Int32 nAddedChars = 0;
@@ -358,7 +361,7 @@ OUString ConvertMSFormatStringToSO(
             else if ((nChar == 'g') || (nChar == 'G'))
                 bForceJapanese = true;
             else if ((nChar == 'a') && lcl_IsNotAM(sFormat, nI))
-                bForceJapanese = true;
+                bAsianDayName = true;
             else if (nChar == 'E')
             {
                 if ((nI != nLen-1) && (sFormat[nI+1] == 'E'))
@@ -400,6 +403,16 @@ OUString ConvertMSFormatStringToSO(
 
     if (bForceNatNum)
         bForceJapanese = true;
+
+    if (bAsianDayName && !bForceJapanese)
+    {
+        // aaa/aaaa is the day name in the run's East Asian language (Korean
+        // Word shows "화" for Tuesday), not always Japanese.
+        if (pAsianLocale && !pAsianLocale->Language.isEmpty())
+            rLocale = *pAsianLocale;
+        else
+            bForceJapanese = true;
+    }
 
     if (bForceJapanese)
     {

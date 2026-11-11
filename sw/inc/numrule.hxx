@@ -279,6 +279,8 @@ public:
     void dumpAsXml(xmlTextWriterPtr w) const;
     SW_DLLPUBLIC void GetGrabBagItem(css::uno::Any& rVal) const;
     void SetGrabBagItem(const css::uno::Any& rVal);
+    /// Word w:lvlRestart of the level kept by the DOCX import, -1 if none.
+    SW_DLLPUBLIC sal_Int16 GetWordLevelRestart(sal_uInt16 nLvl) const;
 
     void RegisterGrfLinks(SwDoc& rDoc);
     void RemoveGrfLinks(SwDoc& rDoc);

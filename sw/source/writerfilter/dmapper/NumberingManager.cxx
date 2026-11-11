@@ -55,6 +55,28 @@ using namespace com::sun::star;
 namespace writerfilter::dmapper {
 
 //---------------------------------------------------  Utility functions
+/// w:numFmt values that ConvertNumberingType() maps to NUMBER_LOWER_ZH.
+static OUString lcl_CollapsedNumFmtName(sal_Int32 nNFC)
+{
+    switch (nNFC)
+    {
+        case NS_ooxml::LN_Value_ST_NumberFormat_chineseCounting:
+            return u"chineseCounting"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_japaneseCounting:
+            return u"japaneseCounting"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_taiwaneseCounting:
+            return u"taiwaneseCounting"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_taiwaneseCountingThousand:
+            return u"taiwaneseCountingThousand"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_ideographDigital:
+            return u"ideographDigital"_ustr;
+        case NS_ooxml::LN_Value_ST_NumberFormat_chineseCountingThousand:
+            return u"chineseCountingThousand"_ustr;
+        default:
+            return OUString();
+    }
+}
+
 template <typename T>
 static beans::PropertyValue lcl_makePropVal(PropertyIds nNameID, T const & aValue)
 {
@@ -115,6 +137,9 @@ void ListLevel::SetValue( Id nId, sal_Int32 nValue )
         break;
         case NS_ooxml::LN_CT_Lvl_isLgl:
             m_bIsLegal = true;
+        break;
+        case NS_ooxml::LN_CT_Lvl_lvlRestart:
+            m_nLevelRestart = static_cast<sal_Int16>(nValue);
         break;
         case NS_ooxml::LN_CT_Lvl_legacy:
         break;
@@ -643,6 +668,47 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
         // Create the numbering style for these rules
         const OUString sNumRulesName = getPropertyName( PROP_NUMBERING_RULES );
         xStyle->setPropertyValue( sNumRulesName, uno::Any( m_xNumRules ) );
+
+        // Several East Asian counting formats share one Writer numbering type
+        // (NUMBER_LOWER_ZH). Keep the original w:numFmt per level so that the
+        // DOCX export can write it back instead of taiwaneseCountingThousand.
+        uno::Sequence<OUString> aNumFmts(9); // WW8 list levels
+        bool bHasNumFmts = false;
+        for (sal_Int32 nLvl = 0; nLvl < nAbstLevels && nLvl < aNumFmts.getLength(); ++nLvl)
+        {
+            ListLevel::Pointer pLvl = GetLevel(nLvl);
+            ListLevel::Pointer pAbsLvl = m_pAbstractDef->GetLevel(nLvl);
+            sal_Int32 nNFC = pLvl && pLvl->GetNFC() >= 0 ? pLvl->GetNFC()
+                             : pAbsLvl ? pAbsLvl->GetNFC() : -1;
+            OUString aName = lcl_CollapsedNumFmtName(nNFC);
+            if (!aName.isEmpty())
+            {
+                aNumFmts.getArray()[nLvl] = aName;
+                bHasNumFmts = true;
+            }
+        }
+        // Writer always restarts a level after its parent level: keep w:lvlRestart
+        // per level for the number tree and the DOCX export.
+        uno::Sequence<sal_Int16> aRestarts(9);
+        bool bHasRestarts = false;
+        for (sal_Int32 nLvl = 0; nLvl < aRestarts.getLength(); ++nLvl)
+        {
+            ListLevel::Pointer pLvl = nLvl < nAbstLevels ? GetLevel(nLvl) : nullptr;
+            ListLevel::Pointer pAbsLvl = nLvl < nAbstLevels ? m_pAbstractDef->GetLevel(nLvl) : nullptr;
+            sal_Int16 nRestart = pLvl && pLvl->GetLevelRestart() >= 0 ? pLvl->GetLevelRestart()
+                                 : pAbsLvl ? pAbsLvl->GetLevelRestart() : -1;
+            aRestarts.getArray()[nLvl] = nRestart;
+            if (nRestart >= 0)
+                bHasRestarts = true;
+        }
+        std::vector<beans::PropertyValue> aGrabBag;
+        if (bHasNumFmts)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNumFmts"_ustr, aNumFmts));
+        if (bHasRestarts)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlLvlRestarts"_ustr, aRestarts));
+        if (!aGrabBag.empty())
+            xStyle->setPropertyValue(u"StyleInteropGrabBag"_ustr,
+                                     uno::Any(comphelper::containerToSequence(aGrabBag)));
     }
     catch( const lang::IllegalArgumentException& )
     {
@@ -960,6 +1026,10 @@ void ListsManager::lcl_sprm( Sprm& rSprm )
             if (ListLevel::Pointer pCurrentLevel = m_pCurrentDefinition->GetCurrentLevel())
                 pCurrentLevel->SetValue( nSprmId, nIntValue );
             bIsStartVisited = true;
+        break;
+        case NS_ooxml::LN_CT_Lvl_lvlRestart:
+            if (ListLevel::Pointer pCurrentLevel = m_pCurrentDefinition->GetCurrentLevel())
+                pCurrentLevel->SetValue(nSprmId, nIntValue);
         break;
         case NS_ooxml::LN_CT_Lvl_numFmt:
         {

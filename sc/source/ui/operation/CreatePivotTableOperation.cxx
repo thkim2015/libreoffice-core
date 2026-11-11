@@ -17,6 +17,7 @@
 #include <vcl/weld/Window.hxx>
 
 #include <dpsave.hxx>
+#include <dpdimsave.hxx>
 #include <undodat.hxx>
 #include <scresid.hxx>
 #include <hints.hxx>
@@ -67,6 +68,13 @@ bool CreatePivotTableOperation::runImplementation()
     {
         const ScDPDimensionSaveData* pGroups = nullptr;
         bool bRefFound = rDoc.GetDPCollection()->GetReferenceGroups(rDestObject, &pGroups);
+        // ZetaOffice: an imported table keeps its own groups, also none (Excel has a cache per
+        // group set, so a table of the same source range may have no or other groups). The xlsx
+        // sheets are imported in parallel: a table without groups took the groups of a table
+        // that happened to be inserted first (oox PivotTable::finalizeFieldsImport shares the
+        // groups of tables of one Excel cache)
+        if (bRefFound && rDoc.IsImportingXML())
+            bRefFound = false;
         if (bRefFound)
         {
             ScDPSaveData* pSaveData = rDestObject.GetSaveData();

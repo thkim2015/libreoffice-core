@@ -345,6 +345,9 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
         case FormulaError::IllegalFPOperation:
             return ScCompiler::GetNativeSymbol(ocErrNum);
         case FormulaError::Spill:
+            // weboffice: Korean Excel shows #SPILL! as "#bunsan!" in Hangul (other error names stay English)
+            if (Application::GetSettings().GetUILanguageTag().getLanguage() == "ko")
+                return u"#\uBD84\uC0B0!"_ustr;
             return ScCompiler::GetNativeSymbol(ocErrSpill);
         // weboffice: Excel has no "Err:nnn"; show the Excel error these are saved as in .xlsx
         case FormulaError::NoConvergence:

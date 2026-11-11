@@ -27,12 +27,14 @@
 #include <comphelper/processfactory.hxx>
 #include <cppuhelper/supportsservice.hxx>
 #include <o3tl/string_view.hxx>
+#include <algorithm>
 #include <cstddef>
 #include <map>
 #include <mutex>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <com/sun/star/i18n/CharacterClassification.hpp>
 #include <com/sun/star/i18n/NativeNumberMode.hpp>
 #include <com/sun/star/linguistic2/NumberText.hpp>
@@ -572,6 +574,72 @@ Separators getLocaleSeparators(const Locale& rLocale, const OUString& rLocStr)
     return it->second;
 }
 
+/// English cardinal number names ("one hundred twenty-one"), for 0 <= n < 10^12
+OUString lcl_englishCardinal(sal_Int64 n)
+{
+    static const char* const aOnes[]
+        = { "zero",    "one",     "two",       "three",    "four",     "five",    "six",
+            "seven",   "eight",   "nine",      "ten",      "eleven",   "twelve",  "thirteen",
+            "fourteen", "fifteen", "sixteen",  "seventeen", "eighteen", "nineteen" };
+    static const char* const aTens[]
+        = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
+    if (n < 20)
+        return OUString::createFromAscii(aOnes[n]);
+    if (n < 100)
+    {
+        OUString aRet = OUString::createFromAscii(aTens[n / 10]);
+        if (n % 10)
+            aRet += "-" + OUString::createFromAscii(aOnes[n % 10]);
+        return aRet;
+    }
+    static const std::pair<sal_Int64, const char*> aScales[]
+        = { { 1000000000, " billion" }, { 1000000, " million" }, { 1000, " thousand" }, { 100, " hundred" } };
+    for (const auto& [nScale, pName] : aScales)
+        if (n >= nScale)
+        {
+            OUString aRet = lcl_englishCardinal(n / nScale) + OUString::createFromAscii(pName);
+            if (n % nScale)
+                aRet += " " + lcl_englishCardinal(n % nScale);
+            return aRet;
+        }
+    return OUString();
+}
+
+/// English number names for NatNum12 "", "ordinal" and "ordinal-number" when the libnumbertext
+/// data is not available (the WASM build ships none): "one", "first", "1st"
+OUString lcl_englishNumberText(std::u16string_view sParams, const OUString& rNumber)
+{
+    if (rNumber.isEmpty() || rNumber.getLength() > 12
+        || !std::all_of(rNumber.getStr(), rNumber.getStr() + rNumber.getLength(),
+                        [](sal_Unicode c) { return '0' <= c && c <= '9'; }))
+        return OUString();
+    const sal_Int64 n = rNumber.toInt64();
+    if (sParams == u"ordinal-number")
+    {
+        const char* pSuffix = "th";
+        if (n % 100 < 11 || n % 100 > 13)
+            pSuffix = n % 10 == 1 ? "st" : n % 10 == 2 ? "nd" : n % 10 == 3 ? "rd" : "th";
+        return OUString::number(n) + OUString::createFromAscii(pSuffix);
+    }
+    const OUString aCardinal = lcl_englishCardinal(n);
+    if (sParams.empty() || sParams == u"cardinal")
+        return aCardinal;
+    if (sParams != u"ordinal")
+        return OUString();
+    // the last word gets the ordinal form: "twenty-one" -> "twenty-first"
+    static const std::pair<std::u16string_view, std::u16string_view> aIrregular[]
+        = { { u"one", u"first" },  { u"two", u"second" }, { u"three", u"third" },
+            { u"five", u"fifth" }, { u"eight", u"eighth" }, { u"nine", u"ninth" },
+            { u"twelve", u"twelfth" } };
+    for (const auto& [aWord, aOrdinal] : aIrregular)
+        if (aCardinal.endsWith(aWord))
+            return OUString::Concat(aCardinal.subView(0, aCardinal.getLength() - aWord.size()))
+                   + aOrdinal;
+    if (aCardinal.endsWith("y"))
+        return OUString::Concat(aCardinal.subView(0, aCardinal.getLength() - 1)) + "ieth";
+    return aCardinal + "th";
+}
+
 OUString getNumberText(const Locale& rLocale, const OUString& rNumberString,
                        std::u16string_view sNumberTextParams)
 {
@@ -621,6 +689,9 @@ OUString getNumberText(const Locale& rLocale, const OUString& rNumberString,
     if (rItem.isEmpty())
     {
         rItem = xNumberText->getNumberText(numbertext_prefix + aNumberStr, rLocale);
+        // without the libnumbertext data the input comes back unchanged: use English names
+        if (rItem.isEmpty() || rItem == numbertext_prefix + aNumberStr)
+            rItem = lcl_englishNumberText(sNumberTextParams, aNumberStr);
         // use number at missing number to text conversion
         if (rItem.isEmpty())
             rItem = aNumberStr;

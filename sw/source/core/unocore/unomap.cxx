@@ -1305,6 +1305,7 @@ std::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetPropertyMa
                     {UNO_NAME_NUMBERING_SEPARATOR, FIELD_PROP_PAR2,   cppu::UnoType<OUString>::get(), PROPERTY_NONE, 0},
                     {UNO_NAME_SUB_TYPE,           FIELD_PROP_SUBTYPE, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE,    0},
                     {UNO_NAME_INSTANCE_NAME,      FIELD_PROP_PAR3,    cppu::UnoType<OUString>::get(), PropertyAttribute::READONLY, 0},
+                    {u"WordRestartOnly"_ustr,     FIELD_PROP_BOOL1,   cppu::UnoType<bool>::get(), PROPERTY_NONE, 0},
                 };
                 m_aMapEntriesArr[nPropertyId] = aSetExpFieldTypePropMap;
             }

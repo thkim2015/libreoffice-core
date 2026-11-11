@@ -164,6 +164,7 @@
 #include <com/sun/star/chart2/XCoordinateSystemContainer.hpp>
 #include <com/sun/star/drawing/ShadingPattern.hpp>
 #include <com/sun/star/text/GraphicCrop.hpp>
+#include <com/sun/star/text/FootnoteNumbering.hpp>
 #include <com/sun/star/embed/EmbedStates.hpp>
 #include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/text/ControlCharacter.hpp>
@@ -4401,6 +4402,9 @@ bool DocxAttributeOutput::StartURL(const OUString& rUrl, const OUString& rTarget
         {
             m_pHyperlinkAttrList->add(FSNS(XML_w, XML_tooltip), rName);
         }
+        // Word writes w:history="1" for the hyperlinks it inserts; without it the field code of
+        // the hyperlink gets a \h switch in Word
+        m_pHyperlinkAttrList->add(FSNS(XML_w, XML_history), "1");
     }
 
     return true;
@@ -5027,9 +5031,30 @@ void DocxAttributeOutput::TableCellProperties( ww8::WW8TableNodeInfoInner::Point
     SwTwips nWidth = GetGridCols( pTableTextNodeInfoInner )->at( nCell );
     if ( nCell )
         nWidth = nWidth - GetGridCols( pTableTextNodeInfoInner )->at( nCell - 1 );
+    // Word's automatic ("auto") or percent ("pct:<fiftieths>") preferred width of an imported
+    // cell, see DomainMapperTableManager::sprm()
+    const char* pWidthType = "dxa";
+    if (const SfxGrabBagItem* pItem = pTableBox->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG))
+    {
+        auto it = pItem->GetGrabBag().find(u"CellPreferredWidth"_ustr);
+        OUString sPreferred;
+        if (it != pItem->GetGrabBag().end() && (it->second >>= sPreferred))
+        {
+            if (sPreferred == "auto")
+            {
+                nWidth = 0;
+                pWidthType = "auto";
+            }
+            else if (sPreferred.startsWith("pct:"))
+            {
+                nWidth = o3tl::toInt32(sPreferred.subView(4));
+                pWidthType = "pct";
+            }
+        }
+    }
     m_pSerializer->singleElementNS( XML_w, XML_tcW,
            FSNS( XML_w, XML_w ), OString::number(nWidth),
-           FSNS( XML_w, XML_type ), "dxa" );
+           FSNS( XML_w, XML_type ), pWidthType );
 
     // Horizontal spans
     const SwWriteTableRows& rRows = m_xTableWrt->GetRows( );
@@ -7853,6 +7878,27 @@ static OString lcl_ConvertNumberingType(sal_Int16 nNumberingType, const SfxItemS
 }
 
 
+/// A value that the DOCX import kept for the page style being exported: rKey is a document grab
+/// bag entry that maps page style (programmatic) names to values.
+static bool lcl_GetPageStyleGrabBagValue(const MSWordExportBase& rExport, const OUString& rKey,
+                                         uno::Any& rValue)
+{
+    const SwPageDesc* pPd = rExport.m_pCurrentPageDesc;
+    const SwDocShell* pDocShell = rExport.m_rDoc.GetDocShell();
+    if (!pPd || !pDocShell)
+        return false;
+    rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
+    uno::Sequence<beans::PropertyValue> aGrabBag;
+    uno::Sequence<beans::PropertyValue> aByStyle;
+    if (!xProps.is() || !(xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
+        || !(comphelper::SequenceAsHashMap(aGrabBag).getValue(rKey) >>= aByStyle))
+        return false;
+    const OUString sProgName
+        = SwStyleNameMapper::GetProgName(pPd->GetName(), SwGetPoolIdFromName::PageDesc).toString();
+    rValue = comphelper::SequenceAsHashMap(aByStyle).getValue(sProgName);
+    return rValue.hasValue();
+}
+
 void DocxAttributeOutput::SectionPageNumbering( sal_uInt16 nNumType, const ::std::optional<sal_uInt16>& oPageRestartNumber )
 {
     // FIXME Not called properly with page styles like "First Page"
@@ -7868,6 +7914,22 @@ void DocxAttributeOutput::SectionPageNumbering( sal_uInt16 nNumType, const ::std
     OString aFormat(lcl_ConvertNumberingType(nNumType, nullptr, aCustomFormat));
     if (!aFormat.isEmpty() && aCustomFormat.isEmpty())
         pAttr->add(FSNS(XML_w, XML_fmt), aFormat);
+
+    // w:chapStyle/w:chapSep kept from DOCX import for this page style, see
+    // SectionPropertyMap::CloseSectionGroup()
+    uno::Any aChapter;
+    OUString sValue;
+    if (lcl_GetPageStyleGrabBagValue(m_rExport, u"OoxmlPageNumberChapters"_ustr, aChapter)
+        && (aChapter >>= sValue))
+    {
+        const sal_Int32 nBar = sValue.indexOf('|');
+        const OUString sStyle = nBar < 0 ? sValue : sValue.copy(0, nBar);
+        const OUString sSep = nBar < 0 ? OUString() : sValue.copy(nBar + 1);
+        if (!sStyle.isEmpty())
+            pAttr->add(FSNS(XML_w, XML_chapStyle), sStyle.toUtf8());
+        if (!sSep.isEmpty())
+            pAttr->add(FSNS(XML_w, XML_chapSep), sSep.toUtf8());
+    }
 
     m_pSerializer->singleElementNS( XML_w, XML_pgNumType, pAttr );
 
@@ -8214,9 +8276,41 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
     OString aCustomFormat;
     OString aFormat(lcl_ConvertNumberingType(nNumberingType, pOutSet, aCustomFormat, "decimal"_ostr));
 
+    // NUMBER_LOWER_ZH stands for several East Asian counting formats; the
+    // DOCX import keeps the original one per level in the rule's grab bag.
+    if (nNumberingType == style::NumberingType::NUMBER_LOWER_ZH)
+    {
+        const SwNumRule* pRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
+                                                     : m_pExportingNumRule;
+        if (pRule)
+        {
+            uno::Any aAny;
+            pRule->GetGrabBagItem(aAny);
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            aAny >>= aGrabBag;
+            for (const auto& rProp : aGrabBag)
+            {
+                uno::Sequence<OUString> aNumFmts;
+                if (rProp.Name == "OoxmlNumFmts" && (rProp.Value >>= aNumFmts)
+                    && nLevel < aNumFmts.getLength() && !aNumFmts[nLevel].isEmpty())
+                    aFormat = aNumFmts[nLevel].toUtf8();
+            }
+        }
+    }
+
     if (aCustomFormat.isEmpty())
     {
         m_pSerializer->singleElementNS(XML_w, XML_numFmt, FSNS(XML_w, XML_val), aFormat);
+    }
+
+    // w:lvlRestart kept by the DOCX import (Writer has no own setting for it).
+    if (const SwNumRule* pRestartRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
+                                                            : m_pExportingNumRule)
+    {
+        const sal_Int16 nRestart = pRestartRule->GetWordLevelRestart(nLevel);
+        if (nRestart >= 0)
+            m_pSerializer->singleElementNS(XML_w, XML_lvlRestart, FSNS(XML_w, XML_val),
+                                           OString::number(nRestart));
     }
 
     if (m_bExportingOutline)
@@ -9198,6 +9292,22 @@ void DocxAttributeOutput::WriteField_Impl(const SwField *const pField,
     if (pField)
         infos.pField = pField->CopyField();
     infos.sCmd = rFieldCmd;
+    // Word switches of an imported field that Writer does not keep, see SwField::SetWordSwitches()
+    if (pField && !rFieldCmd.isEmpty())
+    {
+        auto lcl_Append = [&infos](const OUString& rSwitch)
+        {
+            if (!infos.sCmd.endsWith(" "))
+                infos.sCmd += " ";
+            infos.sCmd += rSwitch;
+        };
+        const OUString& rPicture = pField->GetWordNumberPicture();
+        if (!rPicture.isEmpty() && rFieldCmd.indexOf("\\#") < 0)
+            lcl_Append("\\# \"" + rPicture + "\" ");
+        if (pField->IsWordMergeFormat()
+            && infos.sCmd.toAsciiUpperCase().indexOf("MERGEFORMAT") < 0)
+            lcl_Append(u"\\* MERGEFORMAT "_ustr);
+    }
     infos.eType = eType;
     infos.bClose = bool(FieldFlags::Close & nMode);
     infos.bSep = bool(FieldFlags::CmdEnd & nMode);
@@ -9520,10 +9630,46 @@ void DocxAttributeOutput::WriteFootnoteEndnotePr( ::sax_fastparser::FSHelperPtr 
 
 void DocxAttributeOutput::SectFootnoteEndnotePr()
 {
+    // Writer has document-wide note numbering only: the DOCX import keeps the numbering of
+    // sections that differ from it per page style, see lcl_ApplySectionNoteNumberings().
+    auto lcl_Override = [this](const OUString& rKey, SwEndNoteInfo& rInfo, SwFootnoteInfo* pFootnoteInfo)
+    {
+        uno::Any aValue;
+        uno::Sequence<sal_Int16> aNumbering;
+        if (!lcl_GetPageStyleGrabBagValue(m_rExport, rKey, aValue) || !(aValue >>= aNumbering)
+            || aNumbering.getLength() < 3)
+            return false;
+        SvxNumberType aFormat(rInfo.m_aFormat);
+        aFormat.SetNumberingType(static_cast<SvxNumType>(aNumbering[0]));
+        rInfo.m_aFormat = aFormat;
+        rInfo.m_nFootnoteOffset = aNumbering[1];
+        if (pFootnoteInfo)
+        {
+            switch (aNumbering[2])
+            {
+                case text::FootnoteNumbering::PER_PAGE: pFootnoteInfo->m_eNum = FTNNUM_PAGE; break;
+                case text::FootnoteNumbering::PER_CHAPTER: pFootnoteInfo->m_eNum = FTNNUM_CHAPTER; break;
+                default: pFootnoteInfo->m_eNum = FTNNUM_DOC; break;
+            }
+        }
+        return true;
+    };
     if( HasFootnotes())
-        WriteFootnoteEndnotePr( m_pSerializer, XML_footnotePr, m_rExport.m_rDoc.GetFootnoteInfo(), 0 );
+    {
+        SwFootnoteInfo aInfo(m_rExport.m_rDoc.GetFootnoteInfo());
+        if (lcl_Override(u"OoxmlSectionFootnoteNumbering"_ustr, aInfo, &aInfo))
+            WriteFootnoteEndnotePr(m_pSerializer, XML_footnotePr, aInfo, 0);
+        else
+            WriteFootnoteEndnotePr( m_pSerializer, XML_footnotePr, m_rExport.m_rDoc.GetFootnoteInfo(), 0 );
+    }
     if( HasEndnotes())
-        WriteFootnoteEndnotePr( m_pSerializer, XML_endnotePr, m_rExport.m_rDoc.GetEndNoteInfo(), 0 );
+    {
+        SwEndNoteInfo aInfo(m_rExport.m_rDoc.GetEndNoteInfo());
+        if (lcl_Override(u"OoxmlSectionEndnoteNumbering"_ustr, aInfo, nullptr))
+            WriteFootnoteEndnotePr(m_pSerializer, XML_endnotePr, aInfo, 0);
+        else
+            WriteFootnoteEndnotePr( m_pSerializer, XML_endnotePr, m_rExport.m_rDoc.GetEndNoteInfo(), 0 );
+    }
 }
 
 void DocxAttributeOutput::ParaLineSpacing_Impl( short nSpace, short nMulti )
@@ -9691,10 +9837,41 @@ static void impl_WriteTabElement( FSHelperPtr const & pSerializer,
         pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "middleDot" );
     else if ( '_' == cFillChar )
         pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "underscore" );
+    else if ( u'\x2501' == cFillChar ) // heavy line, see writerfilter getFillCharFromValue()
+        pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "heavy" );
     else
         pTabElementAttrList->add( FSNS( XML_w, XML_leader ), "none" );
 
     pSerializer->singleElementNS(XML_w, XML_tab, pTabElementAttrList);
+}
+
+// Bar tabs (twips) kept by the DOCX import in the paragraph grab bag of the item set
+// being written.
+static uno::Sequence<sal_Int32> lcl_GetBarTabs(const SfxItemSet* pSet)
+{
+    uno::Sequence<sal_Int32> aBarTabs;
+    if (!pSet)
+        return aBarTabs;
+    if (const SfxGrabBagItem* pBag = pSet->GetItemIfSet(RES_PARATR_GRABBAG, false))
+    {
+        auto it = pBag->GetGrabBag().find(u"ParaBarTabs"_ustr);
+        if (it != pBag->GetGrabBag().end())
+            it->second >>= aBarTabs;
+    }
+    return aBarTabs;
+}
+
+static void lcl_WriteBarTabs(FSHelperPtr const& pSerializer, const uno::Sequence<sal_Int32>& rBarTabs,
+                             sal_uInt32& rWrittenTabs)
+{
+    for (sal_Int32 nPos : rBarTabs)
+    {
+        if (rWrittenTabs >= 64)
+            break;
+        pSerializer->singleElementNS(XML_w, XML_tab, FSNS(XML_w, XML_val), "bar",
+                                     FSNS(XML_w, XML_pos), OString::number(nPos));
+        ++rWrittenTabs;
+    }
 }
 
 void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
@@ -9706,13 +9883,29 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
         pInheritedTabs = GetExport().m_pCurrentStyle->DerivedFrom()->GetAttrSet().GetItem<SvxTabStopItem>(RES_PARATR_TABSTOP);
     const sal_uInt16 nInheritedTabCount = pInheritedTabs ? pInheritedTabs->Count() : 0;
     const sal_uInt16 nCount = rTabStop.Count();
+    const uno::Sequence<sal_Int32> aBarTabs = lcl_GetBarTabs(GetExport().GetCurItemSet());
+
+    // <w:tabs> may contain 64 <w:tab> entries at most, or else MS Word reports the file as corrupt
+    sal_uInt32 nWrittenTabs = 0;
+    auto lcl_OnlyBarTabs = [&]()
+    {
+        if (!aBarTabs.hasElements())
+            return;
+        m_pSerializer->startElementNS(XML_w, XML_tabs);
+        lcl_WriteBarTabs(m_pSerializer, aBarTabs, nWrittenTabs);
+        m_pSerializer->endElementNS(XML_w, XML_tabs);
+    };
 
     // <w:tabs> must contain at least one <w:tab>, so don't write it empty
     if ( !nCount && !nInheritedTabCount )
+    {
+        lcl_OnlyBarTabs();
         return;
+    }
     if( nCount == 1 && rTabStop[ 0 ].GetAdjustment() == SvxTabAdjust::Default )
     {
         GetExport().setDefaultTabStop( rTabStop[ 0 ].GetTabPos());
+        lcl_OnlyBarTabs();
         return;
     }
 
@@ -9720,13 +9913,14 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
     if (nCount == nInheritedTabCount)
     {
         if ( *pInheritedTabs == rTabStop )
+        {
+            lcl_OnlyBarTabs();
             return; // <w:tabs> must contain at least one <w:tab>, so don't write it empty
+        }
     }
 
     m_pSerializer->startElementNS(XML_w, XML_tabs);
-
-    // <w:tabs> may contain 64 <w:tab> entries at most, or else MS Word reports the file as corrupt
-    sal_uInt32 nWrittenTabs = 0;
+    lcl_WriteBarTabs(m_pSerializer, aBarTabs, nWrittenTabs);
     // do not output inherited tabs multiple times (inside styles and inside inline properties)
     std::vector<bool> vInherited(nCount, false);
 
@@ -10848,8 +11042,11 @@ void DocxAttributeOutput::FormatTextGrid( const SwTextGridItem& rGrid )
     pGridAttrList->add( FSNS( XML_w, XML_linePitch ),
             OString::number( nHeight ) );
 
+    // w:charSpace is a signed ST_DecimalNumber: a condensed grid (pitch below
+    // the font size) is negative. Writing the raw unsigned DOP value gives
+    // e.g. 4294965042 for -2254, which Word reads as a huge pitch.
     pGridAttrList->add( FSNS( XML_w, XML_charSpace ),
-            OString::number( GridCharacterPitch( rGrid ) ) );
+            OString::number( static_cast<sal_Int32>( GridCharacterPitch( rGrid ) ) ) );
 
     m_pSerializer->singleElementNS( XML_w, XML_docGrid, pGridAttrList );
 }
@@ -10923,6 +11120,23 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
             bool bWordWrap = true;
             if (rGrabBagElement.second >>= bWordWrap)
                 m_pSerializer->singleElementNS(XML_w, XML_wordWrap, FSNS(XML_w, XML_val), OString::boolean(bWordWrap));
+        }
+        else if (rGrabBagElement.first == "ParaBarTabs")
+        {
+            // with own tab stops ParaTabStop() writes the bar tabs inside the same <w:tabs>
+            const SfxItemSet* pSet = GetExport().GetCurItemSet();
+            if (pSet && pSet->GetItemState(RES_PARATR_TABSTOP, false) != SfxItemState::SET)
+            {
+                uno::Sequence<sal_Int32> aBarTabs;
+                rGrabBagElement.second >>= aBarTabs;
+                if (aBarTabs.hasElements())
+                {
+                    sal_uInt32 nWrittenTabs = 0;
+                    m_pSerializer->startElementNS(XML_w, XML_tabs);
+                    lcl_WriteBarTabs(m_pSerializer, aBarTabs, nWrittenTabs);
+                    m_pSerializer->endElementNS(XML_w, XML_tabs);
+                }
+            }
         }
         else if (rGrabBagElement.first == "ParaAdjustRightInd")
         {

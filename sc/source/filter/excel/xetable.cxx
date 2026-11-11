@@ -428,6 +428,39 @@ void XclExpTableop::Save( XclExpStream& rStrm )
         XclExpRangeFmlaBase::Save( rStrm );
 }
 
+bool XclExpTableop::ZetaSaveXmlFormula( XclExpXmlStream& rStrm, const XclAddress& rXclPos ) const
+{
+    if( !mbValid )
+        return false;
+    if( rXclPos.mnCol == maXclRange.maFirst.mnCol && rXclPos.mnRow == maXclRange.maFirst.mnRow )
+    {
+        // Excel: ref = the result cells, r1 = row input (two variables) or the input cell,
+        // r2 = column input; dtr = one-variable table in a row, or a two-variable table
+        OStringBuffer aRef, aR1, aR2;
+        XclXmlUtils::ToOString( aRef, maXclRange.maFirst );
+        aRef.append(':');
+        XclXmlUtils::ToOString( aRef, maXclRange.maLast );
+        if( mnScMode == 2 )
+        {
+            XclXmlUtils::ToOString( aR1, XclAddress( mnRowInpXclCol, mnRowInpXclRow ) );
+            XclXmlUtils::ToOString( aR2, XclAddress( mnColInpXclCol, mnColInpXclRow ) );
+        }
+        else
+            XclXmlUtils::ToOString( aR1, XclAddress( mnColInpXclCol, mnColInpXclRow ) );
+        const OString sRef = aRef.makeStringAndClear();
+        const OString sR1 = aR1.makeStringAndClear();
+        const OString sR2 = aR2.makeStringAndClear();
+        rStrm.GetCurrentStream()->singleElement( XML_f,
+            XML_t, "dataTable",
+            XML_ref, sRef.getStr(),
+            XML_dt2D, mnScMode == 2 ? "1" : "0",
+            XML_dtr, mnScMode != 0 ? "1" : "0",
+            XML_r1, sR1.getStr(),
+            XML_r2, mnScMode == 2 ? sR2.getStr() : nullptr );
+    }
+    return true;
+}
+
 bool XclExpTableop::IsAppendable( sal_uInt16 nXclCol, sal_uInt16 nXclRow ) const
 {
     return  ((nXclCol == mnLastAppXclCol + 1) && (nXclRow == maXclRange.maFirst.mnRow)) ||
@@ -1073,6 +1106,13 @@ void XclExpFormulaCell::SaveXml( XclExpXmlStream& rStrm )
         bWriteFormula = false;
     ScAddress aScPos( static_cast< SCCOL >( GetXclPos().mnCol ),
             static_cast< SCROW >( GetXclPos().mnRow ), rStrm.GetRoot().GetCurrScTab() );
+
+    // ZetaOffice: a cell of a data table (multiple operations). Excel writes the table on its
+    // first cell (<f t="dataTable" .../>) and only values in the others; a TABLE() formula in
+    // each cell is not valid Excel.
+    if (auto* pTableop = dynamic_cast<const XclExpTableop*>(mxAddRec.get());
+        pTableop && pTableop->ZetaSaveXmlFormula(rStrm, GetXclPos()))
+        bWriteFormula = false;
 
     switch (mrScFmlaCell.GetMatrixFlag())
     {
@@ -2874,9 +2914,28 @@ XclExpCellTable::XclExpCellTable( const XclExpRoot& rRoot ) :
                     }
                 }
 
-                xCell = new XclExpFormulaCell(
-                    GetRoot(), aXclPos, pPattern, nMergeBaseXFId,
-                    *rScCell.getFormula(), maArrayBfr, maShrfmlaBfr, maTableopBfr);
+                // ZetaOffice: the xlsx import keeps a Boolean cell (t="b") as formula TRUE()/FALSE();
+                // write such a cell as a Boolean value again, else Excel shows a =TRUE() formula
+                {
+                    const ScFormulaCell& rFCell = *rScCell.getFormula();
+                    const ScTokenArray* pCode = rFCell.GetCode();
+                    if (pCode && rFCell.GetMatrixFlag() == ScMatrixMode::NONE
+                        && (pCode->GetLen() == 1 || pCode->GetLen() == 3))
+                    {
+                        formula::FormulaToken* const* pTok = pCode->GetArray();
+                        const OpCode eOp = pTok[0]->GetOpCode();
+                        if ((eOp == ocTrue || eOp == ocFalse)
+                            && (pCode->GetLen() == 1
+                                || (pTok[1]->GetOpCode() == ocOpen && pTok[2]->GetOpCode() == ocClose)))
+                            xCell = new XclExpBooleanCell(
+                                GetRoot(), aXclPos, pPattern, nMergeBaseXFId, eOp == ocTrue );
+                    }
+                }
+
+                if (!xCell)
+                    xCell = new XclExpFormulaCell(
+                        GetRoot(), aXclPos, pPattern, nMergeBaseXFId,
+                        *rScCell.getFormula(), maArrayBfr, maShrfmlaBfr, maTableopBfr);
             }
             break;
 

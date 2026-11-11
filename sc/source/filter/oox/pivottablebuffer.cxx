@@ -66,6 +66,10 @@
 #include <documentimport.hxx>
 #include <workbooksettings.hxx>
 #include <PivotTableFormat.hxx>
+#include <stylesbuffer.hxx>
+#include <scitems.hxx>
+#include <docpool.hxx>
+#include <svl/itemset.hxx>
 
 namespace oox::xls {
 
@@ -497,6 +501,26 @@ void PivotTableField::finalizeImport(const rtl::Reference<ScDataPilotDescriptorB
                 // create all nested group fields (if any)
                 mrPivotTable.finalizeDateGroupingImport( xDPField, mnFieldIndex );
             }
+            else if( const PivotCacheField* pParent = pCacheField->hasParentGrouping()
+                         ? mrPivotTable.getCacheField( pCacheField->getParentGroupField() ) : nullptr;
+                     pParent && pParent->hasDateGrouping() && pParent->getGroupBaseField() == mnFieldIndex )
+            {
+                // ZETA: Excel keeps the dates and writes a date grouping (e.g. months only) as a
+                // separate group field (fieldGroup base= + rangePr) with only par= on the date
+                // field. That parent is a date group, not a named one: create it from the base.
+                mrPivotTable.finalizeDateGroupingImport( xDPField, mnFieldIndex );
+                // The first date grouping is done in place on the date field (no new
+                // dimension, empty name): the group field then shows as the date field.
+                PivotTableField* pGroupField = mrPivotTable.getFields().get( pCacheField->getParentGroupField() ).get();
+                if( pGroupField && pGroupField->maDPFieldName.isEmpty() && xDPField.is() )
+                {
+                    pGroupField->maDPFieldName = xDPField->getName();
+                    // Excel shows the group field's name (e.g. "개월(Date)") as the header
+                    if( const PivotCacheField* pGroupCache = mrPivotTable.getCacheField( pCacheField->getParentGroupField() );
+                        pGroupCache && !pGroupCache->getName().isEmpty() && pGroupCache->getName() != maDPFieldName )
+                        xDPField->setName( pGroupCache->getName() );
+                }
+            }
             else if( pCacheField->hasParentGrouping() )
             {
 
@@ -712,6 +736,18 @@ void PivotTableField::convertDataField( const PTDataFieldModel& rDataField )
           break;
     }
     aPropSet.setProperty( PROP_Function, eAggFunc );
+
+    // ZETA: the data field's own number format (else the source cells' format is used)
+    if( rDataField.mnNumFmtId > 0 ) try
+    {
+        SfxItemSet aSet( SfxItemSet::makeFixedSfxItemSet<ATTR_VALUE_FORMAT, ATTR_LANGUAGE_FORMAT>( *getScDocument().GetPool() ) );
+        sal_uInt32 nScFmt = getStyles().writeNumFmtToItemSet( aSet, rDataField.mnNumFmtId, false );
+        if( aSet.GetItemState( ATTR_VALUE_FORMAT, false ) == SfxItemState::SET )
+            xDPField->setPropertyValue( u"ZetaNumberFormat"_ustr, css::uno::Any( sal_Int32( nScFmt ) ) );
+    }
+    catch( css::uno::Exception& )
+    {
+    }
 
     // field reference ('show data as')
     DataPilotFieldReference aReference;
@@ -1462,10 +1498,16 @@ void PivotTable::finalizeImport()
         aVisFields.insert( maColFields.begin(), maColFields.end() );
         for( const auto& rPageField : maPageFields )
             aVisFields.insert( rPageField.mnField );
+        // ZETA: a date field grouped in place by its (visible) group field shares its name
+        ::std::set< OUString > aVisNames;
+        for( sal_Int32 nVis : aVisFields )
+            if( PivotTableField* pField = getTableField( nVis ) )
+                if( !pField->getDPFieldName().isEmpty() )
+                    aVisNames.insert( pField->getDPFieldName() );
         sal_Int32 nIndex = 0;
         for( auto& rxField : maFields )
         {
-            if( aVisFields.count( nIndex ) == 0 )
+            if( aVisFields.count( nIndex ) == 0 && aVisNames.count( rxField->getDPFieldName() ) == 0 )
                 rxField->convertHiddenField();
             ++nIndex;
         }
@@ -1541,8 +1583,21 @@ void PivotTable::finalizeFieldsImport()
         assert(pDPCollection != nullptr);
         const ScDPDimensionSaveData* pGroups = nullptr;
         bool bRefFound = pDPCollection->GetReferenceGroups(*pDPObj, &pGroups);
+        // ZetaOffice: only a table whose own Excel cache has group fields takes the groups of
+        // another table of the same source range. The sheets are imported in parallel, so a
+        // table without groups (another Excel cache) could get the date groups of a table that
+        // happened to be finished first - and then shared the cache with it when saving.
+        bool bOwnCacheGroups = false;
+        for (sal_Int32 nCF = 0; mpPivotCache && !bOwnCacheGroups; ++nCF)
+        {
+            const PivotCacheField* pCF = mpPivotCache->getCacheField(nCF);
+            if (!pCF)
+                break;
+            bOwnCacheGroups = pCF->hasGroupItems() || pCF->hasNumericGrouping()
+                              || pCF->hasDateGrouping() || pCF->hasParentGrouping();
+        }
         // Apply reference groups on this table.
-        if (bRefFound && pGroups && pGroups->HasGroupDimensions()) {
+        if (bRefFound && pGroups && pGroups->HasGroupDimensions() && bOwnCacheGroups) {
             ScDPSaveData* pSaveData = pDPObj->GetSaveData();
             if (pSaveData) {
                 pSaveData->SetDimensionData(pGroups);

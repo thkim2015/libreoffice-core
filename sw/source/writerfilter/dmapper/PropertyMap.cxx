@@ -58,6 +58,7 @@
 #include <com/sun/star/text/XTextTablesSupplier.hpp>
 #include <com/sun/star/text/TextGridMode.hpp>
 #include <com/sun/star/text/XTextCopy.hpp>
+#include <com/sun/star/text/XTextRangeCompare.hpp>
 #include <com/sun/star/style/VerticalAlignment.hpp>
 #include <comphelper/sequence.hxx>
 #include <comphelper/propertyvalue.hxx>
@@ -1113,6 +1114,88 @@ void copyHeaderFooter(const DomainMapper_Impl& rDM_Impl,
     }
 }
 
+// Word links a first page header/footer to the previous section's one even
+// when that section had no title page (its first page header is defined but
+// unused). Writer only stashes such content, so copyHeaderFooter() cannot
+// reach it from a later section with a title page. Remember the page style
+// that holds the linked content and copy from it, un-sharing it for the read.
+// Header and footer are copied under one un-share: re-sharing the source
+// replaces its first page footer with the master one.
+void lcl_CopyFirstParts(const rtl::Reference<SwXPageStyle>& xSource,
+                        const rtl::Reference<SwXPageStyle>& xStyle, bool bHeader, bool bFooter)
+{
+    try
+    {
+        const OUString& sFirstShared = getPropertyName(PROP_FIRST_IS_SHARED);
+        bool bShared = false;
+        xSource->getPropertyValue(sFirstShared) >>= bShared;
+        if (bShared)
+            xSource->setPropertyValue(sFirstShared, uno::Any(false));
+        xStyle->setPropertyValue(sFirstShared, uno::Any(false));
+        if (bHeader)
+        {
+            xStyle->setPropertyValue(getPropertyName(PROP_HEADER_IS_ON), uno::Any(true));
+            xStyle->setPropertyValue(getPropertyName(PROP_HEADER_NO_FIRST), uno::Any(false));
+            copyHeaderFooterTextProperty(xSource, xStyle, PROP_HEADER_TEXT_FIRST);
+        }
+        if (bFooter)
+        {
+            xStyle->setPropertyValue(getPropertyName(PROP_FOOTER_IS_ON), uno::Any(true));
+            xStyle->setPropertyValue(getPropertyName(PROP_FOOTER_NO_FIRST), uno::Any(false));
+            copyHeaderFooterTextProperty(xSource, xStyle, PROP_FOOTER_TEXT_FIRST);
+        }
+        if (bShared)
+            xSource->setPropertyValue(sFirstShared, uno::Any(true));
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_INFO_EXCEPTION("writerfilter", "lcl_CopyFirstParts failed");
+    }
+}
+
+bool lcl_ChainHas(const rtl::Reference<SwXPageStyle>& xChain,
+                  const rtl::Reference<SwXPageStyle>& xStyle, PropertyIds eIsOn)
+{
+    if (!xChain.is() || xChain == xStyle)
+        return false;
+    bool bOn = false;
+    try
+    {
+        xChain->getPropertyValue(getPropertyName(eIsOn)) >>= bOn;
+    }
+    catch (const uno::Exception&)
+    {
+    }
+    return bOn;
+}
+
+void lcl_CopyFirstFromChains(DomainMapper_Impl& rDM_Impl,
+                             const rtl::Reference<SwXPageStyle>& xStyle, bool bOwnHeader,
+                             bool bLinkedHeader, bool bOwnFooter, bool bLinkedFooter)
+{
+    if (!xStyle.is())
+        return;
+    rtl::Reference<SwXPageStyle>& rHeaderChain = rDM_Impl.m_xFirstHeaderChainStyle;
+    rtl::Reference<SwXPageStyle>& rFooterChain = rDM_Impl.m_xFirstFooterChainStyle;
+    const bool bHeader = !bOwnHeader && bLinkedHeader
+                         && lcl_ChainHas(rHeaderChain, xStyle, PROP_HEADER_IS_ON);
+    const bool bFooter = !bOwnFooter && bLinkedFooter
+                         && lcl_ChainHas(rFooterChain, xStyle, PROP_FOOTER_IS_ON);
+    if (bHeader && bFooter && rHeaderChain == rFooterChain)
+        lcl_CopyFirstParts(rHeaderChain, xStyle, true, true);
+    else
+    {
+        if (bHeader)
+            lcl_CopyFirstParts(rHeaderChain, xStyle, true, false);
+        if (bFooter)
+            lcl_CopyFirstParts(rFooterChain, xStyle, false, true);
+    }
+    if (bOwnHeader || (bLinkedHeader && rHeaderChain.is()))
+        rHeaderChain = xStyle;
+    if (bOwnFooter || (bLinkedFooter && rFooterChain.is()))
+        rFooterChain = xStyle;
+}
+
 } // end anonymous namespace
 
 
@@ -1141,6 +1224,13 @@ void SectionPropertyMap::CopyLastHeaderFooter(DomainMapper_Impl& rDM_Impl )
                          m_bEvenPageFooterLinkToPrevious,
                          m_bFirstPageFooterLinkToPrevious,
                          bEvenAndOdd, m_bTitlePage);
+    }
+    if (rDM_Impl.IsNewDoc())
+    {
+        lcl_CopyFirstFromChains(rDM_Impl, GetPageStyle(rDM_Impl), m_bHadFirstHeader,
+                                m_bTitlePage && m_bFirstPageHeaderLinkToPrevious,
+                                m_bHadFirstFooter,
+                                m_bTitlePage && m_bFirstPageFooterLinkToPrevious);
     }
     SAL_INFO( "writerfilter", "END>>> SectionPropertyMap::CopyLastHeaderFooter()" );
 }
@@ -1209,6 +1299,45 @@ static uno::Reference< beans::XPropertySet > lcl_GetRangeProperties( bool bIsFir
     else if ( xStartingRange.is() )
         xRangeProperties.set( xStartingRange, uno::UNO_QUERY_THROW );
     return xRangeProperties;
+}
+
+// Stop counting lines in the paragraphs from xStart (or the document start) up to
+// the paragraph before xEnd (or before the paragraph already appended for the
+// next section).
+static void lcl_SuppressLineNumbers(DomainMapper_Impl& rDM_Impl,
+                                    const uno::Reference<text::XTextRange>& xStart,
+                                    const uno::Reference<text::XTextRange>& xEnd)
+{
+    try
+    {
+        uno::Reference<text::XTextAppend> const& xTextAppend = rDM_Impl.GetTopTextAppend();
+        if (!xTextAppend.is())
+            return;
+        rtl::Reference<SwXTextCursor> xCursor = dynamic_cast<SwXTextCursor*>(
+            xTextAppend->createTextCursorByRange(xStart.is() ? xStart : xTextAppend->getStart()).get());
+        rtl::Reference<SwXTextCursor> xEndCursor = dynamic_cast<SwXTextCursor*>(
+            xTextAppend->createTextCursorByRange(xEnd.is() ? xEnd : xTextAppend->getEnd()).get());
+        if (!xCursor || !xEndCursor)
+            return;
+        xCursor->gotoStartOfParagraph(false);
+        // The last section has no paragraph of a next section after it.
+        if (xEnd.is() || !rDM_Impl.GetIsLastSectionGroup())
+        {
+            xEndCursor->gotoStartOfParagraph(false);
+            if (!xEndCursor->gotoPreviousParagraph(false))
+                return;
+        }
+        xEndCursor->gotoEndOfParagraph(false);
+        uno::Reference<text::XTextRangeCompare> xCompare(xTextAppend, uno::UNO_QUERY);
+        if (xCompare.is() && xCompare->compareRegionStarts(xCursor->getStart(), xEndCursor->getEnd()) < 0)
+            return; // nothing before xEnd
+        xCursor->gotoRange(xEndCursor->getEnd(), true);
+        xCursor->setPropertyValue(getPropertyName(PROP_PARA_LINE_NUMBER_COUNT), uno::Any(false));
+    }
+    catch (const uno::Exception&)
+    {
+        DBG_UNHANDLED_EXCEPTION("writerfilter.dmapper", "lcl_SuppressLineNumbers");
+    }
 }
 
 void SectionPropertyMap::HandleMarginsHeaderFooter(DomainMapper_Impl& rDM_Impl)
@@ -1523,6 +1652,12 @@ void SectionPropertyMap::CreateEvenOddPageStyleCopy(DomainMapper_Impl& rDM_Impl,
                 && (!bEvenAndOdd || !rDM_Impl.SeenHeaderFooter(PagePartType::Header, PageType::LEFT)),
             !rDM_Impl.SeenHeaderFooter(PagePartType::Footer, PageType::RIGHT)
                 && (!bEvenAndOdd || !rDM_Impl.SeenHeaderFooter(PagePartType::Footer, PageType::LEFT)));
+        // The first page header/footer now lives in the copy only (the source
+        // was made first-shared above), so later sections must link to it.
+        if (rDM_Impl.m_xFirstHeaderChainStyle == pageProperties)
+            rDM_Impl.m_xFirstHeaderChainStyle = evenOddStyle;
+        if (rDM_Impl.m_xFirstFooterChainStyle == pageProperties)
+            rDM_Impl.m_xFirstFooterChainStyle = evenOddStyle;
     }
 
     // Ignore write-only properties.
@@ -1639,6 +1774,12 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
 {
     SectionPropertyMap* pPrevSection = rDM_Impl.GetLastSectionContext();
 
+    // Remember the note numbering of this section, see DomainMapper::~DomainMapper()
+    const bool bRecordNoteNumbering = rDM_Impl.IsNewDoc() && !rDM_Impl.IsAltChunk();
+    if (bRecordNoteNumbering)
+        rDM_Impl.m_aSectionNoteNumberings.push_back(
+            { OUString(), m_aFootnoteNumbering, m_aEndnoteNumbering });
+
     // The default section type is nextPage.
     if ( m_nBreakType == -1 )
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_nextPage;
@@ -1683,6 +1824,16 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
     catch (const uno::Exception&)
     {
         DBG_UNHANDLED_EXCEPTION("writerfilter", "HandleIncreasedAnchoredObjectSpacing() failed");
+    }
+
+    // Writer line numbering is document wide, Word's is per section: stop counting
+    // the paragraphs of sections without w:lnNumType (exported as suppressLineNumbers).
+    if (!rDM_Impl.IsInFootOrEndnote() && !rDM_Impl.IsInComments())
+    {
+        if (m_nLnnMod && !rDM_Impl.IsLineNumberingSet() && m_xStartingRange.is())
+            lcl_SuppressLineNumbers(rDM_Impl, nullptr, m_xStartingRange);
+        else if (!m_nLnnMod && rDM_Impl.IsLineNumberingSet())
+            lcl_SuppressLineNumbers(rDM_Impl, m_xStartingRange, nullptr);
     }
 
     if ( m_nLnnMod )
@@ -2056,6 +2207,14 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
             {
                 CreateEvenOddPageStyleCopy(rDM_Impl, PageBreakType::Odd);
             }
+
+            // Writer has no chapter number in page numbers: remember w:chapStyle/w:chapSep
+            // for the page style that this section ends up using, so DOCX export keeps them.
+            if (!m_sPageNumberChapStyle.isEmpty() || !m_sPageNumberChapSep.isEmpty())
+                rDM_Impl.m_aPageNumberChapters[m_sPageStyleName]
+                    = m_sPageNumberChapStyle + "|" + m_sPageNumberChapSep;
+            if (bRecordNoteNumbering && !rDM_Impl.m_aSectionNoteNumberings.empty())
+                rDM_Impl.m_aSectionNoteNumberings.back().sPageStyle = m_sPageStyleName;
 
             if (rDM_Impl.m_xAltChunkStartingRange.is())
             {

@@ -586,16 +586,23 @@ void SvxBorderLine::SetBorderLineStyle( SvxBorderLineStyle nNew )
     }
 }
 
+// Automatic color (kept from OOXML w:color="auto") is painted black.
+static Color lcl_PaintColor(const Color& rColor)
+{
+    return rColor == COL_AUTO ? COL_BLACK : rColor;
+}
+
 Color SvxBorderLine::GetColorOut( bool bLeftOrTop ) const
 {
-    Color aResult = m_aColor;
+    const Color aMain = lcl_PaintColor(m_aColor);
+    Color aResult = aMain;
 
     if ( m_aWidthImpl.IsDouble() && m_pColorOutFn != nullptr )
     {
         if ( !bLeftOrTop && m_bUseLeftTop )
-            aResult = (*m_pColorInFn)(m_aColor);
+            aResult = (*m_pColorInFn)(aMain);
         else
-            aResult = (*m_pColorOutFn)(m_aColor);
+            aResult = (*m_pColorOutFn)(aMain);
     }
 
     return aResult;
@@ -603,14 +610,15 @@ Color SvxBorderLine::GetColorOut( bool bLeftOrTop ) const
 
 Color SvxBorderLine::GetColorIn( bool bLeftOrTop ) const
 {
-    Color aResult = m_aColor;
+    const Color aMain = lcl_PaintColor(m_aColor);
+    Color aResult = aMain;
 
     if ( m_aWidthImpl.IsDouble() && m_pColorInFn != nullptr )
     {
         if ( !bLeftOrTop && m_bUseLeftTop )
-            aResult = (*m_pColorOutFn)(m_aColor);
+            aResult = (*m_pColorOutFn)(aMain);
         else
-            aResult = (*m_pColorInFn)(m_aColor);
+            aResult = (*m_pColorInFn)(aMain);
     }
 
     return aResult;
@@ -618,11 +626,12 @@ Color SvxBorderLine::GetColorIn( bool bLeftOrTop ) const
 
 Color SvxBorderLine::GetColorGap( ) const
 {
-    Color aResult = m_aColor;
+    const Color aMain = lcl_PaintColor(m_aColor);
+    Color aResult = aMain;
 
     if ( m_aWidthImpl.IsDouble() && m_pColorGapFn != nullptr )
     {
-        aResult = (*m_pColorGapFn)(m_aColor);
+        aResult = (*m_pColorGapFn)(aMain);
     }
 
     return aResult;

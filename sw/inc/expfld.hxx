@@ -152,6 +152,8 @@ class SW_DLLPUBLIC SwSetExpFieldType final : public SwValueFieldType
     SwGetSetExpType m_nType;
     sal_uInt8       m_nLevel;
     bool        m_bDeleted;
+    /// Word SEQ \s: restart at the chapter level without the chapter number in front.
+    bool        m_bWordRestartOnly = false;
 
     virtual void SwClientNotify(const SwModify&, const SfxHint&) override;
 
@@ -183,6 +185,8 @@ public:
     void SetDelimiter( const OUString& s )    { m_sDelim = s; }
     sal_uInt8 GetOutlineLvl() const             { return m_nLevel; }
     void SetOutlineLvl( sal_uInt8 n )           { m_nLevel = n; }
+    bool IsWordRestartOnly() const              { return m_bWordRestartOnly; }
+    void SetWordRestartOnly( bool b )           { m_bWordRestartOnly = b; }
     void SetChapter(SwSetExpField& rField, const SwNode& rNd, SwRootFrame const* pLayout);
 
     virtual void QueryValue( css::uno::Any& rVal, sal_uInt16 nWhich ) const override;

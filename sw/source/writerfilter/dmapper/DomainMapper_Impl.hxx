@@ -754,6 +754,12 @@ public:
         return m_pLastSectionContext.get( );
     }
 
+    /// Page styles holding the first page header/footer that later sections
+    /// link to. Word keeps that chain even through sections without a title
+    /// page, where Writer only stashes the first page header/footer.
+    rtl::Reference<SwXPageStyle> m_xFirstHeaderChainStyle;
+    rtl::Reference<SwXPageStyle> m_xFirstFooterChainStyle;
+
     rtl::Reference<SwXStyleFamily> const & GetPageStyles();
     OUString GetUnusedPageStyleName();
     rtl::Reference<SwXStyleFamily> const & GetCharacterStyles();
@@ -977,6 +983,7 @@ public:
 
     void StartCustomFootnote(const PropertyMapPtr pContext);
     void EndCustomFootnote();
+    void RemoveCustomNoteMarkText(const rtl::Reference<SwXFootnote>& xNote, const OUString& rLabel);
     bool IsInCustomFootnote() const { return m_StreamStateStack.top().bHasFootnoteStyle; }
     bool CheckFootnoteStyle() const { return m_StreamStateStack.top().bCheckFootnoteStyle; }
     void SetHasFootnoteStyle(bool const bVal) { m_StreamStateStack.top().bHasFootnoteStyle = bVal; }
@@ -1104,6 +1111,9 @@ public:
     bool IsLineNumberingSet() const {return m_bLineNumberingSet;}
 
     DeletableTabStop                m_aCurrentTabStop;
+    bool                            m_bCurrentTabBar = false;
+    sal_Int32                       m_nCurrentTabPosTwip = 0;
+    std::vector<sal_Int32>          m_aCurrentBarTabs;
 
     bool IsOOXMLImport() const { return m_eDocumentType == SourceDocumentType::OOXML; }
 
@@ -1197,6 +1207,20 @@ public:
     /// UI names of built-in paragraph styles that STYLEREF fields and TOC \t referred to by Word's
     /// localized name (Korean Word: "제목 1" for "heading 1"); the export writes them back unchanged.
     o3tl::sorted_vector<OUString> m_aStyleRefUINames;
+    /// heading levels ("1".."9") referred to as STYLEREF 1 etc.
+    o3tl::sorted_vector<OUString> m_aStyleRefLevels;
+
+    /// Page style name -> "chapStyle|chapSep" of w:pgNumType, written back by the DOCX export.
+    std::map<OUString, OUString> m_aPageNumberChapters;
+
+    /// Footnote/endnote numbering of each sectPr and the page style it ended up using.
+    struct SectionNoteNumbering
+    {
+        OUString sPageStyle;
+        SectionPropertyMap::NoteNumbering aFootnote;
+        SectionPropertyMap::NoteNumbering aEndnote;
+    };
+    std::vector<SectionNoteNumbering> m_aSectionNoteNumberings;
 
     /// If we're importing into a new document, or just pasting to an existing one.
     bool IsNewDoc() const { return m_bIsNewDoc;}

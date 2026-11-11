@@ -43,7 +43,8 @@ namespace writerfilter::dmapper::ConversionHelper{
                         css::table::BorderLine2& rToFill,
                         bool bIsOOXML);
     //convert the number format string form MS format to SO format
-    OUString ConvertMSFormatStringToSO(const OUString& rFormat, css::lang::Locale& rLocale, bool bHijri);
+    OUString ConvertMSFormatStringToSO(const OUString& rFormat, css::lang::Locale& rLocale, bool bHijri,
+                                       const css::lang::Locale* pAsianLocale = nullptr);
     // export just for test
     SAL_DLLPUBLIC_EXPORT sal_Int32 convertTwipToMm100_Limited(sal_Int32 _t);
     sal_Int32 convertTwipToMm100_LimitedRoundUp(sal_Int32 _t);

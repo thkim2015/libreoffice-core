@@ -1103,6 +1103,25 @@ OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
         return "\"" + rName + "\"";
     // Didn't find the style, just keep the original name
 
+    // The imported document referred to this heading by its level (STYLEREF 1): write the level
+    // again, it works in any Word UI language, see DomainMapper_Impl's FIELD_STYLEREF import.
+    const sal_uInt16 nPoolId = static_cast<sal_uInt16>(pTextFormat->GetPoolFormatId());
+    const sal_uInt16 nHeading1 = static_cast<sal_uInt16>(SwPoolFormatId::COLL_HEADLINE1);
+    if (nPoolId >= nHeading1 && nPoolId < nHeading1 + 9)
+    {
+        if (const SwDocShell* pDocShell = m_rDoc.GetDocShell())
+        {
+            rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            uno::Sequence<OUString> aLevels;
+            const OUString sLevel = OUString::number(nPoolId - nHeading1 + 1);
+            if (xProps.is() && (xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
+                && (comphelper::SequenceAsHashMap(aGrabBag).getValue(u"StyleRefLevels"_ustr) >>= aLevels)
+                && comphelper::findValue(aLevels, sLevel) != -1)
+                return sLevel;
+        }
+    }
+
     return "\"" + lcl_FieldStyleName(m_rDoc, *m_pStyles, *pTextFormat) + "\"";
 }
 
@@ -3046,6 +3065,11 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
         {
             const SwSetExpField *pSet = static_cast<const SwSetExpField*>(pField);
             SwGetSetExpType nSubType = pSet->GetSubType();
+            // a hidden sequence number is SEQ \h
+            const bool bHiddenSeq = bool(nSubType & SwGetSetExpType::Sequence)
+                                    && bool(nSubType & SwGetSetExpType::Invisible);
+            if (bHiddenSeq)
+                nSubType &= ~SwGetSetExpType::Invisible;
             if (SwGetSetExpType::Sequence == nSubType)
             {
                 OUString sStr;
@@ -3053,6 +3077,20 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                     sStr = FieldString(ww::eSEQ) + pField->GetTyp()->GetName().toString() + " ";
                 else
                     sStr = FieldString(ww::eSEQ) + "\"" + pField->GetTyp()->GetName().toString() +"\" ";
+                // the import writes SEQ \c as the formula "<name>" and \r N as "N", not "<name>+1"
+                const OUString sFormula = pSet->GetFormula().trim();
+                if (!sFormula.isEmpty()
+                    && std::all_of(sFormula.getStr(), sFormula.getStr() + sFormula.getLength(),
+                                   [](sal_Unicode c) { return '0' <= c && c <= '9'; }))
+                    sStr += "\\r " + sFormula + " ";
+                // the name alone (no "+1"), maybe in another spelling of the sequence name
+                else if (!sFormula.isEmpty() && sFormula.indexOf('+') < 0)
+                    sStr += "\\c ";
+                const SwSetExpFieldType* pSeqType = static_cast<const SwSetExpFieldType*>(pField->GetTyp());
+                if (pSeqType->IsWordRestartOnly() && pSeqType->GetOutlineLvl() < MAXLEVEL)
+                    sStr += "\\s " + OUString::number(pSeqType->GetOutlineLvl() + 1) + " ";
+                if (bHiddenSeq)
+                    sStr += "\\h ";
                 GetNumberPara( sStr, *pField );
                 GetExport().OutputField(pField, ww::eSEQ, sStr);
             }
@@ -3416,7 +3454,10 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                 default: break; // ReferencesSubtype::Outline not handled ?
             }
 
-            OUString sExtraFlags = u"\\h "_ustr; // by default, include a hyperlink
+            // by default, include a hyperlink, unless the imported Word field had none
+            OUString sExtraFlags = pField->IsWordNoHyperlink() ? OUString() : u"\\h "_ustr;
+            if (eField == ww::ePAGEREF && pField->IsWordPageRelative())
+                sExtraFlags = "\\p " + sExtraFlags;
 
             switch (eField)
             {
@@ -3599,6 +3640,18 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
         {
             ww::eField eField = ww::eEquals;
             OUString aExpand = OUString::Concat(" =") + o3tl::trim(pField->GetFieldName());
+            // A simple numeric number format (e.g. imported from \# "0.00") as the \# picture
+            const sal_uInt32 nFormat = pField->GetUntypedFormat();
+            if (nFormat % SV_COUNTRY_LANGUAGE_OFFSET != 0)
+            {
+                const SvNumberformat* pEntry = GetExport().m_rDoc.GetNumberFormatter()->GetEntry(nFormat);
+                const OUString sPicture = pEntry ? pEntry->GetFormatstring() : OUString();
+                if (!sPicture.isEmpty()
+                    && (pEntry->GetType() & (SvNumFormatType::NUMBER | SvNumFormatType::PERCENT))
+                    && std::all_of(sPicture.getStr(), sPicture.getStr() + sPicture.getLength(),
+                                   [](sal_Unicode c) { return std::u16string_view(u"0#,.;%$+-() ").find(c) != std::u16string_view::npos; }))
+                    aExpand += " \\# \"" + sPicture + "\"";
+            }
             GetExport().OutputField(pField, eField, aExpand);
         }
         break;
@@ -5222,6 +5275,11 @@ void AttributeOutputBase::FormatColumns( const SwFormatCol& rCol )
         const SvxLRSpaceItem &rLR = pFormat->GetLRSpace();
         nPageSize = pFormat->GetFrameSize().GetWidth();
         nPageSize -= rLR.ResolveLeft() + rLR.ResolveRight({});
+        // Page borders and their padding take text area width too (an imported
+        // page border keeps part of the Word margin there).
+        const SvxBoxItem& rBox = pFormat->GetBox();
+        nPageSize -= rBox.CalcLineSpace(SvxBoxItemLine::LEFT, /*bEvenIfNoLine*/ true)
+                     + rBox.CalcLineSpace(SvxBoxItemLine::RIGHT, /*bEvenIfNoLine*/ true);
         //i120133: The Section width should consider page indent value.
         nPageSize -= rCol.GetAdjustValue();
 

@@ -984,6 +984,16 @@ void GraphicImport::lcl_attribute(Id nName, const Value& rValue)
                             putPropertyToFrameGrabBag(u"AnchorId"_ustr, uno::Any(m_sAnchorId));
                         }
 
+                        // Header/footer objects are always imported as not opaque (Word paints
+                        // them behind the body text); remember an anchor that was in front of
+                        // the text, so DOCX export can write behindDoc="0" back.
+                        if (m_rDomainMapper.IsInHeaderFooter() && !m_bBehindDoc
+                            && m_rGraphicImportType == IMPORT_AS_DETECTED_ANCHOR)
+                        {
+                            putPropertyToFrameGrabBag(u"AnchorInFrontOfText"_ustr, uno::Any(true));
+                            m_aInteropGrabBag[u"AnchorInFrontOfText"_ustr] <<= true;
+                        }
+
                         // Calculate mso unrotated rectangle and its center, needed below
                         awt::Size aImportSize(m_xShape->getSize()); // here only fallback
                         if (isXSizeValid())

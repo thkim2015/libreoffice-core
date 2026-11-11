@@ -222,6 +222,11 @@ public:
     /** Writes the record if it is valid. */
     virtual void        Save( XclExpStream& rStrm ) override;
 
+    /** ZetaOffice: xlsx - writes the Excel data table formula <f t="dataTable" .../> when
+        rXclPos is the first cell of the valid range. Returns true, if the cell belongs to a
+        valid data table (then the cell gets no formula of its own, as in Excel). */
+    bool                ZetaSaveXmlFormula( XclExpXmlStream& rStrm, const XclAddress& rXclPos ) const;
+
 private:
     /** Returns true, if the passed cell position can be appended to this record. */
     bool                IsAppendable( sal_uInt16 nXclCol, sal_uInt16 nXclRow ) const;

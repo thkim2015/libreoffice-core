@@ -224,7 +224,8 @@ ScDPSaveDimension::ScDPSaveDimension(const ScDPSaveDimension& r) :
     bRepeatItemLabels( r.bRepeatItemLabels ),
     bSubTotalDefault( r.bSubTotalDefault ),
     maSubTotalFuncs( r.maSubTotalFuncs ),
-    maZetaFilter( r.maZetaFilter )
+    maZetaFilter( r.maZetaFilter ),
+    mnZetaNumFmt( r.mnZetaNumFmt )
 {
     for (const ScDPSaveMember* pMem : r.maMemberList)
     {
@@ -264,7 +265,8 @@ bool ScDPSaveDimension::operator== ( const ScDPSaveDimension& r ) const
          bRepeatItemLabels!= r.bRepeatItemLabels||
          bSubTotalDefault != r.bSubTotalDefault ||
          maSubTotalFuncs  != r.maSubTotalFuncs  ||
-         maZetaFilter     != r.maZetaFilter      )
+         maZetaFilter     != r.maZetaFilter      ||
+         mnZetaNumFmt     != r.mnZetaNumFmt      )
         return false;
 
     if (maMemberHash.size() != r.maMemberHash.size() )
@@ -528,6 +530,8 @@ void ScDPSaveDimension::WriteToSource( const uno::Reference<uno::XInterface>& xD
 
         if (mpLayoutName)
             ScUnoHelpFunctions::SetOptionalPropertyValue(xDimProp, SC_UNO_DP_LAYOUTNAME, *mpLayoutName);
+        // ZetaOffice: data field number format
+        ScUnoHelpFunctions::SetOptionalPropertyValue(xDimProp, u"ZetaNumberFormat"_ustr, uno::Any(mnZetaNumFmt));
 
         const std::optional<OUString> & pSubTotalName = GetSubtotalName();
         if (pSubTotalName)

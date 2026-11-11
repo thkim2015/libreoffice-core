@@ -213,6 +213,17 @@ namespace writerfilter::dmapper {
                 DomainMapperTableManager* pManager = dynamic_cast<DomainMapperTableManager*>(m_pTableManager);
                 if (pManager)
                     pManager->SetLayoutType(static_cast<sal_uInt32>(nIntValue));
+                // Writer tables have no autofit layout: keep a direct w:tblLayout for DOCX
+                // export (not the one of a table style, that is not a table property)
+                if (pManager)
+                {
+                    TablePropertyMapPtr pPropMap(new TablePropertyMap);
+                    pPropMap->Insert(META_PROP_TABLE_LAYOUT,
+                                     uno::Any(nIntValue == NS_ooxml::LN_Value_doc_ST_TblLayout_fixed
+                                                  ? u"fixed"_ustr
+                                                  : u"autofit"_ustr));
+                    insertTableProps(pPropMap);
+                }
             }
             break;
             case NS_ooxml::LN_CT_TblPrEx_tblBorders:

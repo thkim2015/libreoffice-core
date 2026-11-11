@@ -152,6 +152,7 @@ SwFormatFootnote* SwFormatFootnote::Clone( SfxItemPool* ) const
     pNew->m_nNumber = m_nNumber;
     pNew->m_nNumberRLHidden = m_nNumberRLHidden;
     pNew->m_bEndNote = m_bEndNote;
+    pNew->m_nWordNumType = m_nWordNumType;
     return pNew;
 }
 
@@ -248,7 +249,14 @@ OUString SwFormatFootnote::GetViewNumStr(const SwDoc& rDoc,
                 pInfo = &rDoc.GetEndNoteInfo();
             else
                 pInfo = &rDoc.GetFootnoteInfo();
-            sRet = pInfo->m_aFormat.GetNumStr( nNumber );
+            if (m_nWordNumType >= 0)
+            {
+                SvxNumberType aWordType;
+                aWordType.SetNumberingType(static_cast<SvxNumType>(m_nWordNumType));
+                sRet = aWordType.GetNumStr(nNumber);
+            }
+            else
+                sRet = pInfo->m_aFormat.GetNumStr( nNumber );
             if( bInclStrings )
             {
                 sRet = pInfo->GetPrefix() + sRet + pInfo->GetSuffix();

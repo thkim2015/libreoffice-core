@@ -242,6 +242,19 @@ bool SwNodeNum::IsRestart() const
     return bIsRestart;
 }
 
+bool SwNodeNum::IsContinueAcrossParent() const
+{
+    const SwNumRule* pRule = GetNumRule();
+    if (!pRule || !GetParent())
+        return false;
+    const int nLevel = GetLevelInListTree();
+    if (nLevel <= 0 || nLevel >= MAXLEVEL)
+        return false;
+    // Word w:lvlRestart: restart after the given 1-based level, 0 means never.
+    const sal_Int16 nRestart = pRule->GetWordLevelRestart(o3tl::narrowing<sal_uInt16>(nLevel));
+    return nRestart >= 0 && nRestart < nLevel;
+}
+
 bool SwNodeNum::IsCountPhantoms() const
 {
     bool bResult = true;
