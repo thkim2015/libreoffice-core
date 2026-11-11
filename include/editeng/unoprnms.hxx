@@ -35,6 +35,7 @@ inline constexpr OUString UNO_NAME_FILLCOLOR = u"FillColor"_ustr;
 inline constexpr OUString UNO_NAME_FILLCOLOR_THEME = u"FillColorTheme"_ustr;
 inline constexpr OUString UNO_NAME_FILLCOLOR_LUM_MOD = u"FillColorLumMod"_ustr;
 inline constexpr OUString UNO_NAME_FILLCOLOR_LUM_OFF = u"FillColorLumOff"_ustr;
+inline constexpr OUString UNO_NAME_FILLCOLOR_TINT_OR_SHADE = u"FillColorTintOrShade"_ustr;
 inline constexpr OUString UNO_NAME_FILL_COMPLEX_COLOR = u"FillComplexColor"_ustr;
 inline constexpr OUString UNO_NAME_FILLGRADIENT = u"FillGradient"_ustr;
 inline constexpr OUString UNO_NAME_FILLGRADIENTNAME = u"FillGradientName"_ustr;

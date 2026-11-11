@@ -645,6 +645,7 @@
     { UNO_NAME_FILLCOLOR_THEME,                XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_THEME_INDEX}, \
     { UNO_NAME_FILLCOLOR_LUM_MOD,              XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_LUM_MOD}, \
     { UNO_NAME_FILLCOLOR_LUM_OFF,              XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_LUM_OFF}, \
+    { UNO_NAME_FILLCOLOR_TINT_OR_SHADE,        XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_TINT_OR_SHADE}, \
 
 #endif
 
