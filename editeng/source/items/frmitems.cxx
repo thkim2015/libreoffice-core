@@ -4648,6 +4648,25 @@ bool SvxBrushItem::QueryValue( uno::Any& rVal, sal_uInt8 nMemberId ) const
         }
         break;
 
+        // Theme color reference of the background (like SvxColorItem MID_COLOR_THEME_INDEX /
+        // MID_COLOR_TINT_OR_SHADE), so that UNO clients can set Word-style theme shading.
+        case MID_BACKGROUND_COLOR_THEME_INDEX:
+            rVal <<= sal_Int16(maComplexColor.getThemeColorType());
+        break;
+        case MID_BACKGROUND_COLOR_TINT_OR_SHADE:
+        {
+            sal_Int16 nValue = 0;
+            for (auto const& rTransform : maComplexColor.getTransformations())
+            {
+                if (rTransform.meType == model::TransformationType::Tint)
+                    nValue = rTransform.mnValue;
+                else if (rTransform.meType == model::TransformationType::Shade)
+                    nValue = -rTransform.mnValue;
+            }
+            rVal <<= nValue;
+        }
+        break;
+
         case MID_GRAPHIC_POSITION:
             rVal <<= static_cast<style::GraphicLocation>(static_cast<sal_Int16>(meGraphicPos));
         break;
@@ -4735,6 +4754,33 @@ bool SvxBrushItem::PutValue( const uno::Any& rVal, sal_uInt8 nMemberId )
                 ASSERT_CHANGE_REFCOUNTED_ITEM;
                 maComplexColor = model::color::getFromXComplexColor(xComplexColor);
             }
+        }
+        break;
+
+        case MID_BACKGROUND_COLOR_THEME_INDEX:
+        {
+            sal_Int16 nIndex = -1;
+            if (!(rVal >>= nIndex))
+                return false;
+            ASSERT_CHANGE_REFCOUNTED_ITEM;
+            if (nIndex < 0)
+                maComplexColor = model::ComplexColor();
+            else
+                maComplexColor.setThemeColor(model::convertToThemeColorType(nIndex));
+        }
+        break;
+        case MID_BACKGROUND_COLOR_TINT_OR_SHADE:
+        {
+            sal_Int16 nTintShade = 0;
+            if (!(rVal >>= nTintShade))
+                return false;
+            ASSERT_CHANGE_REFCOUNTED_ITEM;
+            maComplexColor.removeTransformations(model::TransformationType::Tint);
+            maComplexColor.removeTransformations(model::TransformationType::Shade);
+            if (nTintShade > 0)
+                maComplexColor.addTransformation({model::TransformationType::Tint, nTintShade});
+            else if (nTintShade < 0)
+                maComplexColor.addTransformation({model::TransformationType::Shade, sal_Int16(-nTintShade)});
         }
         break;
 

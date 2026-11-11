@@ -8815,6 +8815,16 @@ void DocxAttributeOutput::CharBackground( const SvxBrushItem& rBrush )
             FSNS( XML_w, XML_color ), MSWORD_CH_SHADING_COLOR,
             FSNS( XML_w, XML_fill ), MSWORD_CH_SHADING_FILL );
     }
+    else if (rBrush.getComplexColor().isValidThemeType())
+    {
+        // Theme shading (Word: w:themeFill + w:themeFillTint/Shade) so the fill follows theme changes
+        rtl::Reference<sax_fastparser::FastAttributeList> pAttrList = sax_fastparser::FastSerializerHelper::createAttrList();
+        pAttrList->add(FSNS(XML_w, XML_val), "clear");
+        pAttrList->add(FSNS(XML_w, XML_color), "auto");
+        pAttrList->add(FSNS(XML_w, XML_fill), msfilter::util::ConvertColor(rBrush.GetColor()));
+        lclAddThemeFillColorAttributes(pAttrList, rBrush.getComplexColor());
+        m_pSerializer->singleElementNS(XML_w, XML_shd, pAttrList);
+    }
     else
     {
         m_pSerializer->singleElementNS( XML_w, XML_shd,
