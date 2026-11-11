@@ -103,6 +103,21 @@
 #include <unostyle.hxx>
 #include <unosett.hxx>
 #include <SwXTextDefaults.hxx>
+#include <ndtxt.hxx>
+#include <ndhints.hxx>
+#include <txatbase.hxx>
+#include <charfmt.hxx>
+#include <swtable.hxx>
+#include <frmfmt.hxx>
+#include <frmatr.hxx>
+#include <fmtanchr.hxx>
+#include <pagedesc.hxx>
+#include <pam.hxx>
+#include <IDocumentContentOperations.hxx>
+#include <IDocumentUndoRedo.hxx>
+#include <editeng/charrotateitem.hxx>
+#include <editeng/frmdiritem.hxx>
+#include <optional>
 
 using namespace ::com::sun::star;
 using namespace oox;
@@ -307,6 +322,120 @@ void lcl_ApplySectionNoteNumberings(DomainMapper_Impl& rImpl, comphelper::Sequen
 }
 }
 
+namespace
+{
+bool lcl_IsVerticalDir(SvxFrameDirection eDir)
+{
+    return eDir == SvxFrameDirection::Vertical_RL_TB || eDir == SvxFrameDirection::Vertical_LR_TB
+           || eDir == SvxFrameDirection::Vertical_LR_BT;
+}
+
+/// Writing direction of the text around rNode without a layout: the innermost table cell or
+/// frame with its own direction, else the page style. A paragraph can't be vertical on its own
+/// (SwTextFrame only takes the bidi part of its attribute, see SwFrame::CheckDir()).
+bool lcl_IsInVerticalText(const SwNode& rNode)
+{
+    const SwNode* pNode = &rNode;
+    for (int nGuard = 0; pNode && nGuard < 32; ++nGuard)
+    {
+        if (const SwStartNode* pBoxStart = pNode->FindTableBoxStartNode())
+        {
+            const SwTableNode* pTableNode = pBoxStart->FindTableNode();
+            const SwTableBox* pBox = pTableNode ? pTableNode->GetTable().GetTableBox(pBoxStart->GetIndex()) : nullptr;
+            if (pBox && pBox->GetFrameFormat())
+            {
+                SvxFrameDirection eDir = pBox->GetFrameFormat()->GetFrameDir().GetValue();
+                if (eDir != SvxFrameDirection::Environment)
+                    return lcl_IsVerticalDir(eDir);
+            }
+            if (!pTableNode)
+                break;
+            // continue with the surroundings of the table
+            pNode = pTableNode->StartOfSectionNode();
+            continue;
+        }
+        if (pNode->FindFlyStartNode())
+        {
+            const SwFrameFormat* pFly = pNode->GetFlyFormat();
+            if (!pFly)
+                break;
+            SvxFrameDirection eDir = pFly->GetFrameDir().GetValue();
+            if (eDir != SvxFrameDirection::Environment)
+                return lcl_IsVerticalDir(eDir);
+            const SwFormatAnchor& rAnchor = pFly->GetAnchor();
+            if (rAnchor.GetAnchorId() == RndStdIds::FLY_AT_PAGE || !rAnchor.GetAnchorNode())
+                break;
+            pNode = rAnchor.GetAnchorNode();
+            continue;
+        }
+        break;
+    }
+    if (pNode)
+        if (const SwPageDesc* pDesc = pNode->FindPageDesc())
+            return lcl_IsVerticalDir(pDesc->GetMaster().GetFrameDir().GetValue());
+    return false;
+}
+
+/// Word turns w:eastAsianLayout w:vert ("horizontal in vertical") text clockwise in horizontal
+/// text and keeps it upright in vertical text. Writer's 900 turns it counter-clockwise, so runs
+/// that ended up in horizontal text get 2700 (the DOCX export writes w:vert for both).
+void lcl_FixHorizontalInVertical(SwDoc& rDoc)
+{
+    struct Run
+    {
+        SwTextNode* pNode;
+        sal_Int32 nStart;
+        sal_Int32 nEnd;
+        bool bFit;
+        bool bWhole;
+    };
+    std::vector<Run> aRuns;
+    SwNodes& rNodes = rDoc.GetNodes();
+    for (SwNodeOffset n(0); n < rNodes.Count(); ++n)
+    {
+        SwTextNode* pTextNode = rNodes[n]->GetTextNode();
+        if (!pTextNode)
+            continue;
+        std::optional<bool> oVertical;
+        auto isVertical = [&]() {
+            if (!oVertical)
+                oVertical = lcl_IsInVerticalText(*pTextNode);
+            return *oVertical;
+        };
+        if (const SvxCharRotateItem* pRotate = pTextNode->GetSwAttrSet().GetItemIfSet(RES_CHRATR_ROTATE, false))
+            if (pRotate->GetValue() == 900_deg10 && !isVertical())
+                aRuns.push_back({ pTextNode, 0, pTextNode->Len(), pRotate->IsFitToLine(), true });
+        if (!pTextNode->HasHints())
+            continue;
+        const SwpHints& rHints = pTextNode->GetSwpHints();
+        for (size_t i = 0; i < rHints.Count(); ++i)
+        {
+            const SwTextAttr* pHint = rHints.Get(i);
+            if (pHint->Which() != RES_TXTATR_AUTOFMT || !pHint->End())
+                continue;
+            const SvxCharRotateItem* pRotate = CharFormat::GetItem(*pHint, RES_CHRATR_ROTATE);
+            if (!pRotate || pRotate->GetValue() != 900_deg10 || isVertical())
+                continue;
+            aRuns.push_back({ pTextNode, pHint->GetStart(), *pHint->End(), pRotate->IsFitToLine(), false });
+        }
+    }
+    if (aRuns.empty())
+        return;
+    ::sw::UndoGuard const aUndoGuard(rDoc.GetIDocumentUndoRedo());
+    for (const Run& rRun : aRuns)
+    {
+        SvxCharRotateItem aRotate(2700_deg10, rRun.bFit, RES_CHRATR_ROTATE);
+        if (rRun.bWhole)
+            rRun.pNode->SetAttr(aRotate);
+        else
+        {
+            SwPaM aPaM(*rRun.pNode, rRun.nStart, *rRun.pNode, rRun.nEnd);
+            rDoc.getIDocumentContentOperations().InsertPoolItem(aPaM, aRotate);
+        }
+    }
+}
+}
+
 DomainMapper::~DomainMapper()
 {
     try
@@ -339,6 +468,11 @@ DomainMapper::~DomainMapper()
             m_pImpl->GetTextDocument()->addEventListener(uno::Reference< document::XEventListener >(new ModelEventListener(nIndexes, mbHasControls)));
         }
 
+
+        if (m_pImpl->m_bHasEastAsianVert && m_pImpl->GetTextDocument())
+            if (SwDocShell* pDocShell = m_pImpl->GetTextDocument()->GetDocShell())
+                if (SwDoc* pDoc = pDocShell->GetDoc())
+                    lcl_FixHorizontalInVertical(*pDoc);
 
         // Apply the document settings for both DOCX and RTF after everything else
         m_pImpl->GetSettingsTable()->ApplyProperties( m_pImpl->GetTextDocument( ) );
@@ -944,8 +1078,11 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
         case NS_ooxml::LN_CT_EastAsianLayout_vert:
             if (m_pImpl->GetTopContext())
             {
+                // 900 for now: horizontal text gets 2700 at the end, see lcl_FixHorizontalInVertical()
                 sal_Int16 nRotationAngle = (nIntValue ? 900 : 0);
                 m_pImpl->GetTopContext()->Insert(PROP_CHAR_ROTATION, uno::Any ( nRotationAngle ));
+                if (nIntValue)
+                    m_pImpl->m_bHasEastAsianVert = true;
             }
             break;
         case NS_ooxml::LN_CT_EastAsianLayout_vertCompress:
