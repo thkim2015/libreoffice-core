@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <cstdlib>
 #include <sfx2/dispatch.hxx>
 #include <vcl/commandevent.hxx>
 #include <vcl/help.hxx>
@@ -107,6 +108,17 @@ ScHeaderControl::ScHeaderControl( vcl::Window* pParent, SelectionEngine* pSelect
         GetTextHeight() ) );
     aSize.AdjustWidth(8); // place for highlight border
     aSize.AdjustHeight(3 );
+    // zetaOffice: ZETA_CALC_HEADER_PX sets the column header height in pixels so the canvas header matches the
+    // web app's HTML grid header (its rows then start at the same place as the grid's).
+    if (!bVertical)
+    {
+        static const int nZetaHeaderPx = [] {
+            const char* p = getenv("ZETA_CALC_HEADER_PX");
+            return p ? atoi(p) : 0;
+        }();
+        if (nZetaHeaderPx > 0)
+            aSize.setHeight(nZetaHeaderPx);
+    }
     SetSizePixel( aSize );
 
     nWidth = nSmallWidth = aSize.Width();
