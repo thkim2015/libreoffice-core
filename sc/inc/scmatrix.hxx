@@ -354,6 +354,10 @@ public:
 
     /// @return <TRUE/> if boolean.
     bool IsBoolean( SCSIZE nC, SCSIZE nR ) const ;
+    /// weboffice: element nIndex (column major) is TRUE/FALSE
+    bool IsBoolean( SCSIZE nIndex ) const ;
+    /// weboffice: matrix has at least one TRUE/FALSE element
+    bool HasBoolean() const ;
 
     /// @return <TRUE/> if entire matrix is numeric, including booleans, with no strings or empties
     bool IsNumeric() const ;

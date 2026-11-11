@@ -201,7 +201,12 @@ void ScInterpreter::ScIfJumpNotMatrix( const short* pJump, short nJumpCount )
 static void lcl_storeJumpMatResult(
     const ScMatrix* pMat, ScJumpMatrix* pJumpMat, SCSIZE nC, SCSIZE nR )
 {
-    if ( pMat->IsValue( nC, nR ) )
+    if ( pMat->IsBoolean( nC, nR ) )
+    {
+        // weboffice: keep TRUE/FALSE (IF(A1:A3>1;A1:A3>2) summed by SUM is 0 in Excel)
+        pJumpMat->PutResultBoolean( pMat->GetDouble( nC, nR ) != 0.0, nC, nR );
+    }
+    else if ( pMat->IsValue( nC, nR ) )
     {
         double fVal = pMat->GetDouble( nC, nR );
         pJumpMat->PutResultDouble( fVal, nC, nR );
@@ -543,8 +548,15 @@ bool ScInterpreter::JumpMatrix( short nStackLevel )
                     {
                         fVal = CreateDoubleError( nGlobalError );
                         nGlobalError = FormulaError::NONE;
+                        pJumpMatrix->PutResultDouble( fVal, nC, nR );
                     }
-                    pJumpMatrix->PutResultDouble( fVal, nC, nR );
+                    // weboffice: a logical result of the path (TRUE, comparison, ISNUMBER...) stays
+                    // TRUE/FALSE in the result array, so SUM(IF(A1:A3>1;TRUE)) is 0 like Excel.
+                    // A pushed constant (IF(...;1;0)) keeps the format of the condition, so not that.
+                    else if ( pCur && pCur->GetOpCode() != ocPush && nFuncFmtType == SvNumFormatType::LOGICAL )
+                        pJumpMatrix->PutResultBoolean( fVal != 0.0, nC, nR );
+                    else
+                        pJumpMatrix->PutResultDouble( fVal, nC, nR );
                 }
                 break;
                 case svString:
@@ -1773,6 +1785,12 @@ void ScInterpreter::ScNot()
                 else
                 {
                     pMat->NotOp( *pResMat);
+                    // weboffice: NOT of an array gives TRUE/FALSE elements (Excel SUM(NOT(A1:A3>1)) is 0)
+                    for (SCSIZE c = 0; c < nC; ++c)
+                        for (SCSIZE r = 0; r < nR; ++r)
+                            if (pResMat->IsValue(c, r) && !pResMat->IsBoolean(c, r)
+                                    && GetDoubleErrorValue(pResMat->GetDouble(c, r)) == FormulaError::NONE)
+                                pResMat->PutBoolean(pResMat->GetDouble(c, r) != 0.0, c, r);
                     PushMatrix( pResMat );
                 }
             }
@@ -4648,6 +4666,9 @@ void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double
                     {
                         for (SCSIZE nMatRow = 0; nMatRow < nR; nMatRow++)
                         {
+                            // weboffice: like Excel, TRUE/FALSE inside an array are ignored (STDEVA too)
+                            if (pMat->IsBoolean(nMatCol, nMatRow))
+                                continue;
                             if (!pMat->IsStringOrEmpty(nMatCol,nMatRow))
                             {
                                 fVal= pMat->GetDouble(nMatCol,nMatRow);
@@ -14246,7 +14267,11 @@ void ScInterpreter::ScIndex()
                             if (pMat->IsStringOrEmpty( nElement))
                                 PushString( pMat->GetString(nElement).getString());
                             else
+                            {
+                                if (pMat->IsBoolean( nElement))
+                                    nFuncFmtType = SvNumFormatType::LOGICAL; // weboffice: INDEX(A1:A3>1;2) is TRUE
                                 PushDouble( pMat->GetDouble( nElement));
+                            }
                         }
                     }
                     else if (nCol == 0)
@@ -14286,6 +14311,8 @@ void ScInterpreter::ScIndex()
                     }
                     else
                     {
+                        if (pMat->IsBoolean( static_cast<SCSIZE>(nCol-1), static_cast<SCSIZE>(nRow-1)))
+                            nFuncFmtType = SvNumFormatType::LOGICAL; // weboffice: TRUE/FALSE element
                         if (!pMat->IsStringOrEmpty( static_cast<SCSIZE>(nCol-1),
                                     static_cast<SCSIZE>(nRow-1)))
                             PushDouble( pMat->GetDouble(

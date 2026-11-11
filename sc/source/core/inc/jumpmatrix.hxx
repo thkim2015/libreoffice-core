@@ -115,6 +115,8 @@ public:
 
     void PutResultDouble( double fVal, SCSIZE nC, SCSIZE nR );
     void PutResultString( const svl::SharedString& rStr, SCSIZE nC, SCSIZE nR );
+    /// weboffice: TRUE/FALSE element (IF(A1:A3>1;TRUE), ISNUMBER(A1:A3) in an array)
+    void PutResultBoolean( bool bVal, SCSIZE nC, SCSIZE nR );
     void PutResultEmpty( SCSIZE nC, SCSIZE nR );
     void PutResultEmptyPath( SCSIZE nC, SCSIZE nR );
 };
