@@ -2363,7 +2363,18 @@ void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTa
         // cases where the format should be changed but is not. If that turns
         // out to be a real problem then obtain the current format type after
         // the initial check when needed.
-        bool bForceNumberFormat = (mbAllowNumberFormatChange && !mbNeedsNumberFormat &&
+        // weboffice: the other cells of a matrix (spilled array) take a logical result format
+        // too, and drop it again when the element is no longer TRUE/FALSE - only these two, so
+        // a date or currency of the top left cell is not spread as hard format
+        const bool bMatrixLogical = cMatrixFlag == ScMatrixMode::Reference
+            && (pInterpreter->GetRetFormatType() == SvNumFormatType::LOGICAL || nFormatType == SvNumFormatType::LOGICAL);
+        if (bMatrixLogical && !mbNeedsNumberFormat)
+        {
+            // A reference cell created by spilling may have inherited the cached type of the
+            // top left cell without its hard format - compare with the format the cell has.
+            nFormatType = rContext.GetFormatTable()->GetType( rDocument.GetNumberFormat( rContext, aPos));
+        }
+        bool bForceNumberFormat = ((mbAllowNumberFormatChange || bMatrixLogical) && !mbNeedsNumberFormat &&
                 !SvNumberFormatter::IsCompatible( nFormatType, pInterpreter->GetRetFormatType()));
 
         // We have some requirements additionally to IsCompatible().
