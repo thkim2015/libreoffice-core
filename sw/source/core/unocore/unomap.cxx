@@ -164,6 +164,8 @@ std::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetPropertyMa
                 {
                     { UNO_NAME_BACK_COLOR, RES_BACKGROUND,    cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE , MID_BACK_COLOR       },
                     { UNO_NAME_BACKGROUND_COMPLEX_COLOR, RES_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE, MID_BACKGROUND_COMPLEX_COLOR },
+                    { UNO_NAME_BACK_COLOR_THEME, RES_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_BACKGROUND_COLOR_THEME_INDEX },
+                    { UNO_NAME_BACK_COLOR_TINT_OR_SHADE, RES_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_BACKGROUND_COLOR_TINT_OR_SHADE },
                     { UNO_NAME_BACK_GRAPHIC_URL, RES_BACKGROUND,      cppu::UnoType<OUString>::get(), PROPERTY_NONE ,MID_GRAPHIC_URL    },
                     { UNO_NAME_BACK_GRAPHIC, RES_BACKGROUND,      cppu::UnoType<graphic::XGraphic>::get(), PROPERTY_NONE, MID_GRAPHIC    },
                     { UNO_NAME_BACK_GRAPHIC_FILTER, RES_BACKGROUND,       cppu::UnoType<OUString>::get(), PROPERTY_NONE ,MID_GRAPHIC_FILTER    },

@@ -563,6 +563,10 @@ void DocxAttributeOutput::TableDefaultCellMargins(
     DocxAttributeOutput::ImplCellMargins(m_pSerializer, rBox, XML_tblCellMar, !bEcma);
 }
 
+// defined in docxattributeoutput.cxx
+void lclAddThemeFillColorAttributes(rtl::Reference<sax_fastparser::FastAttributeList>& pAttrList,
+                                    model::ComplexColor const& rComplexColor);
+
 void DocxAttributeOutput::TableBackgrounds(
     const ww8::WW8TableNodeInfoInner::Pointer_t& pTableTextNodeInfoInner)
 {
@@ -600,7 +604,19 @@ void DocxAttributeOutput::TableBackgrounds(
     if (sOriginalColor != sColor)
     {
         // color changed by the user, or no grab bag: write sColor
-        if (sColor != "auto")
+        if (sColor != "auto" && pColorProp && pColorProp->GetColor() == aColor
+            && pColorProp->getComplexColor().isValidThemeType())
+        {
+            // Theme shading (Word: w:themeFill + w:themeFillTint/Shade)
+            rtl::Reference<sax_fastparser::FastAttributeList> pAttrList
+                = sax_fastparser::FastSerializerHelper::createAttrList();
+            pAttrList->add(FSNS(XML_w, XML_val), "clear");
+            pAttrList->add(FSNS(XML_w, XML_color), "auto");
+            pAttrList->add(FSNS(XML_w, XML_fill), sColor);
+            lclAddThemeFillColorAttributes(pAttrList, pColorProp->getComplexColor());
+            m_pSerializer->singleElementNS(XML_w, XML_shd, pAttrList);
+        }
+        else if (sColor != "auto")
         {
             m_pSerializer->singleElementNS(XML_w, XML_shd, FSNS(XML_w, XML_fill), sColor,
                                            FSNS(XML_w, XML_val), "clear");

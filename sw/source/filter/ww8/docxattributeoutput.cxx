@@ -10705,13 +10705,18 @@ void DocxAttributeOutput::FormatBackground( const SvxBrushItem& rBrush )
             m_pBackgroundAttrList = FastSerializerHelper::createAttrList();
             m_pBackgroundAttrList->add(FSNS(XML_w, XML_fill), sColor);
             m_pBackgroundAttrList->add( FSNS( XML_w, XML_val ), "clear" );
+            if (aColor != COL_AUTO)
+                lclAddThemeFillColorAttributes(m_pBackgroundAttrList, rComplexColor);
         }
         else if ( sOriginalFill != sColor )
         {
-            // fill was modified during edition, theme fill attribute must be dropped
+            // fill was modified during edition: the old theme fill attribute must be dropped,
+            // a new theme reference (if any) is written instead
             m_pBackgroundAttrList = FastSerializerHelper::createAttrList();
             m_pBackgroundAttrList->add(FSNS(XML_w, XML_fill), sColor);
             m_pBackgroundAttrList->add( FSNS( XML_w, XML_val ), "clear" );
+            if (aColor != COL_AUTO)
+                lclAddThemeFillColorAttributes(m_pBackgroundAttrList, rComplexColor);
         }
         m_sOriginalBackgroundColor.clear();
     }
