@@ -7314,7 +7314,7 @@ void DocxAttributeOutput::StartStyle( const OUString& rName, StyleType eType,
     // import-time qFormat state must be preserved on export.
     std::optional<bool> oQFormat;
 
-    OUString aRsid, aUiPriority;
+    OUString aRsid, aUiPriority, aAliases;
     rtl::Reference<FastAttributeList> pStyleAttributeList = FastSerializerHelper::createAttrList();
     uno::Any aAny;
     if (eType == STYLE_TYPE_PARA || eType == STYLE_TYPE_CHAR)
@@ -7345,6 +7345,8 @@ void DocxAttributeOutput::StartStyle( const OUString& rName, StyleType eType,
         }
         else if (rProp.Name == "rsid")
             aRsid = rProp.Value.get<OUString>();
+        else if (rProp.Name == "aliases")
+            aAliases = rProp.Value.get<OUString>();
         else if (rProp.Name == "unhideWhenUsed")
             bUnhideWhenUsed = true;
         else if (rProp.Name == "semiHidden")
@@ -7378,6 +7380,8 @@ void DocxAttributeOutput::StartStyle( const OUString& rName, StyleType eType,
         pStyleAttributeList->add(FSNS(XML_w, XML_customStyle), "1");
     m_pSerializer->startElementNS( XML_w, XML_style, pStyleAttributeList);
     m_pSerializer->singleElementNS(XML_w, XML_name, FSNS(XML_w, XML_val), rName);
+    if (!aAliases.isEmpty())
+        m_pSerializer->singleElementNS(XML_w, XML_aliases, FSNS(XML_w, XML_val), aAliases);
 
     if ( nBase != 0x0FFF && eType != STYLE_TYPE_LIST)
     {
@@ -8455,7 +8459,29 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
 
     // indentation
     m_pSerializer->startElementNS(XML_w, XML_pPr);
-    if( nListTabPos >= 0 )
+    // The DOCX import keeps the levels that had no <w:tab w:val="num">; Writer
+    // stores 0 for them, so do not write a tab stop at 0 back.
+    bool bNoNumTab = false;
+    if (nListTabPos == 0)
+    {
+        const SwNumRule* pRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
+                                                     : m_pExportingNumRule;
+        if (pRule)
+        {
+            uno::Any aAny;
+            pRule->GetGrabBagItem(aAny);
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            aAny >>= aGrabBag;
+            for (const auto& rProp : aGrabBag)
+            {
+                uno::Sequence<sal_Bool> aNoNumTabs;
+                if (rProp.Name == "OoxmlNoNumTabs" && (rProp.Value >>= aNoNumTabs)
+                    && nLevel < aNoNumTabs.getLength())
+                    bNoNumTab = aNoNumTabs[nLevel];
+            }
+        }
+    }
+    if( nListTabPos >= 0 && !bNoNumTab )
     {
         m_pSerializer->startElementNS(XML_w, XML_tabs);
         m_pSerializer->singleElementNS( XML_w, XML_tab,

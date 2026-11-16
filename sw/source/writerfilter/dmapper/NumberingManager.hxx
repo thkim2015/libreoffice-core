@@ -82,6 +82,8 @@ public:
     sal_Int32 GetNFC() const { return m_nNFC; }
     sal_Int16 GetLevelRestart() const { return m_nLevelRestart; }
     bool HasBulletChar() const { return m_sBulletChar.has_value(); };
+    /// Whether <w:tab w:val="num"> was given for this level.
+    bool HasTabstop() const { return m_nTabstop.has_value(); }
     OUString GetBulletChar( ) const { return m_sBulletChar.has_value()? *m_sBulletChar : OUString(); };
     const tools::SvRef< StyleSheetEntry >& GetParaStyle( ) const { return m_pParaStyle; };
     sal_Int32 GetStartOverride() const { return m_nStartOverride; };

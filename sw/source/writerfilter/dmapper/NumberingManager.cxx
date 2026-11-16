@@ -701,7 +701,26 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
             if (nRestart >= 0)
                 bHasRestarts = true;
         }
+        // Writer has no "unset" list tab position: the import fills in 0 for a
+        // level without <w:tab w:val="num">. Remember such levels, so that the
+        // DOCX export does not invent a tab stop at 0 (Word: TabPosition undefined).
+        uno::Sequence<sal_Bool> aNoNumTabs(9);
+        bool bHasNoNumTabs = false;
+        for (sal_Int32 nLvl = 0; nLvl < nAbstLevels && nLvl < aNoNumTabs.getLength(); ++nLvl)
+        {
+            ListLevel::Pointer pLvl = GetLevel(nLvl);
+            ListLevel::Pointer pAbsLvl = m_pAbstractDef->GetLevel(nLvl);
+            if (!pAbsLvl)
+                continue;
+            if (!pAbsLvl->HasTabstop() && !(pLvl && pLvl->HasTabstop()))
+            {
+                aNoNumTabs.getArray()[nLvl] = true;
+                bHasNoNumTabs = true;
+            }
+        }
         std::vector<beans::PropertyValue> aGrabBag;
+        if (bHasNoNumTabs)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNoNumTabs"_ustr, aNoNumTabs));
         if (bHasNumFmts)
             aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNumFmts"_ustr, aNumFmts));
         if (bHasRestarts)

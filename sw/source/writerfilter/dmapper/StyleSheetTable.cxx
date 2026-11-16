@@ -539,6 +539,16 @@ void StyleSheetTable::lcl_sprm(Sprm & rSprm)
             m_pCurrentEntry->m_sNextStyleIdentifier = sStringValue;
             break;
         case NS_ooxml::LN_CT_Style_aliases:
+            // Writer has no style aliases: keep them for the DOCX export.
+            if (m_pCurrentEntry->m_nStyleTypeCode != StyleType::Unknown
+                && m_pCurrentEntry->m_nStyleTypeCode != StyleType::Table && !sStringValue.isEmpty())
+            {
+                beans::PropertyValue aValue;
+                aValue.Name = "aliases";
+                aValue.Value <<= sStringValue;
+                m_pCurrentEntry->AppendInteropGrabBag(aValue);
+            }
+        break;
         case NS_ooxml::LN_CT_Style_hidden:
         case NS_ooxml::LN_CT_Style_personal:
         case NS_ooxml::LN_CT_Style_personalCompose:
