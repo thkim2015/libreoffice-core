@@ -1107,6 +1107,8 @@ private:
     // Remember last open and closed cells on each level
     std::vector<sal_Int32> m_LastOpenCell;
     std::vector<sal_Int32> m_LastClosedCell;
+    /// The open cell is a w:gridBefore/w:gridAfter placeholder: its output is dropped.
+    bool m_bGridSkipCellOpen = false;
 
     std::optional<css::drawing::FillStyle> m_oFillStyle;
     /// If FormatBox() already handled fill style / gradient.
@@ -1241,6 +1243,7 @@ public:
     static const sal_Int32 Tag_TableDefinition = 14;
     static const sal_Int32 Tag_OutputFlyFrame = 15;
     static const sal_Int32 Tag_StartSection = 16;
+    static const sal_Int32 Tag_GridSkipCell = 17;
 };
 
 /**
