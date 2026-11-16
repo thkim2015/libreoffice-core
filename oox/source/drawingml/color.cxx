@@ -782,7 +782,9 @@ model::ComplexColor Color::getComplexColor() const
                 case model::TransformationType::HueMod: toHsl(); lclModValue( mnC1, transform.mnValue, MAX_DEGREE ); break;
                 case model::TransformationType::HueOff: toHsl(); lclOffValue( mnC1, transform.mnValue, MAX_DEGREE ); break;
                 case model::TransformationType::Sat: toHsl(); lclSetValue( mnC2, transform.mnValue ); break;
-                case model::TransformationType::SatMod: toHsl(); lclModValue( mnC2, transform.mnValue ); break;
+                // ZETA: PowerPoint keeps saturation above 100% after satMod and clips the RGB channels instead
+                // (4472C4 tint 45% satMod 400% = 99B7FF, not B0C2FF); toRgb() clamps the channels
+                case model::TransformationType::SatMod: toHsl(); lclModValue( mnC2, transform.mnValue, SAL_MAX_INT32 / 2 ); break;
                 case model::TransformationType::SatOff:  toHsl(); lclOffValue( mnC2, transform.mnValue ); break;
 
                 case model::TransformationType::Lum:
@@ -1039,9 +1041,10 @@ void Color::toRgb() const
                     fB = 1.0 - ((1.0 - fB) * fTint);
                 }
             }
-            mnC1 = static_cast< sal_Int32 >( fR * 255.0 + 0.5 );
-            mnC2 = static_cast< sal_Int32 >( fG * 255.0 + 0.5 );
-            mnC3 = static_cast< sal_Int32 >( fB * 255.0 + 0.5 );
+            // ZETA: saturation above 100% (satMod) can push the channels out of range
+            mnC1 = static_cast< sal_Int32 >( std::clamp( fR, 0.0, 1.0 ) * 255.0 + 0.5 );
+            mnC2 = static_cast< sal_Int32 >( std::clamp( fG, 0.0, 1.0 ) * 255.0 + 0.5 );
+            mnC3 = static_cast< sal_Int32 >( std::clamp( fB, 0.0, 1.0 ) * 255.0 + 0.5 );
         }
         break;
         default:
