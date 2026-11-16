@@ -33,12 +33,65 @@
 #include <svx/xflclit.hxx>
 #include <tools/json_writer.hxx>
 
+#include <algorithm>
+#include <cmath>
+
 using namespace css;
 
 namespace svx::theme
 {
 namespace
 {
+// Shape fill/line theme colors carry DrawingML transformations (oox import, Office styles):
+// a:tint/a:shade keep that share of the color in linear RGB (sRGB curve), unlike
+// ComplexColor::applyTransformations, which scales HSL luminance (Word themeShade semantics).
+// Excel 2021: accent FF0000 with shade 15% -> 6C0000, accent 4472C4 -> 172C51.
+Color resolveDrawingMLColor(model::ColorSet const& rColorSet,
+                            model::ComplexColor const& rComplexColor)
+{
+    Color aColor = rColorSet.getColor(rComplexColor.getThemeColorType());
+    auto toLinear = [](double c) {
+        return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+    };
+    auto toSrgb = [](double c) {
+        c = std::clamp(c, 0.0, 1.0);
+        return c <= 0.0031308 ? c * 12.92 : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055;
+    };
+    sal_Int16 nLumMod = 10'000;
+    sal_Int16 nLumOff = 0;
+    for (auto const& rTransform : rComplexColor.getTransformations())
+    {
+        switch (rTransform.meType)
+        {
+            case model::TransformationType::Tint:
+            case model::TransformationType::Shade:
+            {
+                const bool bTint = rTransform.meType == model::TransformationType::Tint;
+                const double f = std::clamp(rTransform.mnValue / 10000.0, 0.0, 1.0);
+                auto apply = [&](sal_uInt8 n) {
+                    double c = toLinear(n / 255.0);
+                    c = bTint ? c * f + (1.0 - f) : c * f;
+                    return sal_uInt8(std::round(toSrgb(c) * 255.0));
+                };
+                aColor = Color(apply(aColor.GetRed()), apply(aColor.GetGreen()),
+                               apply(aColor.GetBlue()));
+                break;
+            }
+            case model::TransformationType::LumMod:
+                nLumMod = rTransform.mnValue;
+                break;
+            case model::TransformationType::LumOff:
+                nLumOff = rTransform.mnValue;
+                break;
+            default:
+                break;
+        }
+    }
+    if (nLumMod != 10'000 || nLumOff != 0)
+        aColor.ApplyLumModOff(nLumMod, nLumOff);
+    return aColor;
+}
+
 const SvxColorItem* getColorItem(const editeng::Section& rSection)
 {
     auto iterator = std::find_if(
@@ -113,7 +166,7 @@ bool updateObjectAttributes(model::ColorSet const& rColorSet, SdrObject& rObject
         model::ComplexColor const& rComplexColor = pItem->getComplexColor();
         if (rComplexColor.isValidThemeType())
         {
-            Color aNewColor = rColorSet.resolveColor(rComplexColor);
+            Color aNewColor = resolveDrawingMLColor(rColorSet, rComplexColor);
             std::unique_ptr<XFillColorItem> pNewItem(pItem->Clone());
             pNewItem->SetColorValue(aNewColor);
             aItemSet.Put(*pNewItem);
@@ -125,7 +178,7 @@ bool updateObjectAttributes(model::ColorSet const& rColorSet, SdrObject& rObject
         model::ComplexColor const& rComplexColor = pItem->getComplexColor();
         if (rComplexColor.isValidThemeType())
         {
-            Color aNewColor = rColorSet.resolveColor(rComplexColor);
+            Color aNewColor = resolveDrawingMLColor(rColorSet, rComplexColor);
             std::unique_ptr<XLineColorItem> pNewItem(pItem->Clone());
             pNewItem->SetColorValue(aNewColor);
             aItemSet.Put(*pNewItem);
