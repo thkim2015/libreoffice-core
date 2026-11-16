@@ -3728,7 +3728,21 @@ void WW8AttributeOutput::ParaHyphenZone( const SvxHyphenZoneItem& rHyphenZone )
     // sprmPFNoAutoHyph
     m_rWW8Export.InsUInt16( NS_sprm::PFNoAutoHyph::val );
 
-    m_rWW8Export.m_pO->push_back( rHyphenZone.IsHyphen() ? 0 : 1 );
+    bool bNoHyphen = !rHyphenZone.IsHyphen();
+    // automatic hyphenation off in the document (DOP from the Standard style): nothing hyphenates
+    // in Word anyway, keep Word's default "allowed" unless the import kept an explicit "do not
+    // hyphenate" (ParaSuppressAutoHyphens)
+    if (bNoHyphen && m_rWW8Export.m_pDop && !m_rWW8Export.m_pDop->fAutoHyphen)
+    {
+        bNoHyphen = false;
+        if (auto pBag = static_cast<const SfxGrabBagItem*>(m_rWW8Export.HasItem(RES_PARATR_GRABBAG)))
+        {
+            auto it = pBag->GetGrabBag().find(u"ParaSuppressAutoHyphens"_ustr);
+            if (it != pBag->GetGrabBag().end())
+                it->second >>= bNoHyphen;
+        }
+    }
+    m_rWW8Export.m_pO->push_back( bNoHyphen ? 1 : 0 );
 }
 
 void WW8AttributeOutput::ParaScriptSpace( const SfxBoolItem& rScriptSpace )

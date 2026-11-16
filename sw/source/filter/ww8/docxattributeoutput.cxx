@@ -10170,6 +10170,21 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
 
 void DocxAttributeOutput::ParaHyphenZone( const SvxHyphenZoneItem& rHyphenZone )
 {
+    // automatic hyphenation off in the imported Word document: keep Word's default "allowed",
+    // only the explicit "do not hyphenate" kept by the import gets w:suppressAutoHyphens
+    if (!rHyphenZone.IsHyphen() && m_rExport.IsWordAutoHyphenationOff())
+    {
+        bool bSuppress = false;
+        if (auto pBag = static_cast<const SfxGrabBagItem*>(m_rExport.HasItem(RES_PARATR_GRABBAG)))
+        {
+            auto it = pBag->GetGrabBag().find(u"ParaSuppressAutoHyphens"_ustr);
+            if (it != pBag->GetGrabBag().end())
+                it->second >>= bSuppress;
+        }
+        if (bSuppress)
+            m_pSerializer->singleElementNS(XML_w, XML_suppressAutoHyphens);
+        return;
+    }
     m_pSerializer->singleElementNS( XML_w, XML_suppressAutoHyphens,
             FSNS( XML_w, XML_val ), OString::boolean( !rHyphenZone.IsHyphen() ) );
 }
@@ -11431,6 +11446,10 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         else if (rGrabBagElement.first == "ParaThaiDistribute")
         {
             // Handled in DocxAttributeOutput::ParaAdjust().
+        }
+        else if (rGrabBagElement.first == "ParaSuppressAutoHyphens")
+        {
+            // Handled in DocxAttributeOutput::ParaHyphenZone().
         }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::ParaGrabBag: unhandled grab bag property " << rGrabBagElement.first );

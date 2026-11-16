@@ -5550,9 +5550,24 @@ void SwWW8ImplReader::Read_Hyphenation( sal_uInt16, const sal_uInt8* pData, shor
 {
     // set Hyphenation flag
     if (nLen < 1)
+    {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_HYPHENZONE );
+        m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_GRABBAG );
+    }
     else
     {
+        // With automatic hyphenation off in the document, Writer paragraphs never hyphenate, so
+        // "do not hyphenate" (fNoAutoHyph) can't be told apart from Word's default "allowed":
+        // keep the explicit one in the grab bag for the export (see ParaHyphenZone).
+        if (*pData && m_xWDop && !m_xWDop->fAutoHyphen)
+        {
+            std::map<OUString, css::uno::Any> aGrabBagMap;
+            if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+                aGrabBagMap = pGrabBag->GetGrabBag();
+            aGrabBagMap[u"ParaSuppressAutoHyphens"_ustr] <<= true;
+            NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+        }
+
         SvxHyphenZoneItem aAttr( *GetFormatAttr( RES_PARATR_HYPHENZONE ) );
 
         aAttr.SetHyphen( 0 == *pData ); // sic !

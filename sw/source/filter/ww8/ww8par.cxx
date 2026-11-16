@@ -2127,6 +2127,10 @@ void SwWW8ImplReader::ImportDop()
         }));
 
         aGrabBag[u"CompatSettings"_ustr] <<= aValue;
+        // automatic hyphenation off: the DOCX export writes w:autoHyphenation off and only the
+        // explicit "do not hyphenate" paragraphs (ParaSuppressAutoHyphens), like Word
+        if (!m_xWDop->fAutoHyphen)
+            aGrabBag[u"WordAutoHyphenation"_ustr] <<= false;
         xDocProps->setPropertyValue(u"InteropGrabBag"_ustr, uno::Any(aGrabBag.getAsConstPropertyValueList()));
     }
 
