@@ -2684,8 +2684,10 @@ SwFrameFormat* SwWW8ImplReader::Read_GrafLayer( tools::Long nGrafAnchorCp )
     switch (pObject->GetObjIdentifier())
     {
         case SdrObjKind::Graphic:
-            bReplaceable = true;
-            bDone = true;
+            // A rotated picture stays a drawing object, like in the DOCX import
+            // (fdo#70457): a Writer graphic frame would lose the rotation.
+            bReplaceable = pObject->GetRotateAngle() == 0_deg100;
+            bDone = bReplaceable;
             break;
         case SdrObjKind::OLE2:
             bReplaceable = true;
