@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <string_view>
+#include <numberindash.hxx>
 #include <svl/itemiter.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/outdev.hxx>
@@ -626,7 +627,9 @@ SvxNumType WW8ListManager::GetSvxNumTypeFromMSONFC(sal_uInt16 nNFC)
         //case 54: // thaiNumbers
         //case 55: // thaiCounting
         //case 56: // vietnameseCounting
-        //case 57: // numberInDash
+        case 57: // numberInDash
+            nType = static_cast<SvxNumType>(SW_NUMBERING_NUMBER_IN_DASH);
+            break;
 
         case 58: // russianLower
             nType = SVX_NUM_CHARS_CYRILLIC_LOWER_LETTER_RU;

@@ -20,6 +20,7 @@
 #include <memory>
 #include "docxattributeoutput.hxx"
 #include "docxhelper.hxx"
+#include <numberindash.hxx>
 #include <unotools/fontdefs.hxx>
 #include "docxsdrexport.hxx"
 #include "docxexportfilter.hxx"
@@ -7953,6 +7954,7 @@ static OString lcl_ConvertNumberingType(sal_Int16 nNumberingType, const SfxItemS
         case style::NumberingType::NUMBER_HANGUL_KO: aType="koreanCounting"_ostr; break;
         case style::NumberingType::NUMBER_LEGAL_KO: aType = "koreanLegal"_ostr; break;
         case style::NumberingType::NUMBER_DIGITAL_KO: aType = "koreanDigital"_ostr; break;
+        case SW_NUMBERING_NUMBER_IN_DASH: aType = "numberInDash"_ostr; break;
         case style::NumberingType::NUMBER_DIGITAL2_KO: aType = "koreanDigital2"_ostr; break;
         case style::NumberingType::CIRCLE_NUMBER: aType="decimalEnclosedCircle"_ostr; break;
         case style::NumberingType::CHARS_ARABIC: aType="arabicAlpha"_ostr; break;

@@ -30,6 +30,9 @@
 #include <editeng/prntitem.hxx>
 #include <editeng/boxitem.hxx>
 #include <editeng/shaditem.hxx>
+#include <svl/grabbagitem.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <swtable.hxx>
 #include <svx/ctredlin.hxx>
 #include <svx/framelink.hxx>
 #include <svx/svdouno.hxx>
@@ -2381,7 +2384,17 @@ class SwTabFramePainter
     SwLineEntryMap maHoriLines;
     const SwTabFrame& mrTabFrame;
 
+    /// Diagonal cell borders (start, end, style)
+    struct DiagonalLine
+    {
+        Point maStart;
+        Point maEnd;
+        svx::frame::Style maStyle;
+    };
+    std::vector<DiagonalLine> maDiagLines;
+
     void Insert( SwLineEntry&, bool bHori );
+    void InsertDiagonals(const SwCellFrame& rCell);
     void Insert(const SwFrame& rFrame, const SvxBoxItem& rBoxItem, const SwRect &rPaintArea);
 
     /// Inserts top border at the top of a follow table.
@@ -2429,6 +2442,7 @@ void SwTabFramePainter::HandleFrame(const SwLayoutFrame& rLayoutFrame, const SwR
             const SwBorderAttrs& rAttrs = *aAccess.Get();
             const SvxBoxItem& rBox = rAttrs.GetBox();
             Insert(rLayoutFrame, rBox, rPaintArea);
+            InsertDiagonals(*pThisCell);
         }
     }
 
@@ -2442,6 +2456,61 @@ void SwTabFramePainter::HandleFrame(const SwLayoutFrame& rLayoutFrame, const SwR
             HandleFrame(*pLowerLayFrame, rPaintArea);
         }
         pLower = pLower->GetNext();
+    }
+}
+
+/// Diagonal cell borders: Writer table cells have none, but the DOC/DOCX import keeps
+/// <w:tl2br>/<w:tr2bl> (sprmTSetBrc 0x10/0x20) in the cell grab bag. Paint them like Word.
+void SwTabFramePainter::InsertDiagonals(const SwCellFrame& rCell)
+{
+    const SwFrameFormat* pFormat = rCell.GetTabBox().GetFrameFormat();
+    if (!pFormat)
+        return;
+    const SfxGrabBagItem* pBag = pFormat->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false);
+    if (!pBag)
+        return;
+    const SwRect& rArea = rCell.getFrameArea();
+    for (int i = 0; i < 2; ++i)
+    {
+        auto it = pBag->GetGrabBag().find(i == 0 ? u"CellTl2br"_ustr : u"CellTr2bl"_ustr);
+        css::uno::Sequence<css::beans::PropertyValue> aAttrs;
+        if (it == pBag->GetGrabBag().end() || !(it->second >>= aAttrs))
+            continue;
+        OUString aVal, aSz, aColor;
+        for (const auto& rAttr : aAttrs)
+        {
+            if (rAttr.Name == "val")
+                rAttr.Value >>= aVal;
+            else if (rAttr.Name == "sz")
+                rAttr.Value >>= aSz;
+            else if (rAttr.Name == "color")
+                rAttr.Value >>= aColor;
+        }
+        if (aVal.isEmpty() || aVal == "nil" || aVal == "none")
+            continue;
+        SvxBorderLineStyle eStyle = SvxBorderLineStyle::SOLID;
+        if (aVal == "dotted")
+            eStyle = SvxBorderLineStyle::DOTTED;
+        else if (aVal == "dashed" || aVal == "dashSmallGap")
+            eStyle = SvxBorderLineStyle::DASHED;
+        else if (aVal == "dotDash" || aVal == "dashDotStroked")
+            eStyle = SvxBorderLineStyle::DASH_DOT;
+        else if (aVal == "dotDotDash")
+            eStyle = SvxBorderLineStyle::DASH_DOT_DOT;
+        else if (aVal == "double")
+            eStyle = SvxBorderLineStyle::DOUBLE;
+        // sz is in eighths of a point
+        tools::Long nWidth = std::max<tools::Long>(1, aSz.toInt32() * 20 / 8);
+        Color aCol(COL_BLACK);
+        if (aColor.getLength() == 6 && aColor != "auto")
+            aCol = Color(ColorTransparency, aColor.toUInt32(16));
+        editeng::SvxBorderLine aLine(&aCol, nWidth, eStyle);
+        svx::frame::Style aStyle(&aLine, 1.0);
+        aStyle.SetRefMode(svx::frame::RefMode::Centered);
+        if (i == 0)
+            maDiagLines.push_back({ rArea.TopLeft(), rArea.BottomRight(), aStyle });
+        else
+            maDiagLines.push_back({ rArea.TopRight(), rArea.BottomLeft(), aStyle });
     }
 }
 
@@ -2661,6 +2730,20 @@ void SwTabFramePainter::PaintLines(OutputDevice& rDev, const SwRect& rRect) cons
             }
         }
         ++aIter;
+    }
+
+    for (const DiagonalLine& rDiag : maDiagLines)
+    {
+        SwRect aDiagRect(rDiag.maStart, rDiag.maEnd);
+        aDiagRect.Justify();
+        if (!rRect.Overlaps(aDiagRect))
+            continue;
+        const Point aPaintStart = rDev.PixelToLogic(rDev.LogicToPixel(rDiag.maStart));
+        const Point aPaintEnd = rDev.PixelToLogic(rDev.LogicToPixel(rDiag.maEnd));
+        const basegfx::B2DPoint aOrigin(aPaintStart.X(), aPaintStart.Y());
+        const basegfx::B2DVector aX(basegfx::B2DPoint(aPaintEnd.X(), aPaintEnd.Y()) - aOrigin);
+        if (!aX.equalZero())
+            aData.emplace_back(aOrigin, aX, rDiag.maStyle, pHCColor);
     }
 
     // create instance of SdrFrameBorderPrimitive2D if

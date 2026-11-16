@@ -27,6 +27,7 @@
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/style/NumberingType.hpp>
 #include <editeng/borderline.hxx>
+#include <numberindash.hxx>
 #include <ooxml/resourceids.hxx>
 #include <rtl/ustrbuf.hxx>
 #include <tools/color.hxx>
@@ -632,6 +633,9 @@ sal_Int16 ConvertNumberingType(const sal_Int32 nFmt, const sal_Int16 nDefault)
             break;
         case NS_ooxml::LN_Value_ST_NumberFormat_decimalZero:
             nRet = style::NumberingType::ARABIC_ZERO;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_numberInDash:
+            nRet = SW_NUMBERING_NUMBER_IN_DASH;
             break;
         default: nRet = nDefault;
     }

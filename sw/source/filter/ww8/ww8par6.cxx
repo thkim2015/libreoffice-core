@@ -861,7 +861,10 @@ void wwSectionManager::SetNumberingType(const wwSection &rNewSection,
     };
 
     SvxNumberType aType;
-    aType.SetNumberingType( aNumTyp[rNewSection.maSep.nfcPgn] );
+    const sal_uInt8 nNfc = rNewSection.maSep.nfcPgn;
+    // Other formats (numberInDash "- 1 -", Korean, ...) are the same nfc values as the lists use.
+    aType.SetNumberingType(nNfc < SAL_N_ELEMENTS(aNumTyp) ? aNumTyp[nNfc]
+                                                         : WW8ListManager::GetSvxNumTypeFromMSONFC(nNfc));
     rPageDesc.SetNumType(aType);
 }
 
@@ -981,7 +984,7 @@ void wwSectionManager::CreateSep(const tools::Long nTextPos)
 
     // sprmSNfcPgn
     aNewSection.maSep.nfcPgn = ReadBSprm( pSep, pIds[2], 0 );
-    if (aNewSection.maSep.nfcPgn > 4)
+    if (aNewSection.maSep.nfcPgn > 4 && eVer <= ww::eWW7)
         aNewSection.maSep.nfcPgn = 0;
 
     aNewSection.maSep.fUnlocked = eVer > ww::eWW2 ? ReadBSprm(pSep, (eVer <= ww::eWW7 ? NS_sprm::v6::sprmSFProtected : NS_sprm::SFProtected::val), 0 ) : 0;
@@ -5671,10 +5674,25 @@ void SwWW8ImplReader::Read_KeepParas( sal_uInt16, const sal_uInt8* pData, short 
 void SwWW8ImplReader::Read_BreakBefore( sal_uInt16, const sal_uInt8* pData, short nLen )
 {
     if (nLen < 1)
+    {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_BREAK );
-    else
-        NewAttr( SvxFormatBreakItem(
-                ( *pData & 1 ) ? SvxBreak::PageBefore : SvxBreak::NONE, RES_BREAK ) );
+        if (!m_pCurrentColl)
+            m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+        return;
+    }
+    NewAttr( SvxFormatBreakItem(
+            ( *pData & 1 ) ? SvxBreak::PageBefore : SvxBreak::NONE, RES_BREAK ) );
+    // A page break character (0x0C) is imported as the same paragraph break: remember that
+    // this one was the paragraph property, so that the DOCX export writes <w:pageBreakBefore>
+    // and not a page break run, like the DOCX import does.
+    if (!m_pCurrentColl && (*pData & 1))
+    {
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaPageBreakBefore"_ustr] <<= true;
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+    }
 }
 
 void SwWW8ImplReader::Read_ApoPPC( sal_uInt16, const sal_uInt8* pData, short )
