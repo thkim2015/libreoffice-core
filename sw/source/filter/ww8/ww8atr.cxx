@@ -5552,8 +5552,30 @@ void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
     }
 }
 
-void WW8AttributeOutput::CharGrabBag(const SfxGrabBagItem& /*rItem*/)
+void WW8AttributeOutput::CharGrabBag(const SfxGrabBagItem& rItem)
 {
+    // character properties read from DOC/DOCX without a Writer attribute
+    const std::map<OUString, css::uno::Any>& rMap = rItem.GetGrabBag();
+    auto it = rMap.find(u"CharFitText"_ustr);
+    sal_Int32 nWidth = 0;
+    if (it != rMap.end() && (it->second >>= nWidth) && nWidth > 0)
+    {
+        sal_Int32 nId = 0;
+        auto itId = rMap.find(u"CharFitTextId"_ustr);
+        if (itId != rMap.end())
+            itId->second >>= nId;
+        m_rWW8Export.InsUInt16(NS_sprm::CFitText::val);
+        m_rWW8Export.m_pO->push_back(8);
+        m_rWW8Export.InsUInt32(static_cast<sal_uInt32>(nWidth));
+        m_rWW8Export.InsUInt32(static_cast<sal_uInt32>(nId));
+    }
+    it = rMap.find(u"CharNoProof"_ustr);
+    bool bNoProof = false;
+    if (it != rMap.end() && (it->second >>= bNoProof) && bNoProof)
+    {
+        m_rWW8Export.InsUInt16(NS_sprm::CFNoProof::val);
+        m_rWW8Export.m_pO->push_back(1);
+    }
 }
 
 void WW8AttributeOutput::ParaOutlineLevel(const SfxUInt16Item& rItem)
