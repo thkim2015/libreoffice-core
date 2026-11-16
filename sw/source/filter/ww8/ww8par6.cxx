@@ -4698,14 +4698,23 @@ void SwWW8ImplReader::Read_ParaAutoBefore(sal_uInt16, const sal_uInt8 *pData, sh
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_UL_SPACE);
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
         return;
     }
 
     if (*pData)
     {
         SvxULSpaceItem aUL(*GetFormatAttr(RES_UL_SPACE));
-        aUL.SetUpper(GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
+        const sal_uInt16 nAutoSpace = GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing);
+        aUL.SetUpper(nAutoSpace);
         NewAttr(aUL);
+        // keep the "auto" of Word for the export, like the DOCX import (value in mm100)
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaTopMarginBeforeAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nAutoSpace, o3tl::Length::twip, o3tl::Length::mm100));
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
         if (m_pCurrentColl && m_nCurrentColl < m_vColl.size())
             m_vColl[m_nCurrentColl].m_bParaAutoBefore = true;
         else
@@ -4725,14 +4734,23 @@ void SwWW8ImplReader::Read_ParaAutoAfter(sal_uInt16, const sal_uInt8 *pData, sho
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_UL_SPACE);
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
         return;
     }
 
     if (*pData)
     {
         SvxULSpaceItem aUL(*GetFormatAttr(RES_UL_SPACE));
-        aUL.SetLower(GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
+        const sal_uInt16 nAutoSpace = GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing);
+        aUL.SetLower(nAutoSpace);
         NewAttr(aUL);
+        // keep the "auto" of Word for the export, like the DOCX import (value in mm100)
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaBottomMarginAfterAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nAutoSpace, o3tl::Length::twip, o3tl::Length::mm100));
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
         if (m_pCurrentColl && m_nCurrentColl < m_vColl.size())
             m_vColl[m_nCurrentColl].m_bParaAutoAfter = true;
         else

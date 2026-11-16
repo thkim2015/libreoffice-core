@@ -5550,6 +5550,24 @@ void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         m_rWW8Export.InsUInt16(NS_sprm::PFWordWrap::val);
         m_rWW8Export.m_pO->push_back(bWordWrap ? 1 : 0);
     }
+
+    // automatic space before/after (HTML auto spacing) kept by the DOC/DOCX import, as long as
+    // the space is still the value set by the import
+    const SvxULSpaceItem* pUL = m_rWW8Export.HasItem(RES_UL_SPACE);
+    for (bool bBefore : { true, false })
+    {
+        it = rMap.find(bBefore ? u"ParaTopMarginBeforeAutoSpacing"_ustr
+                               : u"ParaBottomMarginAfterAutoSpacing"_ustr);
+        sal_Int32 nAuto = -1;
+        if (it == rMap.end() || !(it->second >>= nAuto) || nAuto < 0 || !pUL)
+            continue;
+        const sal_Int32 nTwips = o3tl::toTwips(nAuto, o3tl::Length::mm100);
+        if (nTwips != (bBefore ? pUL->GetUpper() : pUL->GetLower()))
+            continue;
+        m_rWW8Export.InsUInt16(bBefore ? NS_sprm::PFDyaBeforeAuto::val
+                                       : NS_sprm::PFDyaAfterAuto::val);
+        m_rWW8Export.m_pO->push_back(1);
+    }
 }
 
 void WW8AttributeOutput::CharGrabBag(const SfxGrabBagItem& rItem)
