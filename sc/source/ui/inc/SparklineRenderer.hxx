@@ -356,7 +356,7 @@ private:
                 aAxisPolygon.append({ x2, y });
 
                 rRenderContext.SetLineColor(rAttributes.getColorAxis().getFinalColor());
-                drawPolyLine(rRenderContext, aMatrix, aAxisPolygon, 0.2 * mfScaleX);
+                drawPolyLine(rRenderContext, aMatrix, aAxisPolygon, 0.2 * mfScaleX * mnOneX);
             }
         }
 
@@ -365,7 +365,7 @@ private:
         for (auto& rPolygon : aPolygons)
         {
             drawPolyLine(rRenderContext, aMatrix, rPolygon,
-                         rAttributes.getLineWeight() * mfScaleX);
+                         rAttributes.getLineWeight() * mfScaleX * mnOneX);
         }
 
         for (auto& rMarker : aMarkers)
@@ -455,7 +455,7 @@ private:
                 aAxisPolygon.append({ x2, nZeroPosition });
 
                 rRenderContext.SetLineColor(rAttributes.getColorAxis().getFinalColor());
-                drawPolyLine(rRenderContext, aMatrix, aAxisPolygon, 0.2 * mfScaleX);
+                drawPolyLine(rRenderContext, aMatrix, aAxisPolygon, 0.2 * mfScaleX * mnOneX);
             }
         }
         else
@@ -513,7 +513,7 @@ public:
         rRenderContext.SetClipRegion(vcl::Region(rRectangle));
 
         tools::Rectangle aOutputRectangle(rRectangle);
-        aOutputRectangle.shrink(6); // provide border
+        aOutputRectangle.shrink(6 * nOneX); // provide border
 
         mnOneX = nOneX;
         mnOneY = nOneY;
