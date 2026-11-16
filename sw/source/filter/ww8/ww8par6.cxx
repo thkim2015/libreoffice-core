@@ -1481,8 +1481,8 @@ static void GetLineIndex(SvxBoxItem &rBox, short nLineThickness, short nSpace,
         ::editeng::ConvertBorderWidthFromWord(eStyle, nLineThickness, nIdx));
     aLine.SetWidth(fConverted);
 
-    //No AUTO for borders as yet, so if AUTO, use BLACK
-    Color col = (cv==0xff000000) ? COL_BLACK : msfilter::util::BGRToRGB(cv);
+    // automatic colour: COL_AUTO like the DOCX import (w:color="auto"), drawn black
+    Color col = (cv==0xff000000) ? COL_AUTO : msfilter::util::BGRToRGB(cv);
 
     aLine.SetColor(col);
 

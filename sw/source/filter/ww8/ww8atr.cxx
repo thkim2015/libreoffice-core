@@ -5016,8 +5016,10 @@ WW8_BRCVer9 WW8Export::TranslateBorderLine(const SvxBorderLine& rLine,
         if( 0 == nWidth )                       // really thin line
             nWidth = 1;                         // don't omit
 
-        // BRC.cv
-        nColBGR = wwUtility::RGBToBGR(rLine.GetColor().GetRGBColor());
+        // BRC.cv (automatic colour is cvAuto, not white)
+        nColBGR = rLine.GetColor() == COL_AUTO
+                      ? 0xFF000000
+                      : wwUtility::RGBToBGR(rLine.GetColor().GetRGBColor());
     }
 
     // BRC.dptSpace
@@ -5052,7 +5054,8 @@ void WW8Export::Out_BorderLine(ww::bytes& rO, const SvxBorderLine* pLine,
     if( pLine && pLine->GetBorderLineStyle() != SvxBorderLineStyle::NONE )
     {
         aBrcVer9 = TranslateBorderLine( *pLine, nDist, bShadow );
-        sal_uInt8 ico = msfilter::util::TransColToIco( msfilter::util::BGRToRGB(aBrcVer9.cv()) );
+        sal_uInt8 ico = aBrcVer9.cv() == 0xFF000000 ? 0 // auto
+                        : msfilter::util::TransColToIco( msfilter::util::BGRToRGB(aBrcVer9.cv()) );
         aBrcVer8 = WW8_BRC( aBrcVer9.dptLineWidth(), aBrcVer9.brcType(), ico,
             aBrcVer9.dptSpace(), aBrcVer9.fShadow(), aBrcVer9.fFrame() );
     }
