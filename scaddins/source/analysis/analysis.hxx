@@ -192,7 +192,7 @@ public:
 
     virtual double SAL_CALL     getAmordegrc( const css::uno::Reference< css::beans::XPropertySet >&, double fCost, sal_Int32 nDate, sal_Int32 nFirstPer, double fRestVal, double fPer, double fRate, const css::uno::Any& rOptBase ) override;
     virtual double SAL_CALL     getAmorlinc( const css::uno::Reference< css::beans::XPropertySet >&, double fCost, sal_Int32 nDate, sal_Int32 nFirstPer, double fRestVal, double fPer, double fRate, const css::uno::Any& rOptBase ) override;
-    virtual double SAL_CALL     getAccrint( const css::uno::Reference< css::beans::XPropertySet >& xOpt, sal_Int32 nIssue, sal_Int32 nFirstInter, sal_Int32 nSettle, double fRate, const css::uno::Any& rVal, sal_Int32 nFreq, const css::uno::Any& rOptBase ) override;
+    virtual double SAL_CALL     getAccrint( const css::uno::Reference< css::beans::XPropertySet >& xOpt, sal_Int32 nIssue, sal_Int32 nFirstInter, sal_Int32 nSettle, double fRate, const css::uno::Any& rVal, sal_Int32 nFreq, const css::uno::Any& rOptBase, const css::uno::Any& rCalcMethod ) override;
     virtual double SAL_CALL     getAccrintm( const css::uno::Reference< css::beans::XPropertySet >& xOpt, sal_Int32 nIssue, sal_Int32 nSettle, double fRate, const css::uno::Any& rVal, const css::uno::Any& rOptBase ) override;
     virtual double SAL_CALL     getReceived( const css::uno::Reference< css::beans::XPropertySet >& xOpt, sal_Int32 nSettle, sal_Int32 nMat, double fInvest, double fDisc, const css::uno::Any& rOptBase ) override;
     virtual double SAL_CALL     getDisc( const css::uno::Reference< css::beans::XPropertySet >& xOpt, sal_Int32 nSettle, sal_Int32 nMat, double fPrice, double fRedemp, const css::uno::Any& rOptBase ) override;

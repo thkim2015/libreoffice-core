@@ -591,7 +591,7 @@ const FunctionData saFuncTableBiff4[] =
     { "AMORDEGRC",              "AMORDEGRC",            466,    NOID,   6,  7,  V, { RR }, FuncFlags::EXTERNAL },
     { "AMORLINC",               "AMORLINC",             467,    NOID,   6,  7,  V, { RR }, FuncFlags::EXTERNAL },
     { "CONVERT",                "CONVERT",              468,    NOID,   3,  3,  V, { RR }, FuncFlags::EXTERNAL },       // Calc: builtin and add-in (but different!)
-    { "ACCRINT",                "ACCRINT",              469,    NOID,   6,  7,  V, { RR }, FuncFlags::EXTERNAL },
+    { "ACCRINT",                "ACCRINT",              469,    NOID,   6,  8,  V, { RR }, FuncFlags::EXTERNAL },
     { "ACCRINTM",               "ACCRINTM",             470,    NOID,   4,  5,  V, { RR }, FuncFlags::EXTERNAL },
     { "WORKDAY",                "WORKDAY",              471,    NOID,   2,  3,  V, { RR, RR, RX, C }, FuncFlags::EXTERNAL },
     { "NETWORKDAYS",            "NETWORKDAYS",          472,    NOID,   2,  3,  V, { RR, RR, RX, C }, FuncFlags::EXTERNAL | FuncFlags::INTERNAL }, // Calc: builtin and add-in

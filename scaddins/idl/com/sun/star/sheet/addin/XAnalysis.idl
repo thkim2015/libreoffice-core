@@ -366,7 +366,7 @@ module addin
         double getAccrint(
                     [in] com::sun::star::beans::XPropertySet xOptions,
                     [in] long Issue, [in] long FirstInterest, [in] long Settlement, [in] double Rate,
-                    [in] any Value, [in] long Frequency, [in] any Base )
+                    [in] any Value, [in] long Frequency, [in] any Base, [in] any CalcMethod )
             raises( com::sun::star::lang::IllegalArgumentException );
 
         /// accrintm.
