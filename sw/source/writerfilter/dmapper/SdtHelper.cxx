@@ -364,8 +364,13 @@ void SdtHelper::createPlainTextControl()
     rtl::Reference<SwXContentControl> xContentControl(
         m_rDM_Impl.GetTextDocument()->createContentControl());
 
+    // A block SDT without a type element is rich text: only w:text (or a data binding, which
+    // Word treats as plain text) makes this a plain text content control.
+    bool bPlainText = false;
     for (const beans::PropertyValue& prop : getInteropGrabBagAndClear())
     {
+        if (prop.Name == "ooxml:CT_SdtPr_text" || prop.Name == "ooxml:CT_SdtPr_dataBinding")
+            bPlainText = true;
         OUString sPropertyName;
         if (prop.Name == "ooxml:CT_SdtPr_showingPlcHdr")
             sPropertyName = "ShowingPlaceHolder";
@@ -415,7 +420,8 @@ void SdtHelper::createPlainTextControl()
         }
     }
 
-    xContentControl->setPropertyValue(u"PlainText"_ustr, uno::Any(true));
+    if (bPlainText)
+        xContentControl->setPropertyValue(u"PlainText"_ustr, uno::Any(true));
 
     xText->insertTextContent(xCrsr, xContentControl, /*bAbsorb=*/true);
 
@@ -577,6 +583,7 @@ void SdtHelper::clear()
     m_aUncheckedState.clear();
     m_aPlaceholderDocPart.clear();
     m_aColor.clear();
+    m_aAppearance.clear();
     m_aAlias.clear();
     m_aTag.clear();
     m_nId = 0;
