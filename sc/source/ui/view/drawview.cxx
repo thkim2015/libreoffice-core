@@ -78,6 +78,9 @@ void ScDrawView::Construct()
 
     SetMinMoveDistancePixel( 2 );
     SetHitTolerancePixel( 2 );
+    // weboffice: Excel brings forward / sends backward one z-order step, also past objects
+    // that do not overlap (Excel 2021 ZOrder msoBringForward/msoSendBackward)
+    SetZOrderOneStep( true );
 
     SCTAB nViewTab = rViewData.CurrentTabForData();
     // For sheet view tabs, use the default view's draw page so that
