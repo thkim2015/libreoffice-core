@@ -26,6 +26,8 @@
 #include <ShapeFactory.hxx>
 #include <Diagram.hxx>
 #include <BaseCoordinateSystem.hxx>
+#include <com/sun/star/chart2/AxisOrientation.hpp>
+#include <Axis.hxx>
 #include <DataSeries.hxx>
 #include <DataSeriesProperties.hxx>
 
@@ -2400,10 +2402,18 @@ std::vector< ViewLegendEntry > VSeriesPlotter::createLegendEntries(
         rtl::Reference< Diagram > xDiagram = rModel.getFirstChartDiagram();
         rtl::Reference< BaseCoordinateSystem > xCooSys(xDiagram->getBaseCoordinateSystems()[0]);
         bool bSwapXAndY = false;
+        // Excel lists the series of a horizontal (unstacked) bar chart bottom-up, the order the bars
+        // are drawn in, but top-down when the category axis is reversed (bars go top-down then).
+        bool bCategoriesReversed = false;
 
         try
         {
             xCooSys->getPropertyValue( u"SwapXAndYAxis"_ustr ) >>= bSwapXAndY;
+            if (bSwapXAndY)
+            {
+                if (const rtl::Reference<Axis>& xCatAxis = xCooSys->getAxisByDimension2(0, 0); xCatAxis.is())
+                    bCategoriesReversed = xCatAxis->getScaleData().Orientation == AxisOrientation_REVERSE;
+            }
         }
         catch( const uno::Exception& )
         {
@@ -2448,7 +2458,7 @@ std::vector< ViewLegendEntry > VSeriesPlotter::createLegendEntries(
                     if ( bSwapXAndY )
                     {
                         StackingDirection eStackingDirection( pSeries->getStackingDirection() );
-                        bReverse = ( eStackingDirection != StackingDirection_Y_STACKING );
+                        bReverse = ( eStackingDirection != StackingDirection_Y_STACKING ) && !bCategoriesReversed;
                     }
                     else if ( eLegendPosition == LegendPosition_LINE_START || eLegendPosition == LegendPosition_LINE_END )
                     {
