@@ -912,14 +912,17 @@ rtl::Reference<SdrObject> SwMSDffManager::ProcessObj(SvStream& rSt,
 
             if (pObj != nullptr)
             {
-                pObj->SetMergedItemSet(aSet);
-
+                // Switch to vertical writing first: SdrTextObj::SetVerticalWriting swaps the
+                // horizontal and vertical text adjustment, but eTHA/eTVA above are already
+                // meant for vertical writing (anchor top = right).
                 if (bVerticalText)
                 {
                     SdrTextObj *pTextObj = DynCastSdrTextObj(pObj.get());
                     if (pTextObj)
                         pTextObj->SetVerticalWriting(true);
                 }
+
+                pObj->SetMergedItemSet(aSet);
 
                 if ( bIsSimpleDrawingTextBox )
                 {
