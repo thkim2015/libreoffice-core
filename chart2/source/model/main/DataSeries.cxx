@@ -28,6 +28,10 @@
 #include <RegressionCurveModel.hxx>
 #include <ModifyListenerHelper.hxx>
 #include <unonames.hxx>
+#include <ResId.hxx>
+#include <strings.hrc>
+#include <unotools/syslocale.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <com/sun/star/chart2/DataPointLabel.hpp>
 #include <com/sun/star/chart2/Symbol.hpp>
 #include <com/sun/star/chart2/data/XTextualDataSequence.hpp>
@@ -639,8 +643,20 @@ static OUString lcl_getDataSequenceLabel( const Reference< chart2::data::XDataSe
     return aResult;
 }
 
+// Excel names an unnamed series "Series1", "Series2"... by its position (Korean UI: U+ACC4 U+C5F4 + n,
+// the LibreOffice Korean translation of STR_DATA_UNNAMED_SERIES_WITH_INDEX differs)
+static OUString lcl_getUnnamedSeriesLabel( sal_Int32 nIndex )
+{
+    OUString aName;
+    if( SvtSysLocale().GetUILanguageTag().getLanguage() == "ko" )
+        aName = u"\uACC4\uC5F4%NUMBER"_ustr;
+    else
+        aName = ::chart::SchResId( STR_DATA_UNNAMED_SERIES_WITH_INDEX );
+    return aName.replaceFirst( "%NUMBER", OUString::number( nIndex + 1 ) );
+}
+
 static OUString getLabelForLabeledDataSequence(
-    const Reference< chart2::data::XLabeledDataSequence > & xLabeledSeq )
+    const Reference< chart2::data::XLabeledDataSequence > & xLabeledSeq, sal_Int32 nAutoLabelIndex = -1 )
 {
     OUString aResult;
     if( xLabeledSeq.is())
@@ -648,7 +664,9 @@ static OUString getLabelForLabeledDataSequence(
         Reference< chart2::data::XDataSequence > xSeq( xLabeledSeq->getLabel());
         if( xSeq.is() )
             aResult = lcl_getDataSequenceLabel( xSeq );
-        if( !xSeq.is() || aResult.isEmpty() )
+        if( ( !xSeq.is() || aResult.isEmpty() ) && nAutoLabelIndex >= 0 )
+            aResult = lcl_getUnnamedSeriesLabel( nAutoLabelIndex );
+        else if( !xSeq.is() || aResult.isEmpty() )
         {
             // no label set or label content is empty -> use auto-generated one
             Reference< chart2::data::XDataSequence > xValueSeq( xLabeledSeq->getValues() );
@@ -681,7 +699,7 @@ OUString DataSeries::getLabelForRole( const OUString & rLabelSequenceRole )
     Reference< chart2::data::XLabeledDataSequence > xLabeledSeq(
         ::chart::DataSeriesHelper::getDataSequenceByRole( this, rLabelSequenceRole ));
     if( xLabeledSeq.is())
-        aResult = getLabelForLabeledDataSequence( xLabeledSeq );
+        aResult = getLabelForLabeledDataSequence( xLabeledSeq, m_nAutoLabelIndex );
     else
     {
         // special case: labeled data series with only a label and no values may

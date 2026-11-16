@@ -191,6 +191,7 @@ void SeriesPlotterContainer::initializeCooSysAndSeriesPlotter(ChartModel& rChart
         xColorScheme = new ChartColorScheme(*rChartModel.getCurrentColorPalette());
     auto aCooSysList = xDiagram->getBaseCoordinateSystems();
     sal_Int32 nGlobalSeriesIndex = 0; //for automatic symbols
+    sal_Int32 nAutoLabelIndex = 0; //all series, also hidden ones (Excel numbering)
     for (std::size_t nCS = 0; nCS < aCooSysList.size(); ++nCS)
     {
         const rtl::Reference<BaseCoordinateSystem>& xCooSys(aCooSysList[nCS]);
@@ -275,6 +276,7 @@ void SeriesPlotterContainer::initializeCooSysAndSeriesPlotter(ChartModel& rChart
             for (std::size_t nS = 0; nS < aSeriesList.size(); ++nS)
             {
                 rtl::Reference<DataSeries> const& xDataSeries = aSeriesList[nS];
+                xDataSeries->setAutoLabelIndex(nAutoLabelIndex++); // Excel "Series<n>" for unnamed series
                 if (!bIncludeHiddenCells && !xDataSeries->hasUnhiddenData())
                     continue;
 

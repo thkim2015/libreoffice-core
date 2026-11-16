@@ -424,7 +424,9 @@ void CharacterProperties::AddDefaultsToMap(
     ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_CHAR_COMPLEX_FONT_PITCH, sal_Int16(aFontCTL.GetPitchMaybeAskConfig()) );
 
     ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_WRITING_MODE, sal_Int16( css::text::WritingMode2::PAGE ) );
-    ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_PARA_IS_CHARACTER_DISTANCE, true );
+    // Office charts never add the editeng Asian/Latin script spacing (height/5 at every script change):
+    // a Korean legend "Series 1" or "Linear (Series1)" looked spaced out next to Excel
+    ::chart::PropertyHelper::setPropertyValueDefault( rOutMap, PROP_PARA_IS_CHARACTER_DISTANCE, false );
 }
 
 bool CharacterProperties::IsCharacterPropertyHandle( sal_Int32 nHandle )

@@ -1773,6 +1773,47 @@ void lcl_collectFieldButtons(const SdrObjList* pList, std::vector<OUString>& rOu
         lcl_collectFieldButtons(pObj->GetSubList(), rOut);
     }
 }
+// Every text shape of the chart view (title, legend entry, axis label, data label):
+// "text\tx\ty\tw\th\tParaIsCharacterDistance" - lets the web shell (and its tests) read
+// the rendered legend names and the Asian/Latin spacing flag.
+void lcl_collectTexts(const SdrObjList* pList, std::vector<OUString>& rOut)
+{
+    if (!pList)
+        return;
+    for (const rtl::Reference<SdrObject>& pObj : *pList)
+    {
+        if (!pObj)
+            continue;
+        if (pObj->GetSubList())
+        {
+            lcl_collectTexts(pObj->GetSubList(), rOut);
+            continue;
+        }
+        uno::Reference<text::XTextRange> xText(pObj->getUnoShape(), uno::UNO_QUERY);
+        if (!xText.is())
+            continue;
+        OUString aText;
+        bool bDistance = false;
+        try
+        {
+            aText = xText->getString();
+            uno::Reference<beans::XPropertySet> xProps(xText, uno::UNO_QUERY);
+            if (xProps.is())
+                xProps->getPropertyValue(u"ParaIsCharacterDistance"_ustr) >>= bDistance;
+        }
+        catch (const uno::Exception&)
+        {
+        }
+        if (aText.isEmpty())
+            continue;
+        const tools::Rectangle aRect = pObj->GetCurrentBoundRect();
+        rOut.push_back(aText + "\t" + OUString::number(aRect.Left()) + "\t"
+                       + OUString::number(aRect.Top()) + "\t"
+                       + OUString::number(aRect.GetWidth()) + "\t"
+                       + OUString::number(aRect.GetHeight()) + "\t"
+                       + OUString::number(bDistance ? 1 : 0));
+    }
+}
 // Every chart object shape carries its ObjectIdentifier ("CID/...") as name.
 // Report them all with their rectangles so the web shell can hit-test a
 // click inside the chart (title, legend, axis, series, data point, ...).
@@ -1805,6 +1846,14 @@ Any SAL_CALL ChartView::getPropertyValue( const OUString& rPropertyName )
         std::vector<OUString> aOut;
         if (mxRootShape.is() && mxRootShape->GetSdrObject())
             lcl_collectObjectRects(mxRootShape->GetSdrObject()->GetSubList(), aOut);
+        return Any(comphelper::containerToSequence(aOut));
+    }
+    if( rPropertyName == "ZetaTexts" )
+    {
+        impl_updateView();
+        std::vector<OUString> aOut;
+        if (mxRootShape.is() && mxRootShape->GetSdrObject())
+            lcl_collectTexts(mxRootShape->GetSdrObject()->GetSubList(), aOut);
         return Any(comphelper::containerToSequence(aOut));
     }
     if( rPropertyName == "ZetaFieldButtons" )
