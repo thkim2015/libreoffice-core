@@ -1613,7 +1613,7 @@ enum wwTableSprm
     sprmTSetBrc, sprmTSetBrc90, sprmTDxaCol, sprmTInsert, sprmTDelete,
     sprmTTableHeader, sprmTDxaGapHalf, sprmTTableBorders, sprmTTableBorders90,
     sprmTDefTableNewShd, sprmTDefTableNewShd2nd, sprmTDefTableNewShd3rd,
-    sprmTCellPadding, sprmTCellPaddingDefault
+    sprmTCellPadding, sprmTCellPaddingDefault, sprmTWidthIndent
 };
 
 }
@@ -1671,6 +1671,8 @@ static wwTableSprm GetTableSprm(sal_uInt16 nId, ww::WordVersion eVer)
                     return sprmTCellPadding;
                 case NS_sprm::TCellPaddingDefault::val:
                     return sprmTCellPaddingDefault;
+                case NS_sprm::TWidthIndent::val:
+                    return sprmTWidthIndent;
             }
             break;
         case ww::eWW7:
@@ -1789,6 +1791,9 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
     do
     {
         short nTabeDxaNew      = SHRT_MAX;
+        // tblInd (sprmTWidthIndent, ftsDxa): Word 2002+ writes it beside the
+        // old sprmTDxaLeft and follows it when both differ
+        short nTableIndent     = SHRT_MAX;
         bool bTabRowJustRead   = false;
         const sal_uInt8* pShadeSprm = nullptr;
         const sal_uInt8* pNewShadeSprm[3] = {nullptr, nullptr, nullptr};
@@ -1905,6 +1910,11 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
                                 nTabeDxaNew = nDxaNew;
                         }
                         break;
+                    case sprmTWidthIndent:
+                        // FtsWWidth_Indent: ftsWidth (1 byte) + wWidth (2 bytes)
+                        if (nLen >= 3 && pParams[0] == 3) // ftsDxa
+                            nTableIndent = SVBT16ToInt16(pParams + 1);
+                        break;
                     case sprmTSetBrc:
                         aTSetBrcs.emplace_back(pParams, nLen); // process at end
                         break;
@@ -1966,6 +1976,11 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
             for (const auto& a : aTSetBrc90s)
                 pNewBand->ProcessSprmTSetBRC(9, a.first, a.second);
         }
+
+        // Like sprmTDxaLeft, tblInd is the position of the first cell text
+        // (compatibility mode < 15), so it replaces the old value.
+        if (nTableIndent != SHRT_MAX && nTabeDxaNew != SHRT_MAX && !m_bIsBiDi)
+            nTabeDxaNew = nTableIndent;
 
         if( nTabeDxaNew < SHRT_MAX )
         {
