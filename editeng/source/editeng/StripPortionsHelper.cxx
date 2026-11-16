@@ -31,6 +31,19 @@
 #include <drawinglayer/primitive2d/wrongspellprimitive2d.hxx>
 #include <drawinglayer/primitive2d/graphicprimitive2d.hxx>
 #include <vcl/fntstyle.hxx>
+#include <drawinglayer/attribute/fillgradientattribute.hxx>
+#include <drawinglayer/geometry/viewinformation2d.hxx>
+#include <drawinglayer/primitive2d/fillgradientprimitive2d.hxx>
+#include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonColorPrimitive2D.hxx>
+#include <drawinglayer/primitive2d/transparenceprimitive2d.hxx>
+#include <basegfx/color/bcolormodifier.hxx>
+#include <basegfx/numeric/ftools.hxx>
+#include <basegfx/polygon/b2dpolygontools.hxx>
+#include <basegfx/polygon/b2dpolypolygon.hxx>
+#include <basegfx/utils/bgradient.hxx>
+#include <o3tl/string_view.hxx>
+#include <algorithm>
 
 // anonymous Outline/EditEngine decompose helpers
 namespace
@@ -573,8 +586,121 @@ void CreateDrawBulletPrimitivesFromDrawBulletInfo(
 }
 } // end of anonymous namespace
 
+namespace
+{
+// zeta: 'ZG1 <열 때 글자색> <L|R|Q> <각도 1/10도> <X 중심%> <Y 중심%> <위치>:<색> ...'을 그라데이션 속성으로
+bool zetaParseTextGradient(std::u16string_view aSpec,
+                           drawinglayer::attribute::FillGradientAttribute& rAttr)
+{
+    std::vector<OUString> aTok;
+    sal_Int32 nIdx = 0;
+    do
+    {
+        OUString aOne(o3tl::getToken(aSpec, 0, ' ', nIdx));
+        if (!aOne.isEmpty())
+            aTok.push_back(aOne);
+    } while (nIdx >= 0);
+    if (aTok.size() < 8 || aTok[0] != "ZG1")
+        return false;
+    css::awt::GradientStyle eStyle = css::awt::GradientStyle_LINEAR;
+    if (aTok[2] == "R")
+        eStyle = css::awt::GradientStyle_RADIAL;
+    else if (aTok[2] == "Q")
+        eStyle = css::awt::GradientStyle_RECT;
+    const double fAngle(basegfx::deg2rad(aTok[3].toInt32() / 10.0));
+    const double fOfsX(aTok[4].toInt32() / 100.0);
+    const double fOfsY(aTok[5].toInt32() / 100.0);
+    basegfx::BColorStops aStops;
+    for (size_t i = 6; i < aTok.size(); ++i)
+    {
+        const sal_Int32 nColon(aTok[i].indexOf(':'));
+        if (nColon <= 0)
+            return false;
+        const double fPos(aTok[i].copy(0, nColon).toDouble());
+        const ::Color aColor(ColorTransparency, aTok[i].copy(nColon + 1).toUInt32(16));
+        aStops.addStop(std::clamp(fPos, 0.0, 1.0), aColor.getBColor());
+    }
+    if (aStops.size() < 2)
+        return false;
+    rAttr = drawinglayer::attribute::FillGradientAttribute(eStyle, 0.0, fOfsX, fOfsY, fAngle,
+                                                           aStops);
+    return true;
+}
+
+// zeta: 글 조각의 글꼴 위(ascent)·아래(descent) 끝을 최종 좌표로 — PowerPoint는 그라데이션 높이를 줄 높이로 잡는다
+basegfx::B2DRange zetaPortionVerticalRange(const DrawPortionInfo& rInfo,
+                                           const basegfx::B2DHomMatrix& rTransformA,
+                                           const basegfx::B2DHomMatrix& rTransformB)
+{
+    drawinglayer::primitive2d::TextLayouterDevice aLayouter;
+    aLayouter.setFont(rInfo.mrFont);
+    basegfx::B2DHomMatrix aTransform(rTransformA);
+    aTransform.translate(rInfo.mrStartPos.X(), rInfo.mrStartPos.Y());
+    aTransform *= rTransformB;
+    basegfx::B2DRange aRange(aTransform * basegfx::B2DPoint(0.0, -aLayouter.getFontAscent()));
+    aRange.expand(aTransform * basegfx::B2DPoint(0.0, aLayouter.getFontDescent()));
+    return aRange;
+}
+}
+
+void TextHierarchyBreakup::zetaApplyTextGradients()
+{
+    // PowerPoint 2021 실측(창 없이 COM Export): 글자 그라데이션은 줄마다 처음부터 다시 — 가로는 그 줄 글자 전체
+    // (그라데이션이 낱말 하나뿐이어도 줄 전체 범위의 가운데 색), 세로는 줄 높이
+    const drawinglayer::geometry::ViewInformation2D aViewInfo;
+    basegfx::B2DRange aInk;
+    for (const auto& rPortion : maTextPortionPrimitives)
+        if (rPortion)
+            aInk.expand(rPortion->getB2DRange(aViewInfo));
+    basegfx::B2DRange aVertical;
+    for (const auto& rGrad : maZetaGradientPortions)
+        aVertical.expand(rGrad.maVertical);
+    if (aInk.isEmpty())
+    {
+        maZetaGradientPortions.clear();
+        return;
+    }
+    const basegfx::B2DRange aDefinition(aInk.getMinX(),
+                                        aVertical.isEmpty() ? aInk.getMinY() : aVertical.getMinY(),
+                                        aInk.getMaxX(),
+                                        aVertical.isEmpty() ? aInk.getMaxY() : aVertical.getMaxY());
+    for (const auto& rGrad : maZetaGradientPortions)
+    {
+        drawinglayer::attribute::FillGradientAttribute aAttr;
+        if (!zetaParseTextGradient(rGrad.maSpec, aAttr))
+            continue;
+        for (size_t i = rGrad.mnStart; i < rGrad.mnEnd && i < maTextPortionPrimitives.size(); ++i)
+        {
+            const drawinglayer::primitive2d::Primitive2DReference xText(maTextPortionPrimitives[i]);
+            if (!xText)
+                continue;
+            basegfx::B2DRange aOutput(aDefinition);
+            aOutput.expand(xText->getB2DRange(aViewInfo));
+            // 글자를 검정으로 그린 것을 밝기 마스크로(흰 곳은 투명) 그라데이션을 글자 모양대로 남긴다
+            drawinglayer::primitive2d::Primitive2DContainer aMask{
+                new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
+                    basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(aOutput)),
+                    basegfx::BColor(1.0, 1.0, 1.0)),
+                new drawinglayer::primitive2d::ModifiedColorPrimitive2D(
+                    drawinglayer::primitive2d::Primitive2DContainer{ xText },
+                    std::make_shared<basegfx::BColorModifier_replace>(
+                        basegfx::BColor(0.0, 0.0, 0.0)))
+            };
+            drawinglayer::primitive2d::Primitive2DContainer aContent{
+                new drawinglayer::primitive2d::FillGradientPrimitive2D(aOutput, aDefinition, aAttr)
+            };
+            maTextPortionPrimitives[i] = new drawinglayer::primitive2d::TransparencePrimitive2D(
+                std::move(aContent), std::move(aMask));
+        }
+    }
+    maZetaGradientPortions.clear();
+}
+
 void TextHierarchyBreakup::flushTextPortionPrimitivesToLinePrimitives()
 {
+    if (!maZetaGradientPortions.empty())
+        zetaApplyTextGradients();
+
     // only create a line primitive when we had content; there is no need for
     // empty line primitives (contrary to paragraphs, see below).
     if (!maTextPortionPrimitives.empty())
@@ -603,8 +729,16 @@ void TextHierarchyBreakup::flushLinePrimitivesToParagraphPrimitives(sal_Int32 nP
 
 void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPortionInfo)
 {
+    const size_t nBefore(maTextPortionPrimitives.size());
     CreateTextPortionPrimitivesFromDrawPortionInfo(maTextPortionPrimitives, maNewTransformA,
                                                    maNewTransformB, rDrawPortionInfo);
+    if (!rDrawPortionInfo.maZetaTextGradient.isEmpty()
+        && maTextPortionPrimitives.size() > nBefore)
+    {
+        maZetaGradientPortions.push_back(
+            { nBefore, maTextPortionPrimitives.size(), rDrawPortionInfo.maZetaTextGradient,
+              zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA, maNewTransformB) });
+    }
 
     if (rDrawPortionInfo.mbEndOfLine || rDrawPortionInfo.mbEndOfParagraph)
     {

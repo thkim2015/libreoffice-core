@@ -46,6 +46,8 @@
 #include <editeng/charscaleitem.hxx>
 #include <editeng/numitem.hxx>
 #include <editeng/StripPortionsHelper.hxx>
+#include <svl/grabbagitem.hxx>
+#include <o3tl/string_view.hxx>
 #include <outleeng.hxx>
 #include <TextPortion.hxx>
 #include <tools/gen.hxx>
@@ -496,6 +498,34 @@ void ImpEditEngine::CheckPageOverflow()
         mbNeedsChainingHandling = false;
     }
 
+}
+
+// zeta: 글 조각 첫 글자의 글자 그라데이션 — oox(pptx 열기)나 앱이 CharInteropGrabBag 'ZetaTextGradient'에 둔
+// 'ZG1 <열 때 글자색> ...'. 글자색을 바꾼 조각은 PowerPoint처럼 단색이므로 지금 글자색이 그 색일 때만 돌려준다.
+static OUString lcl_ZetaTextGradient(const ContentNode& rNode, sal_Int32 nPos, const Color& rFontColor)
+{
+    const SfxGrabBagItem* pItem = nullptr;
+    for (const auto& rAttr : rNode.GetCharAttribs().GetAttribs())
+    {
+        if (rAttr->Which() == EE_CHAR_GRABBAG && rAttr->GetStart() <= nPos && rAttr->GetEnd() > nPos)
+            pItem = static_cast<const SfxGrabBagItem*>(rAttr->GetItem());
+    }
+    if (!pItem && rNode.GetContentAttribs().HasItem(EE_CHAR_GRABBAG))
+        pItem = &rNode.GetContentAttribs().GetItem(EE_CHAR_GRABBAG);
+    if (!pItem)
+        return OUString();
+    const auto it = pItem->GetGrabBag().find(u"ZetaTextGradient"_ustr);
+    if (it == pItem->GetGrabBag().end())
+        return OUString();
+    OUString aSpec;
+    it->second >>= aSpec;
+    sal_Int32 nIdx = 0;
+    if (o3tl::getToken(aSpec, 0, ' ', nIdx) != u"ZG1" || nIdx < 0)
+        return OUString();
+    const Color aSolid(ColorTransparency, o3tl::toUInt32(o3tl::getToken(aSpec, 0, ' ', nIdx), 16));
+    if (aSolid.GetRGBColor() != rFontColor.GetRGBColor())
+        return OUString();
+    return aSpec;
 }
 
 static sal_Int32 ImplCalculateFontIndependentLineSpacing( const sal_Int32 nFontHeight )
@@ -3946,7 +3976,7 @@ void ImpEditEngine::StripAllPortions( OutputDevice& rOutDev, tools::Rectangle aC
                                     nTextStart, nTextLen);
 
                                 // StripPortions() data callback
-                                const DrawPortionInfo aInfo(
+                                DrawPortionInfo aInfo(
                                     aOutPos, aText, nTextStart, nTextLen, pDXArray, pKashidaArray,
                                     aTmpFont, nParaPortion, rTextPortion.GetRightToLeftLevel(),
                                     !aWrongSpellVector.empty() ? &aWrongSpellVector : nullptr,
@@ -3955,6 +3985,8 @@ void ImpEditEngine::StripAllPortions( OutputDevice& rOutDev, tools::Rectangle aC
                                     &aLocale,
                                     aOverlineColor,
                                     aTextLineColor);
+                                aInfo.maZetaTextGradient = lcl_ZetaTextGradient(
+                                    *rParaPortion.GetNode(), nIndex, aTmpFont.GetColor());
                                 rStripPortionsHelper.processDrawPortionInfo(aInfo);
 
                                 // #108052# remember that EOP is written already for this ParaPortion
