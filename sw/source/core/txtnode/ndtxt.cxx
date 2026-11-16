@@ -84,6 +84,7 @@
 #include <unotext.hxx>
 #include <wrtsh.hxx>
 #include <fmtpdsc.hxx>
+#include <fmtline.hxx>
 #include <svx/sdr/attribute/sdrallfillattributeshelper.hxx>
 #include <svl/itemiter.hxx>
 #include <undobj.hxx>
@@ -3184,6 +3185,20 @@ SwTextNode* SwTextNode::MakeNewTextNode( const SwNode& rPosNd, bool bNext,
                 aClearWhichIds.push_back( RES_PARATR_SPLIT );
             bRemoveFromCache = true;
         }
+        // weboffice: a line numbering restart ("restart at this paragraph" = Word section start) belongs to
+        // the first part only - the successor keeps the count flag but does not restart again
+        std::optional<SwFormatLineNumber> oLineNumberNoRestart;
+        if (const SwFormatLineNumber* pLineNumber = pTmpSet->GetItemIfSet(RES_LINENUMBER, false))
+        {
+            if (pLineNumber->GetStartValue() != 0)
+            {
+                oLineNumberNoRestart.emplace(*pLineNumber);
+                oLineNumberNoRestart->SetStartValue(0);
+                if (bNext)
+                    oNewAttrSet->Put(*oLineNumberNoRestart);
+                bRemoveFromCache = true;
+            }
+        }
         if(SfxItemState::SET == pTmpSet->GetItemState(RES_PARATR_NUMRULE, false))
         {
             SwNumRule * pRule = GetNumRule();
@@ -3205,6 +3220,8 @@ SwTextNode* SwTextNode::MakeNewTextNode( const SwNode& rPosNd, bool bNext,
 
         if ( !aClearWhichIds.empty() )
             bRemoveFromCache = 0 != ClearItemsFromAttrSet( aClearWhichIds );
+        if (!bNext && oLineNumberNoRestart)
+            SetAttr(*oLineNumberNoRestart);
 
         if( !bNext && bRemoveFromCache )
         {
