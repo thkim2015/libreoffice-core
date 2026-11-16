@@ -3980,7 +3980,24 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
         mpFS->endElementNS( XML_a, XML_spcAft );
     }
 
-    if (!bWriteNumbering)
+    // A master list level without bullets says so: with no a:bu* element PowerPoint falls back
+    // to the bullets of its own defaults, as the slide master carries no p:txStyles.
+    bool bListStyleNoNumbering = false;
+    if (bWriteNumbering && bIsListStyle)
+    {
+        bListStyleNoNumbering = true;
+        Reference<XIndexAccess> xRules;
+        if (nLevel >= 0 && GetProperty(rXPropSet, u"NumberingRules"_ustr) && (mAny >>= xRules)
+            && xRules.is() && nLevel < xRules->getCount())
+        {
+            const PropertyValues aLevel = xRules->getByIndex(nLevel).get<PropertyValues>();
+            for (const PropertyValue& rRule : aLevel)
+                if (rRule.Name == "NumberingType" && rRule.Value.hasValue())
+                    bListStyleNoNumbering = rRule.Value.get<sal_Int16>() == style::NumberingType::NUMBER_NONE;
+        }
+    }
+
+    if (!bWriteNumbering || bListStyleNoNumbering)
         mpFS->singleElementNS(XML_a, XML_buNone);
     else
         WriteParagraphNumbering( rXPropSet, fFirstCharHeight, nLevel );
