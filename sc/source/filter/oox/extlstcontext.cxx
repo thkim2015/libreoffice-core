@@ -92,10 +92,12 @@ css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ExtCfRuleCont
     const OUString& /*Namespace*/, const OUString& Name,
     const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs )
 {
-    if (getCurrentElement() == XLS14_TOKEN( dataBar ) && (Name == "borderColor" || Name == "negativeBorderColor"))
+    // the parser passes unknown elements as prefix:localName
+    std::u16string_view aLocal = Name.subView(Name.lastIndexOf(':') + 1);
+    if (getCurrentElement() == XLS14_TOKEN( dataBar ) && (aLocal == u"borderColor" || aLocal == u"negativeBorderColor"))
     {
         ExtCfDataBarRuleRef xRule = getCondFormats().createExtCfDataBarRule(mpTarget);
-        xRule->importBorderColor( AttributeList( Attribs ), Name == "negativeBorderColor" );
+        xRule->importBorderColor( AttributeList( Attribs ), aLocal == u"negativeBorderColor" );
     }
     return nullptr;
 }
