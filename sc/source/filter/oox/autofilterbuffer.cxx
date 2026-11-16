@@ -859,7 +859,12 @@ void AutoFilter::finalizeImport(const rtl::Reference<ScDatabaseRangeObj>& rxData
 
     aParam.maKeyState[0].bDoSort = true;
     aParam.maKeyState[0].bAscending = !rSorConditionLoaded.mbDescending;
-    aParam.maKeyState[0].nField += nStartPos;
+    // ZetaOffice: the key is the sortCondition's column (was always the first column of the range)
+    if (rSorConditionLoaded.maRange.aStart.Col() >= maRange.aStart.Col()
+        && rSorConditionLoaded.maRange.aStart.Col() <= maRange.aEnd.Col())
+        aParam.maKeyState[0].nField = rSorConditionLoaded.maRange.aStart.Col();
+    else
+        aParam.maKeyState[0].nField += nStartPos;
 
     ScDBData* pDBData = rDoc.GetDBAtArea(
         nSheet,
