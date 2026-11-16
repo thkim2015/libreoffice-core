@@ -1900,7 +1900,7 @@ void XclExpChartObj::SaveXml( XclExpXmlStream& rStrm )
     {
         // ZetaOffice: 'Print object' off -> fPrintsWithSheet="0"
         SdrObject* pPrintObj = SdrObject::getSdrObjectFromXShape( mxShape );
-        const bool bNoPrint = pPrintObj && !pPrintObj->IsPrintable();
+        const bool bNoPrint = pPrintObj && !pPrintObj->IsPrintable() && pPrintObj->IsVisible(); // hidden shapes are also unprintable
         pDrawing->singleElement( FSNS( XML_xdr, XML_clientData),
                 // OOXTODO: XML_fLocksWithSheet
                 XML_fPrintsWithSheet, sax_fastparser::UseIf("0", bNoPrint)
