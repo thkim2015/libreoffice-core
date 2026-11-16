@@ -3725,14 +3725,21 @@ void WW8AttributeOutput::Redline( const SwRedlineData* pRedline )
         break;
 
     case RedlineType::Format:
-        // like Word 2002+ (sprmCPropRMark90 is not read back by Word)
-        m_rWW8Export.InsUInt16( NS_sprm::CPropRMark::val );
-        m_rWW8Export.m_pO->push_back( 7 );       // len
-        m_rWW8Export.m_pO->push_back( 1 );
-        m_rWW8Export.InsUInt16( m_rWW8Export.AddRedlineAuthor( pRedline->GetAuthor() ) );
-        m_rWW8Export.InsUInt32(sw::ms::DateTime2DTTM(
+    {
+        // like Word 2002+: sprmCPropRMark, then sprmCWall 1 in front of the run properties -- the
+        // sprms before the "wall" are the old properties (not kept), the ones after it the new
+        ww::bytes aRMark;
+        SwWW8Writer::InsUInt16(aRMark, NS_sprm::CPropRMark::val);
+        aRMark.push_back(7); // len
+        aRMark.push_back(1);
+        SwWW8Writer::InsUInt16(aRMark, m_rWW8Export.AddRedlineAuthor(pRedline->GetAuthor()));
+        SwWW8Writer::InsUInt32(aRMark, sw::ms::DateTime2DTTM(
             bRemovePersonalInfo ? DateTime(DateTime::EMPTY) : pRedline->GetTimeStamp()));
+        SwWW8Writer::InsUInt16(aRMark, NS_sprm::CWall::val);
+        aRMark.push_back(1);
+        m_rWW8Export.m_pO->insert(m_rWW8Export.m_pO->begin(), aRMark.begin(), aRMark.end());
         break;
+    }
     default:
         OSL_ENSURE(false, "Unhandled redline type for export");
         break;
@@ -3762,12 +3769,19 @@ void WW8AttributeOutput::EndParagraphProperties(const SfxItemSet&, const SwRedli
         = SvtSecurityOptions::IsOptionSet(SvtSecurityOptions::EOption::DocWarnRemovePersonalInfo)
           && !SvtSecurityOptions::IsOptionSet(
                  SvtSecurityOptions::EOption::DocWarnKeepRedlineInfo);
-    m_rWW8Export.InsUInt16(NS_sprm::PPropRMark::val);
-    m_rWW8Export.m_pO->push_back(7); // len
-    m_rWW8Export.m_pO->push_back(1);
-    m_rWW8Export.InsUInt16(m_rWW8Export.AddRedlineAuthor(pRedlineData->GetAuthor()));
-    m_rWW8Export.InsUInt32(sw::ms::DateTime2DTTM(
+    // like Word: after the style, sprmPPropRMark and sprmPWall 1 in front of the paragraph
+    // properties (the sprms before the "wall" are the old properties, not kept)
+    ww::bytes aRMark;
+    SwWW8Writer::InsUInt16(aRMark, NS_sprm::PPropRMark::val);
+    aRMark.push_back(7); // len
+    aRMark.push_back(1);
+    SwWW8Writer::InsUInt16(aRMark, m_rWW8Export.AddRedlineAuthor(pRedlineData->GetAuthor()));
+    SwWW8Writer::InsUInt32(aRMark, sw::ms::DateTime2DTTM(
         bRemovePersonalInfo ? DateTime(DateTime::EMPTY) : pRedlineData->GetTimeStamp()));
+    SwWW8Writer::InsUInt16(aRMark, NS_sprm::PWall::val);
+    aRMark.push_back(1);
+    const size_t nAfterStyle = std::min<size_t>(2, m_rWW8Export.m_pO->size());
+    m_rWW8Export.m_pO->insert(m_rWW8Export.m_pO->begin() + nAfterStyle, aRMark.begin(), aRMark.end());
 }
 
 void MSWordExportBase::OutputContentNode( SwContentNode& rNode )
