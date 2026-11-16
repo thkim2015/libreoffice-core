@@ -2324,14 +2324,21 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     case NS_ooxml::LN_CT_PBdr_bar:
         break;
     case NS_ooxml::LN_CT_PPrBase_suppressAutoHyphens:
-        rContext->Insert(PROP_PARA_IS_HYPHENATION, uno::Any( nIntValue == 0 ));
-        // explicit "do not hyphenate": with Word automatic hyphenation off the DOCX export writes
-        // w:suppressAutoHyphens only here, see DocxAttributeOutput::ParaHyphenZone()
+    {
+        // with Word automatic hyphenation off, an explicit "allow hyphenation" does not hyphenate
+        // either (Word hyphenates only with the document setting on)
+        const bool bWordAutoOff = !m_pImpl->GetSettingsTable()->GetAutoHyphenation();
+        rContext->Insert(PROP_PARA_IS_HYPHENATION, uno::Any( nIntValue == 0 && !bWordAutoOff ));
+        // explicit "do not hyphenate" (or "allow" with automatic hyphenation off): with Word
+        // automatic hyphenation off the DOCX export writes w:suppressAutoHyphens only here,
+        // see DocxAttributeOutput::ParaHyphenZone()
         if (nIntValue != 0)
             rContext->Insert(PROP_PARA_SUPPRESS_AUTO_HYPHENS, uno::Any(true), true, PARA_GRAB_BAG);
+        else if (bWordAutoOff)
+            rContext->Insert(PROP_PARA_SUPPRESS_AUTO_HYPHENS, uno::Any(false), true, PARA_GRAB_BAG);
         // if hyphenation is enabled, don't lose other paragraph-level
         // hyphenation settings of SvxHyphenZoneItem
-        if ( nIntValue == 0 )
+        if ( nIntValue == 0 && !bWordAutoOff )
         {
             rContext->Insert(PROP_PARA_HYPHENATION_KEEP,
                             uno::Any(m_pImpl->GetSettingsTable()->GetHyphenationKeep()));
@@ -2339,6 +2346,7 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                             uno::Any(text::ParagraphHyphenationKeepType::COLUMN));
         }
         break;
+    }
     case NS_ooxml::LN_CT_FramePr_h:
         break;
     case NS_ooxml::LN_CT_PrBase_shd:

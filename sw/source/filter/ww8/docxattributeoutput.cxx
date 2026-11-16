@@ -10291,18 +10291,21 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
 void DocxAttributeOutput::ParaHyphenZone( const SvxHyphenZoneItem& rHyphenZone )
 {
     // automatic hyphenation off in the imported Word document: keep Word's default "allowed",
-    // only the explicit "do not hyphenate" kept by the import gets w:suppressAutoHyphens
+    // only the explicit "do not hyphenate" or "allow" kept by the import gets w:suppressAutoHyphens
     if (!rHyphenZone.IsHyphen() && m_rExport.IsWordAutoHyphenationOff())
     {
         bool bSuppress = false;
+        bool bExplicit = false;
         if (auto pBag = static_cast<const SfxGrabBagItem*>(m_rExport.HasItem(RES_PARATR_GRABBAG)))
         {
             auto it = pBag->GetGrabBag().find(u"ParaSuppressAutoHyphens"_ustr);
             if (it != pBag->GetGrabBag().end())
-                it->second >>= bSuppress;
+                bExplicit = (it->second >>= bSuppress);
         }
         if (bSuppress)
             m_pSerializer->singleElementNS(XML_w, XML_suppressAutoHyphens);
+        else if (bExplicit)
+            m_pSerializer->singleElementNS(XML_w, XML_suppressAutoHyphens, FSNS(XML_w, XML_val), "false");
         return;
     }
     m_pSerializer->singleElementNS( XML_w, XML_suppressAutoHyphens,
