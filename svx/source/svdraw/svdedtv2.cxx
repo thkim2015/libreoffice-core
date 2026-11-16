@@ -30,6 +30,7 @@
 #include <svx/dialmgr.hxx>
 #include <svx/sdooitm.hxx>
 #include <svx/sdshitm.hxx>
+#include <svx/sdtagitm.hxx>
 #include <svx/xfillit0.hxx>
 #include <svx/xlineit0.hxx>
 #include <svx/xtextit0.hxx>
@@ -1284,23 +1285,16 @@ size_t SdrEditView::FragmentMarkedObjects()
         SdrObject* pObj = pM->GetMarkedSdrObj();
         if (!ImpCanConvertForCombine(pObj))
             continue;
-        // outline only: the text of the object is not part of the area
-        rtl::Reference<SdrObject> xPoly = pObj->DoConvertToPolyObj(true, false);
-        if (!xPoly)
-            continue;
+        // outline only (the text of the object is not part of the area): the
+        // closed parts of the object outline, holes found by nesting
         basegfx::B2DPolyPolygon aArea;
-        SdrObjListIter aIter(*xPoly, SdrIterMode::DeepWithGroups);
-        while (aIter.IsMore())
-        {
-            SdrPathObj* pPathObj = dynamic_cast<SdrPathObj*>(aIter.Next());
-            if (!pPathObj || !pPathObj->IsClosed())
-                continue;
-            basegfx::B2DPolyPolygon aTmp
-                = basegfx::utils::simplifyCurveSegments(pPathObj->GetPathPoly());
-            aTmp = basegfx::utils::prepareForPolygonOperation(aTmp);
-            aArea = aArea.count() ? basegfx::utils::solvePolygonOperationOr(aArea, aTmp)
-                                  : std::move(aTmp);
-        }
+        for (const basegfx::B2DPolygon& rPart : pObj->TakeXorPoly())
+            if (rPart.isClosed() && rPart.count() > 2)
+                aArea.append(rPart);
+        if (!aArea.count())
+            continue;
+        aArea = basegfx::utils::simplifyCurveSegments(aArea);
+        aArea = basegfx::utils::prepareForPolygonOperation(aArea);
         if (!aArea.count())
             continue;
         if (!pAttrObj || pM->getTimeStamp() < nFirstTime)
@@ -1359,8 +1353,11 @@ size_t SdrEditView::FragmentMarkedObjects()
         rtl::Reference<SdrPathObj> pPath = new SdrPathObj(
             pAttrObj->getSdrModelFromSdrObject(), SdrObjKind::PathFill, std::move(rPiece));
         ImpCopyAttributes(pAttrObj, pPath.get());
+        // keep the piece geometry: the text must not grow or shrink the frame
+        pPath->SetMergedItem(makeSdrTextAutoGrowHeightItem(false));
+        pPath->SetMergedItem(makeSdrTextAutoGrowWidthItem(false));
         if (pText)
-            pPath->NbcSetOutlinerParaObject(*pText);
+            pPath->NbcSetOutlinerParaObject(*pText, false);
         pInsOL->InsertObject(pPath.get(), nInsPos++);
         if (bUndo)
             AddUndo(GetModel().GetSdrUndoFactory().CreateUndoNewObject(*pPath));
