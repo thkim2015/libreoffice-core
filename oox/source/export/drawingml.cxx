@@ -123,6 +123,7 @@
 #include <vcl/alpha.hxx>
 #include <vcl/cvtgrf.hxx>
 #include <vcl/gfxlink.hxx>
+#include <vcl/graphicfilter.hxx>
 #include <vcl/svapp.hxx>
 #include <vcl/outdev.hxx>
 #include <vcl/embeddedfontsmanager.hxx>
@@ -1808,6 +1809,42 @@ void DrawingML::WriteXGraphicBlip(uno::Reference<beans::XPropertySet> const & rX
 
     Graphic aGraphic(rxGraphic);
 
+    // ZETA: a baked recolor (grab bag BlipRecolorProperties, set on import or by the editor) is written
+    // back as the original image plus its a:blip children, so PowerPoint keeps it adjustable.
+    // Only while the original still matches the shown picture in pixel size (not replaced or compressed).
+    OUString aRecolorXml;
+    if (GetProperty(rXPropSet, u"InteropGrabBag"_ustr))
+    {
+        Sequence<PropertyValue> aGrabBag;
+        mAny >>= aGrabBag;
+        for (const auto& rProp : aGrabBag)
+        {
+            Sequence<PropertyValue> aRecolor;
+            if (rProp.Name != "BlipRecolorProperties" || !(rProp.Value >>= aRecolor))
+                continue;
+            Sequence<sal_Int8> aData;
+            OUString aEffects;
+            for (const auto& rItem : aRecolor)
+            {
+                if (rItem.Name == "OriginalData")
+                    rItem.Value >>= aData;
+                else if (rItem.Name == "Effects")
+                    rItem.Value >>= aEffects;
+            }
+            if (!aData.hasElements() || aEffects.isEmpty())
+                break;
+            SvMemoryStream aStream(const_cast<sal_Int8*>(aData.getConstArray()), aData.getLength(), StreamMode::READ);
+            Graphic aOriginal;
+            if (GraphicFilter::GetGraphicFilter().ImportGraphic(aOriginal, u"", aStream) == ERRCODE_NONE
+                && aOriginal.GetSizePixel() == aGraphic.GetSizePixel())
+            {
+                aGraphic = aOriginal;
+                aRecolorXml = aEffects;
+            }
+            break;
+        }
+    }
+
     sRelId = writeGraphicToStorage(aGraphic, bRelPathToMedia);
 
     if (isDiagaramExport())
@@ -1824,6 +1861,10 @@ void DrawingML::WriteXGraphicBlip(uno::Reference<beans::XPropertySet> const & rX
         if (!sSvgRelId.isEmpty())
             aExporter.writeSvgExtension(sSvgRelId);
     }
+
+    // ZETA: recolor children first, like PowerPoint (a:clrChange / a:biLevel / a:duotone before a:lum)
+    if (!aRecolorXml.isEmpty())
+        mpFS->write(aRecolorXml);
 
     WriteImageBrightnessContrastTransparence(rXPropSet);
 
