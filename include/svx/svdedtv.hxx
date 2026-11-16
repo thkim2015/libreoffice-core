@@ -286,6 +286,11 @@ public:
     // SID_POLY_MERGE, SID_POLY_SUBSTRACT, SID_POLY_INTERSECT
     void MergeMarkedObjects(SdrMergeMode eMode);
 
+    // Split the marked objects into all the pieces their outlines cut each
+    // other into (PowerPoint "Merge Shapes > Fragment"). Every piece gets the
+    // attributes and text of the first selected object. Returns the piece count.
+    size_t FragmentMarkedObjects();
+
     // for distribution dialog function
     void DistributeMarkedObjects(sal_uInt16 SlotID);
 

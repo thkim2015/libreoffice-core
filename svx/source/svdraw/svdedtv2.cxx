@@ -1263,6 +1263,120 @@ void SdrEditView::MergeMarkedObjects(SdrMergeMode eMode)
         EndUndo();
 }
 
+size_t SdrEditView::FragmentMarkedObjects()
+{
+    const SdrMarkList& rMarkList = GetMarkedObjectList();
+    if (rMarkList.GetMarkCount() < 2)
+        return 0;
+    rMarkList.ForceSort();
+
+    // The first selected object gives attributes and text (like PowerPoint)
+    const SdrObject* pAttrObj = nullptr;
+    sal_Int64 nFirstTime = 0;
+    std::vector<basegfx::B2DPolyPolygon> aSources;
+    SdrMarkList aRemove;
+    SdrObjList* pInsOL = nullptr;
+    SdrPageView* pInsPV = nullptr;
+    size_t nInsPos = SAL_MAX_SIZE;
+    for (size_t a = 0; a < rMarkList.GetMarkCount(); ++a)
+    {
+        SdrMark* pM = rMarkList.GetMark(a);
+        SdrObject* pObj = pM->GetMarkedSdrObj();
+        if (!ImpCanConvertForCombine(pObj))
+            continue;
+        // outline only: the text of the object is not part of the area
+        rtl::Reference<SdrObject> xPoly = pObj->DoConvertToPolyObj(true, false);
+        if (!xPoly)
+            continue;
+        basegfx::B2DPolyPolygon aArea;
+        SdrObjListIter aIter(*xPoly, SdrIterMode::DeepWithGroups);
+        while (aIter.IsMore())
+        {
+            SdrPathObj* pPathObj = dynamic_cast<SdrPathObj*>(aIter.Next());
+            if (!pPathObj || !pPathObj->IsClosed())
+                continue;
+            basegfx::B2DPolyPolygon aTmp
+                = basegfx::utils::simplifyCurveSegments(pPathObj->GetPathPoly());
+            aTmp = basegfx::utils::prepareForPolygonOperation(aTmp);
+            aArea = aArea.count() ? basegfx::utils::solvePolygonOperationOr(aArea, aTmp)
+                                  : std::move(aTmp);
+        }
+        if (!aArea.count())
+            continue;
+        if (!pAttrObj || pM->getTimeStamp() < nFirstTime)
+        {
+            pAttrObj = pObj;
+            nFirstTime = pM->getTimeStamp();
+        }
+        aSources.push_back(std::move(aArea));
+        nInsPos = pObj->GetOrdNum() + 1;
+        pInsPV = pM->GetPageView();
+        pInsOL = pObj->getParentSdrObjListFromSdrObject();
+        aRemove.InsertEntry(SdrMark(pObj, pM->GetPageView()));
+    }
+    if (aSources.size() < 2 || !pInsOL)
+        return 0;
+
+    auto lcl_HasArea = [](const basegfx::B2DPolyPolygon& rPoly) {
+        // ignore slivers left by the clipper (area below 0.1 mm^2 in 1/100 mm)
+        return rPoly.count()
+               && basegfx::utils::getArea(basegfx::utils::adaptiveSubdivideByAngle(rPoly))
+                      > 1000.0;
+    };
+
+    // Every source cuts the pieces found so far into the part inside it and
+    // the part outside it; what is left of the source becomes a new piece.
+    std::vector<basegfx::B2DPolyPolygon> aPieces;
+    for (const basegfx::B2DPolyPolygon& rSource : aSources)
+    {
+        std::vector<basegfx::B2DPolyPolygon> aNext;
+        basegfx::B2DPolyPolygon aRest(rSource);
+        for (const basegfx::B2DPolyPolygon& rPiece : aPieces)
+        {
+            basegfx::B2DPolyPolygon aIn = basegfx::utils::solvePolygonOperationAnd(rPiece, rSource);
+            basegfx::B2DPolyPolygon aOut = basegfx::utils::solvePolygonOperationDiff(rPiece, rSource);
+            if (lcl_HasArea(aIn))
+                aNext.push_back(std::move(aIn));
+            if (lcl_HasArea(aOut))
+                aNext.push_back(std::move(aOut));
+            if (aRest.count())
+                aRest = basegfx::utils::solvePolygonOperationDiff(aRest, rPiece);
+        }
+        if (lcl_HasArea(aRest))
+            aNext.push_back(std::move(aRest));
+        aPieces = std::move(aNext);
+    }
+
+    const bool bUndo = IsUndoEnabled();
+    if (bUndo)
+        BegUndo(SvxResId(STR_EditMergeMergePoly), aRemove.GetMarkDescription());
+
+    const OutlinerParaObject* pText = pAttrObj->GetOutlinerParaObject();
+    UnmarkAllObj(pInsPV);
+    std::vector<SdrPathObj*> aNew;
+    for (basegfx::B2DPolyPolygon& rPiece : aPieces)
+    {
+        rtl::Reference<SdrPathObj> pPath = new SdrPathObj(
+            pAttrObj->getSdrModelFromSdrObject(), SdrObjKind::PathFill, std::move(rPiece));
+        ImpCopyAttributes(pAttrObj, pPath.get());
+        if (pText)
+            pPath->NbcSetOutlinerParaObject(*pText);
+        pInsOL->InsertObject(pPath.get(), nInsPos++);
+        if (bUndo)
+            AddUndo(GetModel().GetSdrUndoFactory().CreateUndoNewObject(*pPath));
+        aNew.push_back(pPath.get());
+    }
+
+    aRemove.ForceSort();
+    DeleteMarkedList(aRemove);
+    for (size_t i = 0; i < aNew.size(); ++i)
+        MarkObj(aNew[i], pInsPV, false, i + 1 < aNew.size());
+
+    if (bUndo)
+        EndUndo();
+    return aNew.size();
+}
+
 void SdrEditView::EqualizeMarkedObjects(bool bWidth)
 {
     const SdrMarkList& rMarkList = GetMarkedObjectList();
