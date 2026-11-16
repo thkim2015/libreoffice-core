@@ -2887,7 +2887,8 @@ sal_Int32 SwEscherEx::WriteTextFlyFrame(const DrawObj &rObj, sal_uInt32 nShapeId
         break;
         case SvxFrameDirection::Vertical_LR_TB: //not really possible in word
         case SvxFrameDirection::Vertical_RL_TB:
-            nFlow=mso_txflTtoBA;
+            // what Word writes for its vertical (East Asian) text box
+            nFlow=mso_txflVertN;
         break;
         case SvxFrameDirection::Vertical_LR_BT:
             nFlow = mso_txflBtoT;

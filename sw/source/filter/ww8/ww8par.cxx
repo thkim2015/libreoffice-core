@@ -745,10 +745,13 @@ rtl::Reference<SdrObject> SwMSDffManager::ProcessObj(SvStream& rSt,
                     case mso_txflBtoT:
                         nTextRotationAngle = 9000_deg100;
                     break;
-                    case mso_txflVertN:
                     case mso_txflTtoBN:
                         nTextRotationAngle = 27000_deg100;
                         break;
+                    // vertical, glyphs not rotated: the East Asian vertical text box of
+                    // Word (DOCX layout-flow:vertical;mso-layout-flow-alt:top-to-bottom),
+                    // not a text rotated by 270 degrees in a turned box
+                    case mso_txflVertN:
                     case mso_txflTtoBA:
                         bVerticalText = true;
                     break;
