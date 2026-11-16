@@ -1556,6 +1556,15 @@ bool XclExpCellAlign::FillFromItemSet(const XclRoot& rRoot, const SfxItemSet& rI
             if (eVerJustMethod == SvxCellJustifyMethod::Distribute)
                 mnVerAlign = EXC_XF_VER_DISTRIB;
         }
+        // weboffice: horizontal distributed + vertical justify method DISTRIBUTE outside
+        // vertical BLOCK = 'justify distributed' (see oox Alignment::finalizeImport)
+        else if (mnHorAlign == EXC_XF_HOR_DISTRIB
+                 && rItemSet.GetItem<SvxJustifyMethodItem>(ATTR_VER_JUSTIFY_METHOD)->GetValue()
+                    == SvxCellJustifyMethod::Distribute)
+        {
+            mbJustLastLine = true;
+            bUsed |= ScfTools::CheckItem( rItemSet, ATTR_VER_JUSTIFY_METHOD, bStyle );
+        }
     }
 
     return bUsed;
@@ -1618,7 +1627,7 @@ void XclExpCellAlign::SaveXml( XclExpXmlStream& rStrm ) const
             XML_wrapText,           ToPsz( mbLineBreak ),
             XML_indent,             OString::number(mnIndent),
             // OOXTODO: XML_relativeIndent,     mnIndent?
-            // OOXTODO: XML_justifyLastLine,
+            XML_justifyLastLine,    sax_fastparser::UseIf("1"_ostr, mbJustLastLine),
             XML_shrinkToFit,        ToPsz( mbShrink ),
             XML_readingOrder, sax_fastparser::UseIf(OString::number(mnTextDir), mnTextDir != EXC_XF_TEXTDIR_CONTEXT) );
 }
@@ -2146,6 +2155,7 @@ bool XclExpXF::Equals( const XclExpXF& rCmpXF ) const
 {
     return XclXFBase::Equals( rCmpXF ) &&
         (maProtection == rCmpXF.maProtection) && (maAlignment  == rCmpXF.maAlignment) &&
+        (maAlignment.mbJustLastLine == rCmpXF.maAlignment.mbJustLastLine) &&
         (maBorder     == rCmpXF.maBorder)     && (maArea       == rCmpXF.maArea)      &&
         (mnXclFont    == rCmpXF.mnXclFont)    && (mnXclNumFmt  == rCmpXF.mnXclNumFmt) &&
         (mnParentXFId == rCmpXF.mnParentXFId);

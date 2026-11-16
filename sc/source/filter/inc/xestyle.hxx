@@ -324,6 +324,8 @@ struct XclExpCellProt : public XclCellProt
     @descr  Provides functions to fill from item sets and to fill to Excel record data. */
 struct XclExpCellAlign : public XclCellAlign
 {
+    bool                mbJustLastLine = false; /// weboffice: xlsx justifyLastLine (see FillFromItemSet).
+
     /** Fills the alignment attributes from the passed item set.
         @descr  Fills only the attributes exported in the passed BIFF version.
         @param bForceLineBreak  true = Set line break flag unconditionally.

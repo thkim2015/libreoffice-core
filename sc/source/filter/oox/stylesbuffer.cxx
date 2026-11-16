@@ -1256,6 +1256,12 @@ void Alignment::finalizeImport()
 
     if (maModel.mnVerAlign == XML_distributed)
         maApiData.mnVerJustifyMethod = css::table::CellJustifyMethod::DISTRIBUTE;
+    // weboffice: 'justify distributed' (justifyLastLine) of horizontal distributed.
+    // The vertical justify method only matters for vertical BLOCK, so use it as marker
+    // there; export writes it back (XclExpCellAlign::SaveXml).
+    else if (maModel.mbJustLastLine && maModel.mnHorAlign == XML_distributed
+             && maModel.mnVerAlign != XML_justify)
+        maApiData.mnVerJustifyMethod = css::table::CellJustifyMethod::DISTRIBUTE;
 
     /*  indentation: expressed as number of blocks of 3 space characters in
         OOXML. */
