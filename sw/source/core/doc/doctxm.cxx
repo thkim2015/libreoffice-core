@@ -2177,7 +2177,9 @@ void SwTOXBaseSection::UpdatePageNum_( SwTextNode* pNd,
         pCharFormat = rDoc.MakeCharFormat(GetMainEntryCharStyle(), nullptr);
 
     // find the page numbers in aNumStr and set the character style
-    sal_Int32 nOffset = pNd->GetText().getLength() - aNumStr.getLength();
+    // aNumStr was inserted at nStartPos: in a run-in (comma separated) index
+    // the paragraph holds all entries, so the numbers are not at its end
+    sal_Int32 nOffset = nStartPos;
     SwFormatCharFormat aCharFormat(pCharFormat);
     for (size_t j = 0; j < xCharStyleIdx->size(); j += 2)
     {
