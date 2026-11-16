@@ -994,6 +994,10 @@ CellPropertyValuesSeq_t DomainMapperTableHandler::endTableGetCellProperties(Tabl
                 const sal_uInt32 nFirstCell = m_rDMapper_Impl.getTableManager().getGridBefore(nRow);
                 const sal_uInt32 nLastCell = m_aCellProperties[nRow].size() - m_rDMapper_Impl.getTableManager().getGridAfter(nRow) - 1;
                 lcl_computeCellBorders( rInfo.pTableBorders, *aCellIterator, nCell, nFirstCell, nLastCell, nRow, bIsEndRow, bMergedVertically );
+                // Fake cells for w:gridBefore/w:gridAfter: mark them, so DOCX export can write
+                // the skipped grid columns back instead of real (empty) cells.
+                if (nCell < nFirstCell || nCell > nLastCell)
+                    aCellIterator->get()->Insert(PROP_CELL_GRID_SKIP, uno::Any(true), true, CELL_GRAB_BAG);
 
                 //now set the default left+right border distance TODO: there's an sprm containing the default distance!
                 aCellIterator->get()->Insert( PROP_LEFT_BORDER_DISTANCE,

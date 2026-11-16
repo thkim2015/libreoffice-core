@@ -5229,12 +5229,97 @@ void DocxAttributeOutput::EndTable()
     m_aTableStyleConfs.pop_back();
 }
 
+namespace {
+/// Imported w:gridBefore/w:gridAfter placeholder cell that is still empty.
+bool lcl_IsGridSkipBox(const SwTableBox* pBox)
+{
+    const SwStartNode* pSttNd = pBox ? pBox->GetSttNd() : nullptr;
+    if (!pSttNd)
+        return false;
+    const SfxGrabBagItem* pItem = pBox->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG);
+    if (!pItem)
+        return false;
+    auto it = pItem->GetGrabBag().find(u"CellGridSkip"_ustr);
+    bool bSkip = false;
+    if (it == pItem->GetGrabBag().end() || !(it->second >>= bSkip) || !bSkip)
+        return false;
+    if (pSttNd->EndOfSectionIndex() - pSttNd->GetIndex() != SwNodeOffset(2))
+        return false;
+    const SwTextNode* pTextNd = pSttNd->GetNodes()[pSttNd->GetIndex() + 1]->GetTextNode();
+    return pTextNd && pTextNd->GetText().isEmpty();
+}
+
+/// Number of leading (bBefore) or trailing placeholder cells of a row; never all of them.
+size_t lcl_GridSkipCount(const SwTableLine* pLine, bool bBefore)
+{
+    const SwTableBoxes& rBoxes = pLine->GetTabBoxes();
+    const size_t nBoxes = rBoxes.size();
+    size_t nBefore = 0;
+    while (nBefore < nBoxes && lcl_IsGridSkipBox(rBoxes[nBefore]))
+        ++nBefore;
+    if (nBefore == nBoxes)
+        return 0;
+    if (bBefore)
+        return nBefore;
+    size_t nAfter = 0;
+    while (nAfter < nBoxes - nBefore && lcl_IsGridSkipBox(rBoxes[nBoxes - 1 - nAfter]))
+        ++nAfter;
+    return nAfter;
+}
+}
+
 void DocxAttributeOutput::StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner )
 {
     m_pSerializer->startElementNS(XML_w, XML_tr);
 
     // Output the row properties
     m_pSerializer->startElementNS(XML_w, XML_trPr);
+
+    // Skipped grid columns before/after the row (imported w:gridBefore/w:gridAfter cells)
+    if (const SwTableBox* pFirstBox = pTableTextNodeInfoInner->getTableBox())
+    {
+        const SwTableLine* pLine = pFirstBox->GetUpper();
+        const size_t nBefore = lcl_GridSkipCount(pLine, true);
+        const size_t nAfter = lcl_GridSkipCount(pLine, false);
+        if (nBefore || nAfter)
+        {
+            InitTableHelper(pTableTextNodeInfoInner);
+            const size_t nBoxes = pLine->GetTabBoxes().size();
+            const sal_uInt32 nRow = pTableTextNodeInfoInner->getRow();
+            const SwWriteTableRows& rRows = m_xTableWrt->GetRows();
+            ww8::GridColsPtr pGridCols = GetGridCols(pTableTextNodeInfoInner);
+            auto lcl_span = [&](size_t nFrom, size_t nTo) {
+                sal_Int32 nSpan = 0;
+                for (size_t i = nFrom; i < nTo; ++i)
+                {
+                    sal_uInt16 nColSpan = 1;
+                    if (nRow < rRows.size() && i < rRows[nRow]->GetCells().size())
+                        nColSpan = rRows[nRow]->GetCells()[i]->GetColSpan();
+                    nSpan += nColSpan;
+                }
+                return nSpan;
+            };
+            auto lcl_edge = [&](size_t nCell) -> SwTwips {
+                if (nCell == 0)
+                    return 0;
+                return nCell - 1 < pGridCols->size() ? pGridCols->at(nCell - 1) : 0;
+            };
+            if (nBefore)
+                m_pSerializer->singleElementNS(XML_w, XML_gridBefore, FSNS(XML_w, XML_val),
+                                               OString::number(lcl_span(0, nBefore)));
+            if (nAfter)
+                m_pSerializer->singleElementNS(XML_w, XML_gridAfter, FSNS(XML_w, XML_val),
+                                               OString::number(lcl_span(nBoxes - nAfter, nBoxes)));
+            if (nBefore)
+                m_pSerializer->singleElementNS(XML_w, XML_wBefore, FSNS(XML_w, XML_w),
+                                               OString::number(lcl_edge(nBefore)),
+                                               FSNS(XML_w, XML_type), "dxa");
+            if (nAfter)
+                m_pSerializer->singleElementNS(XML_w, XML_wAfter, FSNS(XML_w, XML_w),
+                                               OString::number(lcl_edge(nBoxes) - lcl_edge(nBoxes - nAfter)),
+                                               FSNS(XML_w, XML_type), "dxa");
+        }
+    }
 
     // Header row: tblHeader
     const SwTable *pTable = pTableTextNodeInfoInner->getTable( );
@@ -5309,6 +5394,23 @@ void DocxAttributeOutput::StartTableCell( ww8::WW8TableNodeInfoInner::Pointer_t 
     if (nChange != SwRedlineTable::npos)
         m_tableReference.m_bTableCellChanged = true;
 
+    // A w:gridBefore/w:gridAfter placeholder: written as trPr in StartTableRow(), so drop
+    // the whole cell. A ForSort mark keeps only the listed elements (w:tblGrid never
+    // occurs in an empty cell), so everything written until EndTableCell() is discarded.
+    m_bGridSkipCellOpen = false;
+    if (pTabBox && lcl_IsGridSkipBox(pTabBox))
+    {
+        const SwTableLine* pLine = pTabBox->GetUpper();
+        const size_t nPos = pLine->GetBoxPos(pTabBox);
+        const size_t nBoxes = pLine->GetTabBoxes().size();
+        if (nPos < lcl_GridSkipCount(pLine, true) || nPos >= nBoxes - lcl_GridSkipCount(pLine, false))
+        {
+            const uno::Sequence<sal_Int32> aKeepOnly{ FSNS(XML_w, XML_tblGrid) };
+            m_pSerializer->mark(Tag_GridSkipCell, aKeepOnly);
+            m_bGridSkipCellOpen = true;
+        }
+    }
+
     m_pSerializer->startElementNS(XML_w, XML_tc);
 
     // Write the cell properties here
@@ -5326,6 +5428,12 @@ void DocxAttributeOutput::EndTableCell(sal_uInt32 nCell)
         EndParaSdtBlock();
 
     m_pSerializer->endElementNS( XML_w, XML_tc );
+
+    if (m_bGridSkipCellOpen)
+    {
+        m_pSerializer->mergeTopMarks(Tag_GridSkipCell);
+        m_bGridSkipCellOpen = false;
+    }
 
     m_tableReference.m_bTableCellOpen = false;
     m_tableReference.m_bTableCellParaSdtOpen = false;
