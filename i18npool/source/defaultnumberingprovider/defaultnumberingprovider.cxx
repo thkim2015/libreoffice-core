@@ -1040,6 +1040,54 @@ DefaultNumberingProvider::makeNumberingString( const Sequence<beans::PropertyVal
                result += "- " + OUString::number(number) + " -";
                break;
 
+          // More Word formats (no IDL constants, see sw/inc/numberindash.hxx)
+          case 77: // decimalEnclosedFullstop
+          case 78: // decimalEnclosedParen
+               if (number >= 1 && number <= 20)
+                   result += OUStringChar(sal_Unicode((numType == 77 ? 0x2487 : 0x2473) + number));
+               else
+                   result += OUString::number(number);
+               break;
+          case 79: // hex
+               result += OUString::number(number, 16).toAsciiUpperCase();
+               break;
+          case 80: // decimalHalfWidth
+               result += OUString::number(number);
+               break;
+          case 81: // thaiNumbers
+          case 82: // taiwaneseDigital
+          case 83: // japaneseDigitalTenThousand
+          {
+               static const sal_Unicode aIdeo[] = { 0x25CB, 0x4E00, 0x4E8C, 0x4E09, 0x56DB,
+                                                    0x4E94, 0x516D, 0x4E03, 0x516B, 0x4E5D };
+               const OUString aDigits = OUString::number(number);
+               for (sal_Int32 i = 0; i < aDigits.getLength(); ++i)
+               {
+                   const int d = aDigits[i] - '0';
+                   if (d < 0 || d > 9)
+                       result += OUStringChar(aDigits[i]);
+                   else if (numType == 81)
+                       result += OUStringChar(sal_Unicode(0x0E50 + d));
+                   else if (d == 0 && numType == 83)
+                       result += OUStringChar(sal_Unicode(0x3007));
+                   else
+                       result += OUStringChar(aIdeo[d]);
+               }
+               break;
+          }
+          case 84: // ideographZodiacTraditional
+          {
+               static const sal_Unicode aStems[] = { 0x7532, 0x4E59, 0x4E19, 0x4E01, 0x620A,
+                                                     0x5DF1, 0x5E9A, 0x8F9B, 0x58EC, 0x7678 };
+               // Word writes U+620D for the 11th branch
+               static const sal_Unicode aBranches[] = { 0x5B50, 0x4E11, 0x5BC5, 0x536F, 0x8FB0, 0x5DF3,
+                                                        0x5348, 0x672A, 0x7533, 0x9149, 0x620D, 0x4EA5 };
+               const sal_Int32 n = number >= 1 ? (number - 1) % 60 : 0;
+               result += OUStringChar(aStems[n % 10]);
+               result += OUStringChar(aBranches[n % 12]);
+               break;
+          }
+
           case SZEKELY_ROVAS: // Old Hungarian
                natNum = NativeNumberMode::NATNUM12;
                locale.Language = "hu-Hung";
@@ -1160,6 +1208,14 @@ const Supported_NumberingType aSupportedTypes[] =
         {style::NumberingType::ARABIC_ZERO4, "0001, 0002, 0003, ...", LANG_ALL},
         {style::NumberingType::ARABIC_ZERO5, "00001, 00002, 00003, ...", LANG_ALL},
         {76 /* numberInDash */, "- 1 -, - 2 -, - 3 -, ...", LANG_ALL},
+        {77 /* decimalEnclosedFullstop */, nullptr, LANG_ALL},
+        {78 /* decimalEnclosedParen */, nullptr, LANG_ALL},
+        {79 /* hex */, "1, ..., 9, A, ..., F, 10, ...", LANG_ALL},
+        {80 /* decimalHalfWidth */, "1, 2, 3, ... (half-width)", LANG_ALL},
+        {81 /* thaiNumbers */, nullptr, LANG_CTL},
+        {82 /* taiwaneseDigital */, nullptr, LANG_CJK},
+        {83 /* japaneseDigitalTenThousand */, nullptr, LANG_CJK},
+        {84 /* ideographZodiacTraditional */, nullptr, LANG_CJK},
 };
 const sal_Int32 nSupported_NumberingTypes = std::size(aSupportedTypes);
 

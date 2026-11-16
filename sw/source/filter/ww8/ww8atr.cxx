@@ -841,6 +841,15 @@ sal_uInt8 WW8Export::GetNumId( sal_uInt16 eNumType )
     case style::NumberingType::NUMBER_UPPER_ZH: nRet = 38; break;
     case style::NumberingType::NUMBER_DIGITAL_KO: nRet = 41; break;
     case SW_NUMBERING_NUMBER_IN_DASH: nRet = 57; break; // numberInDash
+    case SW_NUMBERING_ENCLOSED_FULLSTOP: nRet = 26; break;
+    case SW_NUMBERING_ENCLOSED_PAREN: nRet = 27; break;
+    case SW_NUMBERING_HEX: nRet = 8; break;
+    case SW_NUMBERING_DECIMAL_HALF_WIDTH: nRet = 15; break;
+    case SW_NUMBERING_THAI_NUMBERS: nRet = 54; break;
+    case style::NumberingType::NUMBER_INDIC_DEVANAGARI: nRet = 51; break; // hindiNumbers
+    case SW_NUMBERING_TAIWANESE_DIGITAL: nRet = 36; break;
+    case SW_NUMBERING_JAPANESE_DIGITAL: nRet = 17; break;
+    case SW_NUMBERING_ZODIAC_TRADITIONAL: nRet = 32; break;
     case style::NumberingType::NUMBER_HANGUL_KO: nRet = 42; break;
     case style::NumberingType::NUMBER_LEGAL_KO: nRet = 43; break;
     case style::NumberingType::NUMBER_DIGITAL2_KO: nRet = 44; break;
