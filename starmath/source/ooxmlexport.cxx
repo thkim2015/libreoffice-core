@@ -611,4 +611,20 @@ void SmOoxmlExport::HandleBlank()
     m_pSerializer->endElementNS( XML_m, XML_r );
 }
 
+bool SmOoxmlExport::HandleFunction(const SmNode* pName, const SmNode* pArg, int nLevel)
+{
+    // A blank or placeholder is no argument: write the name alone, as before.
+    if (pArg->GetType() == SmNodeType::Blank || pArg->GetType() == SmNodeType::Place)
+        return false;
+    m_pSerializer->startElementNS(XML_m, XML_func);
+    m_pSerializer->startElementNS(XML_m, XML_fName);
+    HandleNode(pName, nLevel + 1);
+    m_pSerializer->endElementNS(XML_m, XML_fName);
+    m_pSerializer->startElementNS(XML_m, XML_e);
+    HandleNode(pArg, nLevel + 1);
+    m_pSerializer->endElementNS(XML_m, XML_e);
+    m_pSerializer->endElementNS(XML_m, XML_func);
+    return true;
+}
+
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */
