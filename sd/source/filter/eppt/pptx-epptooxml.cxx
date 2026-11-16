@@ -2273,20 +2273,8 @@ static bool lcl_ComparePageProperties(SdrPage* pMasterPage, SdrPage* pMasterNext
     SdrPageProperties& rProperties = pMasterPage->getSdrPageProperties();
     SdrPageProperties& rNextProperties = pMasterNext->getSdrPageProperties();
 
-    if (!rProperties.GetItemSet().Equals(rNextProperties.GetItemSet(), false))
-        return false;
-    const auto& pTheme = rProperties.getTheme();
-    const auto& pNextTheme = rNextProperties.getTheme();
-    if (pTheme.get() == pNextTheme.get())
-        return true;
-    // ZETA: a theme set on every master page through the API is a copy per page - the same theme
-    // all the same, so the pages still make one slide master with its layouts.
-    if (!pTheme || !pNextTheme)
-        return false;
-    uno::Any aTheme, aNextTheme;
-    pTheme->ToAny(aTheme);
-    pNextTheme->ToAny(aNextTheme);
-    return aTheme == aNextTheme;
+    return rProperties.GetItemSet().Equals(rNextProperties.GetItemSet(), false)
+           && rProperties.getTheme().get() == rNextProperties.getTheme().get();
 }
 
 void PowerPointExport::FindEquivalentMasterPages()
