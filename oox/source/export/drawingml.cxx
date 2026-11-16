@@ -3980,10 +3980,11 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
         mpFS->endElementNS( XML_a, XML_spcAft );
     }
 
-    // A master list level without bullets says so: with no a:bu* element PowerPoint falls back
-    // to the bullets of its own defaults, as the slide master carries no p:txStyles.
+    // A master list level or placeholder paragraph without bullets says so: with no a:bu* element
+    // PowerPoint falls back to the bullets of its own defaults, as the slide master carries no
+    // p:txStyles (and a slide placeholder whose idx the layout lacks inherits nothing else).
     bool bListStyleNoNumbering = false;
-    if (bWriteNumbering && bIsListStyle)
+    if (bWriteNumbering && (bIsListStyle || mbPlaceholder))
     {
         bListStyleNoNumbering = true;
         Reference<XIndexAccess> xRules;
