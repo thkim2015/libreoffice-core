@@ -1956,6 +1956,9 @@ Reference< XShape > const & Shape::createAndInsert(
         if(nShapeRotateInclCamera != 0 && bIsCustomShape)
             aShapeProps.setProperty(PROP_RotateAngle,
                                     sal_Int32(lcl_MSORotateAngleToAPIAngle(nShapeRotateInclCamera)));
+        // ZETA: the recolor XML has to be taken before pushToPropMap resolves (finalizes) the RGB colors
+        const OUString aRecolorXml = mpGraphicPropertiesPtr->maBlipProps.mxFillGraphic.is()
+            ? lcl_recolorXml(mpGraphicPropertiesPtr->maBlipProps, rGraphicHelper) : OUString();
         if( bIsEmbMedia ||
             bIsCustomShape ||
             aServiceName == "com.sun.star.drawing.GraphicObjectShape" ||
@@ -2382,7 +2385,7 @@ Reference< XShape > const & Shape::createAndInsert(
             const BlipFillProperties& rRecolorBlip = mpGraphicPropertiesPtr->maBlipProps;
             if (rRecolorBlip.mxFillGraphic.is())
             {
-                OUString aRecolor = lcl_recolorXml(rRecolorBlip, rGraphicHelper);
+                const OUString& aRecolor = aRecolorXml;
                 Graphic aOriginal(rRecolorBlip.mxFillGraphic);
                 if (!aRecolor.isEmpty() && aOriginal.IsGfxLink())
                 {
