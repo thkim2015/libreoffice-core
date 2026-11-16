@@ -51,6 +51,8 @@
 #include <i18nutil/unicode.hxx>
 #include <sal/log.hxx>
 #include <tools/debug.hxx>
+#include <algorithm>
+#include <functional>
 #include <memory>
 #include <vector>
 #include <vcl/graph.hxx>
@@ -1320,26 +1322,101 @@ size_t SdrEditView::FragmentMarkedObjects()
 
     // Every source cuts the pieces found so far into the part inside it and
     // the part outside it; what is left of the source becomes a new piece.
-    std::vector<basegfx::B2DPolyPolygon> aPieces;
+    // Each atomic piece remembers how many sources cover it.
+    std::vector<std::pair<basegfx::B2DPolyPolygon, sal_Int32>> aAtoms;
     for (const basegfx::B2DPolyPolygon& rSource : aSources)
     {
-        std::vector<basegfx::B2DPolyPolygon> aNext;
+        std::vector<std::pair<basegfx::B2DPolyPolygon, sal_Int32>> aNext;
         basegfx::B2DPolyPolygon aRest(rSource);
-        for (const basegfx::B2DPolyPolygon& rPiece : aPieces)
+        for (const auto& [rPiece, nCover] : aAtoms)
         {
             basegfx::B2DPolyPolygon aIn = basegfx::utils::solvePolygonOperationAnd(rPiece, rSource);
             basegfx::B2DPolyPolygon aOut = basegfx::utils::solvePolygonOperationDiff(rPiece, rSource);
             if (lcl_HasArea(aIn))
-                aNext.push_back(std::move(aIn));
+                aNext.emplace_back(std::move(aIn), nCover + 1);
             if (lcl_HasArea(aOut))
-                aNext.push_back(std::move(aOut));
+                aNext.emplace_back(std::move(aOut), nCover);
             if (aRest.count())
                 aRest = basegfx::utils::solvePolygonOperationDiff(aRest, rPiece);
         }
         if (lcl_HasArea(aRest))
-            aNext.push_back(std::move(aRest));
-        aPieces = std::move(aNext);
+            aNext.emplace_back(std::move(aRest), 1);
+        aAtoms = std::move(aNext);
     }
+
+    // ZETA: PowerPoint keeps only the outline segments crossed by an odd number
+    // of source outlines (coinciding edges cancel in pairs, measured with three
+    // rectangles: 5 pieces, not 7). So atomic pieces of the same coverage parity
+    // that share a boundary of some length are one piece, and an even piece that
+    // shares a boundary with the outside is dropped (it is not enclosed).
+    const size_t nAtoms = aAtoms.size();
+    std::vector<basegfx::B2DPolyPolygon> aFlat(nAtoms);
+    for (size_t i = 0; i < nAtoms; ++i)
+        aFlat[i] = basegfx::utils::adaptiveSubdivideByAngle(aAtoms[i].first);
+    basegfx::B2DPolyPolygon aUnion;
+    for (const basegfx::B2DPolyPolygon& rSource : aSources)
+        aUnion = aUnion.count() ? basegfx::utils::solvePolygonOperationOr(aUnion, rSource) : rSource;
+    const basegfx::B2DPolyPolygon aUnionFlat = basegfx::utils::adaptiveSubdivideByAngle(aUnion);
+    // length of the boundary of rA that lies on the boundary of rB (sampled, 1/100 mm)
+    auto lcl_SharedLength = [](const basegfx::B2DPolyPolygon& rA, const basegfx::B2DPolyPolygon& rB) {
+        if (!rA.getB2DRange().overlaps(rB.getB2DRange()))
+            return 0.0;
+        double fShared = 0.0;
+        for (const basegfx::B2DPolygon& rPoly : rA)
+        {
+            const sal_uInt32 nCount = rPoly.count();
+            for (sal_uInt32 n = 0; n < nCount; ++n)
+            {
+                const basegfx::B2DPoint aS = rPoly.getB2DPoint(n);
+                const basegfx::B2DPoint aE = rPoly.getB2DPoint((n + 1) % nCount);
+                const double fLen = basegfx::B2DVector(aE - aS).getLength();
+                const sal_Int32 nSteps = std::max<sal_Int32>(1, static_cast<sal_Int32>(fLen / 20.0));
+                for (sal_Int32 k = 0; k < nSteps; ++k)
+                {
+                    const basegfx::B2DPoint aP = aS + (aE - aS) * ((k + 0.5) / nSteps);
+                    sal_uInt32 nPoly, nEdge;
+                    double fCut;
+                    if (basegfx::utils::getSmallestDistancePointToPolyPolygon(rB, aP, nPoly, nEdge, fCut) < 3.0)
+                        fShared += fLen / nSteps;
+                }
+            }
+        }
+        return fShared;
+    };
+    constexpr double fMinShared = 50.0; // 0.5 mm: touching corners do not join pieces
+    std::vector<size_t> aGroup(nAtoms);
+    for (size_t i = 0; i < nAtoms; ++i)
+        aGroup[i] = i;
+    std::function<size_t(size_t)> lcl_Root = [&](size_t i) { return aGroup[i] == i ? i : aGroup[i] = lcl_Root(aGroup[i]); };
+    for (size_t i = 0; i < nAtoms; ++i)
+        for (size_t j = i + 1; j < nAtoms; ++j)
+            if ((aAtoms[i].second & 1) == (aAtoms[j].second & 1)
+                && lcl_SharedLength(aFlat[i], aFlat[j]) > fMinShared)
+                aGroup[lcl_Root(i)] = lcl_Root(j);
+    std::vector<bool> aOpen(nAtoms, false); // group touches the outside
+    for (size_t i = 0; i < nAtoms; ++i)
+        if (!(aAtoms[i].second & 1) && lcl_SharedLength(aFlat[i], aUnionFlat) > fMinShared)
+            aOpen[lcl_Root(i)] = true;
+    std::vector<basegfx::B2DPolyPolygon> aPieces;
+    std::vector<size_t> aPieceOf(nAtoms, SAL_MAX_SIZE);
+    for (size_t i = 0; i < nAtoms; ++i)
+    {
+        const size_t nRoot = lcl_Root(i);
+        if (aOpen[nRoot])
+            continue;
+        if (aPieceOf[nRoot] == SAL_MAX_SIZE)
+        {
+            aPieceOf[nRoot] = aPieces.size();
+            aPieces.push_back(aAtoms[i].first);
+        }
+        else
+        {
+            basegfx::B2DPolyPolygon& rPiece = aPieces[aPieceOf[nRoot]];
+            rPiece = basegfx::utils::solvePolygonOperationOr(rPiece, aAtoms[i].first);
+        }
+    }
+    if (aPieces.empty())
+        return 0;
 
     const bool bUndo = IsUndoEnabled();
     if (bUndo)
