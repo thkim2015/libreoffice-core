@@ -117,15 +117,34 @@ void SmWordExportBase::HandleTable(const SmNode* pNode, int nLevel)
         HandleAllSubNodes(pNode, nLevel);
 }
 
+bool SmWordExportBase::IsFunctionName(const SmNode* pNode)
+{
+    if (pNode && pNode->GetType() == SmNodeType::SubSup)
+        pNode = static_cast<const SmSubSupNode*>(pNode)->GetBody(); // sin^2 x
+    return pNode && pNode->GetType() == SmNodeType::Text
+           && static_cast<const SmTextNode*>(pNode)->GetFontDesc() == FNT_FUNCTION;
+}
+
 void SmWordExportBase::HandleAllSubNodes(const SmNode* pNode, int nLevel)
 {
     int size = pNode->GetNumSubNodes();
+    const bool bSequence
+        = pNode->GetType() == SmNodeType::Expression || pNode->GetType() == SmNodeType::Line;
     for (int i = 0; i < size; ++i)
     {
         // TODO remove when all types of nodes are handled properly
         if (pNode->GetSubNode(i) == nullptr)
         {
             SAL_WARN("starmath.wordbase", "Subnode is NULL, parent node not handled properly");
+            continue;
+        }
+        // "sin x": the function name and the next node of the sequence are one function
+        // (m:func in OOXML, Word puts a function space between them).
+        if (bSequence && i + 1 < size && pNode->GetSubNode(i + 1) != nullptr
+            && IsFunctionName(pNode->GetSubNode(i))
+            && HandleFunction(pNode->GetSubNode(i), pNode->GetSubNode(i + 1), nLevel + 1))
+        {
+            ++i;
             continue;
         }
         HandleNode(pNode->GetSubNode(i), nLevel + 1);

@@ -20,6 +20,7 @@
 #include <memory>
 #include "docxattributeoutput.hxx"
 #include "docxhelper.hxx"
+#include <unotools/fontdefs.hxx>
 #include "docxsdrexport.hxx"
 #include "docxexportfilter.hxx"
 #include "docxfootnotes.hxx"
@@ -8785,10 +8786,20 @@ void DocxAttributeOutput::CharEscapement( const SvxEscapementItem& rEscapement )
     }
 }
 
+/// A font name read from a .doc font table carries its alternate name ("Name;AltName", a Writer
+/// font list); Word takes w:rFonts literally, so write the first name only (as wwFont does for
+/// the font table).
+static OUString lcl_getDocxFontName(const SvxFontItem& rFont)
+{
+    const OUString aName = wwFontHelper::GetExportFontName(rFont);
+    sal_Int32 nIndex = 0;
+    return OUString(GetNextFontToken(aName, nIndex));
+}
+
 void DocxAttributeOutput::CharFont( const SvxFontItem& rFont)
 {
     GetExport().GetId( rFont ); // ensure font info is written to fontTable.xml
-    OUString sFontName(wwFontHelper::GetExportFontName(rFont));
+    OUString sFontName(lcl_getDocxFontName(rFont));
     if (sFontName.isEmpty())
         return;
 
@@ -9008,7 +9019,7 @@ void DocxAttributeOutput::CharFontCJK( const SvxFontItem& rFont )
         return;
     }
 
-    AddToAttrList( m_pFontsAttrList, FSNS( XML_w, XML_eastAsia ), wwFontHelper::GetExportFontName(rFont) );
+    AddToAttrList( m_pFontsAttrList, FSNS( XML_w, XML_eastAsia ), lcl_getDocxFontName(rFont) );
 }
 
 void DocxAttributeOutput::CharPostureCJK( const SvxPostureItem& rPosture )
@@ -9041,7 +9052,7 @@ void DocxAttributeOutput::CharFontCTL( const SvxFontItem& rFont )
         return;
     }
 
-    AddToAttrList( m_pFontsAttrList, FSNS( XML_w, XML_cs ), wwFontHelper::GetExportFontName(rFont) );
+    AddToAttrList( m_pFontsAttrList, FSNS( XML_w, XML_cs ), lcl_getDocxFontName(rFont) );
 }
 
 void DocxAttributeOutput::CharPostureCTL( const SvxPostureItem& rPosture)

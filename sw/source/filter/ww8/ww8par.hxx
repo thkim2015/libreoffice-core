@@ -1818,6 +1818,8 @@ public:     // really private, but can only be done public
     void Read_ApoPPC(sal_uInt16, const sal_uInt8* pData, short);
 
     void Read_BoolItem(         sal_uInt16 nId, const sal_uInt8*, short nLen );
+    void Read_WordWrap(sal_uInt16, const sal_uInt8* pData, short nLen);
+    void Read_AutoSpaceDN(sal_uInt16, const sal_uInt8* pData, short nLen);
 
     void Read_Border(           sal_uInt16 nId, const sal_uInt8* pData, short nLen );
     void Read_CharBorder(sal_uInt16 nId, const sal_uInt8* pData, short nLen );

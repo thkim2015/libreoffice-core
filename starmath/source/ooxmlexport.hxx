@@ -37,6 +37,7 @@ private:
     void HandleBrace(const SmBraceNode* pNode, int nLevel) override;
     void HandleVerticalBrace(const SmVerticalBraceNode* pNode, int nLevel) override;
     void HandleBlank() override;
+    bool HandleFunction(const SmNode* pName, const SmNode* pArg, int nLevel) override;
     ::sax_fastparser::FSHelperPtr m_pSerializer;
     oox::core::OoxmlVersion version;
     /// needed to determine markup for nested run properties

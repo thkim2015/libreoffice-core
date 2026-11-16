@@ -1162,13 +1162,16 @@ void WW8AttributeOutput::WriteBookmarkInActParagraph( const OUString& rName, sal
     m_aBookmarksOfParagraphEnd.insert(std::pair<sal_Int32, OUString>(nLastRunPos, rName));
 }
 
-bool WW8AttributeOutput::StartURL(const OUString& rUrl, const OUString& rTarget, const OUString& /*rName*/)
+bool WW8AttributeOutput::StartURL(const OUString& rUrl, const OUString& rTarget, const OUString& rName)
 {
     INetURLObject aURL( rUrl );
     OUString sURL;
     OUString sMark;
 
     bool bBookMarkOnly = AnalyzeURL( rUrl, rTarget, &sURL, &sMark );
+    // ScreenTip (the hyperlink name, w:tooltip in DOCX)
+    if (!rName.isEmpty())
+        sURL += " \\o \"" + rName.replaceAll("\"", "\\\"") + "\"";
 
     m_rWW8Export.OutputField( nullptr, ww::eHYPERLINK, sURL, FieldFlags::Start | FieldFlags::CmdStart );
 

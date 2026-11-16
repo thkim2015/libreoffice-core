@@ -3723,6 +3723,9 @@ void WW8AttributeOutput::ParaScriptSpace( const SfxBoolItem& rScriptSpace )
 {
     m_rWW8Export.InsUInt16( NS_sprm::PFAutoSpaceDE::val );
     m_rWW8Export.m_pO->push_back( rScriptSpace.GetValue() ? 1 : 0 );
+    // Writer's single flag covers both Asian/Latin and Asian/number spacing (see the import)
+    m_rWW8Export.InsUInt16( NS_sprm::PFAutoSpaceDN::val );
+    m_rWW8Export.m_pO->push_back( rScriptSpace.GetValue() ? 1 : 0 );
 }
 
 void WW8AttributeOutput::ParaHangingPunctuation( const SfxBoolItem& rItem )
@@ -5524,8 +5527,17 @@ void WW8AttributeOutput::FormatFrameDirection( const SvxFrameDirectionItem& rDir
     }
 }
 
-void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& /*rItem*/)
+void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
 {
+    // East Asian word wrap kept by the DOC/DOCX import (Writer has no such setting)
+    const std::map<OUString, css::uno::Any>& rMap = rItem.GetGrabBag();
+    auto it = rMap.find(u"ParaWordWrap"_ustr);
+    bool bWordWrap = true;
+    if (it != rMap.end() && (it->second >>= bWordWrap))
+    {
+        m_rWW8Export.InsUInt16(NS_sprm::PFWordWrap::val);
+        m_rWW8Export.m_pO->push_back(bWordWrap ? 1 : 0);
+    }
 }
 
 void WW8AttributeOutput::CharGrabBag(const SfxGrabBagItem& /*rItem*/)

@@ -46,6 +46,8 @@
 #include <oox/token/tokens.hxx>
 #include <svx/svdtrans.hxx>
 #include <comphelper/propertysequence.hxx>
+#include <comphelper/sequenceashashmap.hxx>
+#include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <o3tl/string_view.hxx>
 #include <svx/xbitmap.hxx>
 #include <vcl/BitmapTools.hxx>
@@ -1052,8 +1054,29 @@ void TextpathModel::pushToPropMap(ShapePropertyMap& rPropMap, const uno::Referen
     auto nTextWidth = pDevice->GetTextWidth(sText);
     if (nTextWidth)
     {
-        sal_Int32 nNewHeight = (static_cast<double>(pDevice->GetTextHeight()) / nTextWidth) * xShape->getSize().Width;
-        xShape->setSize(awt::Size(xShape->getSize().Width, nNewHeight));
+        const awt::Size aOrigSize = xShape->getSize();
+        sal_Int32 nNewHeight = (static_cast<double>(pDevice->GetTextHeight()) / nTextWidth) * aOrigSize.Width;
+        xShape->setSize(awt::Size(aOrigSize.Width, nNewHeight));
+
+        // Remember the size written in the file: the export writes it back with trim="f" while
+        // the shape keeps the size set here, so Word sees the shape it wrote (the height above
+        // depends on the fonts available here).
+        uno::Reference<beans::XPropertySet> xPropertySet(xShape, uno::UNO_QUERY);
+        if (xPropertySet.is() && xPropertySet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        {
+            comphelper::SequenceAsHashMap aGrabBag(xPropertySet->getPropertyValue(u"InteropGrabBag"_ustr));
+            // CustomShape converts the shape properties twice: the second time the size is the
+            // fitted one already, keep the file size of the first time.
+            awt::Size aFitBefore;
+            auto itFit = aGrabBag.find(u"VML-TextpathFitSize"_ustr);
+            const bool bFittedBefore = itFit != aGrabBag.end() && (itFit->second >>= aFitBefore)
+                                       && aFitBefore.Width == aOrigSize.Width
+                                       && aFitBefore.Height == aOrigSize.Height;
+            if (!bFittedBefore)
+                aGrabBag[u"VML-TextpathOrigSize"_ustr] <<= aOrigSize;
+            aGrabBag[u"VML-TextpathFitSize"_ustr] <<= xShape->getSize();
+            xPropertySet->setPropertyValue(u"InteropGrabBag"_ustr, uno::Any(aGrabBag.getAsConstPropertyValueList()));
+        }
     }
 }
 
