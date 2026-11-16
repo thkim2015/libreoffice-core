@@ -32,6 +32,7 @@
 
 #include <i18nlangtag/languagetag.hxx>
 
+#include <comphelper/sequence.hxx>
 #include <comphelper/configuration.hxx>
 #include <comphelper/string.hxx>
 #include <unotools/ucbstreamhelper.hxx>
@@ -121,6 +122,7 @@
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/document/XViewDataSupplier.hpp>
 
+#include <svl/grabbagitem.hxx>
 #include <svl/lngmisc.hxx>
 #include <svl/itemiter.hxx>
 #include <svl/whiter.hxx>
@@ -1769,6 +1771,11 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
     if (nLen < 0)
     {
         m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_TABSTOP);
+        if (m_bBarTabs)
+        {
+            m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+            m_bBarTabs = false;
+        }
         return;
     }
 
@@ -1848,6 +1855,7 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
     }
 
     SvxTabStop aTabStop;
+    std::vector<sal_Int32> aBarTabs; // Writer has no bar tabs: kept in the paragraph grab bag
     for (short i=0; i < nDel; ++i)
     {
         sal_uInt16 nPos = aAttr->GetPos(SVBT16ToUInt16(pDel + i*2));
@@ -1874,7 +1882,8 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
                 aTabStop.GetAdjustment() = SvxTabAdjust::Decimal;
                 break;
             case 4:
-                continue; // Ignore Bar
+                aBarTabs.push_back(nPos);
+                continue; // no Writer tab stop for a bar
         }
 
         switch( pTyp[i].aBits1 >> 3 & 0x7 )
@@ -1898,6 +1907,18 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
         if (nPos2 != SVX_TAB_NOTFOUND)
             aAttr->Remove(nPos2); // Or else Insert() refuses
         aAttr->Insert(aTabStop);
+    }
+
+    if (!aBarTabs.empty())
+    {
+        // like the DOCX import (w:tab w:val="bar"), positions in twips
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaBarTabs"_ustr] <<= comphelper::containerToSequence(aBarTabs);
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+        if (!m_pCurrentColl)
+            m_bBarTabs = true;
     }
 
     if (nIns || nDel)

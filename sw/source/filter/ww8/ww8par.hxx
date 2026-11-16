@@ -1429,6 +1429,7 @@ private:
     bool m_bKernMinSize = false; // CharKernMinSize is open in the character grab bag
     bool m_bFitText = false; // CharFitText is open in the character grab bag
     bool m_bNoProof = false; // CharNoProof is open in the character grab bag
+    bool m_bBarTabs = false; // ParaBarTabs is open in the paragraph grab bag
 
     const SprmReadInfo& GetSprmReadInfo(sal_uInt16 nId) const;
 

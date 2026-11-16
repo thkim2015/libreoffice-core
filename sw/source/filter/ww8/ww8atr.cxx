@@ -5551,6 +5551,22 @@ void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         m_rWW8Export.m_pO->push_back(bWordWrap ? 1 : 0);
     }
 
+    // bar tabs kept by the DOC/DOCX import: an extra sprmPChgTabsPapx that only adds them
+    it = rMap.find(u"ParaBarTabs"_ustr);
+    css::uno::Sequence<sal_Int32> aBarTabs;
+    if (it != rMap.end() && (it->second >>= aBarTabs) && aBarTabs.hasElements())
+    {
+        const sal_uInt8 nCount = static_cast<sal_uInt8>(std::min<sal_Int32>(aBarTabs.getLength(), 64));
+        m_rWW8Export.InsUInt16(NS_sprm::PChgTabsPapx::val);
+        m_rWW8Export.m_pO->push_back(static_cast<sal_uInt8>(2 + 3 * nCount));
+        m_rWW8Export.m_pO->push_back(0); // nothing deleted
+        m_rWW8Export.m_pO->push_back(nCount);
+        for (sal_uInt8 i = 0; i < nCount; ++i)
+            m_rWW8Export.InsUInt16(static_cast<sal_uInt16>(aBarTabs[i]));
+        for (sal_uInt8 i = 0; i < nCount; ++i)
+            m_rWW8Export.m_pO->push_back(4); // jc = bar, no leader
+    }
+
     // mirror indents kept by the DOC/DOCX import
     it = rMap.find(u"MirrorIndents"_ustr);
     if (it != rMap.end())
