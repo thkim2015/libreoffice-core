@@ -117,6 +117,9 @@
 #include <o3tl/any.hxx>
 #include <o3tl/safeint.hxx>
 #include <o3tl/string_view.hxx>
+#include <basegfx/numeric/ftools.hxx>
+#include <algorithm>
+#include <vector>
 #include <tools/stream.hxx>
 #include <tools/UnitConversion.hxx>
 #include <unotools/fontdefs.hxx>
@@ -2643,6 +2646,78 @@ static OUString lcl_GetTarget(const css::uno::Reference<css::frame::XModel>& xMo
     return sTarget;
 }
 
+// zeta: 글자 그라데이션(CharInteropGrabBag 'ZetaTextGradient' — textcharacterproperties.cxx 꼴)을 a:gradFill로 쓴다.
+// 글자색이 그 글의 단색과 같을 때만(글자색을 바꾼 조각은 단색). 쓰면 true.
+static bool lcl_WriteZetaTextGradient(const sax_fastparser::FSHelperPtr& pFS,
+                                      const Reference<XPropertySet>& rXPropSet, ::Color aColor)
+{
+    if (!rXPropSet->getPropertySetInfo()->hasPropertyByName(u"CharInteropGrabBag"_ustr))
+        return false;
+    Sequence<PropertyValue> aGrabBag;
+    rXPropSet->getPropertyValue(u"CharInteropGrabBag"_ustr) >>= aGrabBag;
+    OUString aSpec;
+    for (const PropertyValue& rProp : aGrabBag)
+        if (rProp.Name == "ZetaTextGradient")
+            rProp.Value >>= aSpec;
+    std::vector<OUString> aTok;
+    sal_Int32 nIdx = 0;
+    while (nIdx >= 0)
+    {
+        OUString aOne(o3tl::getToken(aSpec, 0, ' ', nIdx));
+        if (!aOne.isEmpty())
+            aTok.push_back(aOne);
+    }
+    if (aTok.size() < 8 || aTok[0] != "ZG1")
+        return false;
+    if (::Color(ColorTransparency, aTok[1].toUInt32(16)).GetRGBColor() != aColor.GetRGBColor())
+        return false;
+    const bool bPath = aTok[2] != "L";
+    pFS->startElementNS(XML_a, XML_gradFill, XML_flip, "none", XML_rotWithShape, "1");
+    pFS->startElementNS(XML_a, XML_gsLst);
+    std::vector<std::pair<sal_Int32, sal_uInt32>> aStops;
+    for (size_t i = 6; i < aTok.size(); ++i)
+    {
+        const sal_Int32 nColon = aTok[i].indexOf(':');
+        if (nColon <= 0)
+            continue;
+        const double fPos = std::clamp(aTok[i].copy(0, nColon).toDouble(), 0.0, 1.0);
+        aStops.emplace_back(basegfx::fround((bPath ? 1.0 - fPos : fPos) * 100000),
+                            aTok[i].copy(nColon + 1).toUInt32(16) & 0xFFFFFF);
+    }
+    std::stable_sort(aStops.begin(), aStops.end(),
+                     [](const auto& a, const auto& b) { return a.first < b.first; });
+    for (const auto& [nPos, nRGB] : aStops)
+    {
+        pFS->startElementNS(XML_a, XML_gs, XML_pos, OString::number(nPos));
+        OStringBuffer aHex(OString::number(nRGB, 16).toAsciiUpperCase());
+        while (aHex.getLength() < 6)
+            aHex.insert(0, '0');
+        pFS->singleElementNS(XML_a, XML_srgbClr, XML_val, aHex.makeStringAndClear());
+        pFS->endElementNS(XML_a, XML_gs);
+    }
+    pFS->endElementNS(XML_a, XML_gsLst);
+    if (bPath)
+    {
+        const sal_Int32 nX = std::clamp<sal_Int32>(aTok[4].toInt32(), 0, 100);
+        const sal_Int32 nY = std::clamp<sal_Int32>(aTok[5].toInt32(), 0, 100);
+        pFS->startElementNS(XML_a, XML_path, XML_path, aTok[2] == "R" ? "circle" : "rect");
+        pFS->singleElementNS(XML_a, XML_fillToRect, XML_l, OString::number(nX * 1000),
+                             XML_t, OString::number(nY * 1000), XML_r,
+                             OString::number((100 - nX) * 1000), XML_b,
+                             OString::number((100 - nY) * 1000));
+        pFS->endElementNS(XML_a, XML_path);
+    }
+    else
+    {
+        const sal_Int32 nAngle10 = aTok[3].toInt32();
+        const sal_Int32 nDml = (((8100 - nAngle10) % 3600 + 3600) % 3600) * 6000;
+        pFS->singleElementNS(XML_a, XML_lin, XML_ang, OString::number(nDml), XML_scaled, "1");
+    }
+    pFS->singleElementNS(XML_a, XML_tileRect);
+    pFS->endElementNS(XML_a, XML_gradFill);
+    return true;
+}
+
 void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int32 nElement, WriteRunInput& rRunInput)
 {
     Reference< XPropertySet > rXPropSet = rRun;
@@ -2919,7 +2994,9 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
             {
                 color.SetAlpha(255);
                 // TODO: special handle embossed/engraved
-                if (!WriteSchemeColor(u"CharComplexColor"_ustr, rXPropSet, rRunInput.bUseTextSchemeColors))
+                const bool bZetaGradient = GetDocumentType() != DOCUMENT_DOCX
+                                           && lcl_WriteZetaTextGradient(mpFS, rXPropSet, color);
+                if (!bZetaGradient && !WriteSchemeColor(u"CharComplexColor"_ustr, rXPropSet, rRunInput.bUseTextSchemeColors))
                 {
                     WriteSolidFill(color, nTransparency);
                 }
