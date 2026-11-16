@@ -20,7 +20,9 @@
 #include <sal/config.h>
 #include <sal/log.hxx>
 
+#include <comphelper/propertyvalue.hxx>
 #include <comphelper/string.hxx>
+#include <svl/grabbagitem.hxx>
 #include <osl/diagnose.h>
 #include <o3tl/safeint.hxx>
 #include <o3tl/temporary.hxx>
@@ -1613,7 +1615,7 @@ enum wwTableSprm
     sprmTSetBrc, sprmTSetBrc90, sprmTDxaCol, sprmTInsert, sprmTDelete,
     sprmTTableHeader, sprmTDxaGapHalf, sprmTTableBorders, sprmTTableBorders90,
     sprmTDefTableNewShd, sprmTDefTableNewShd2nd, sprmTDefTableNewShd3rd,
-    sprmTCellPadding, sprmTCellPaddingDefault
+    sprmTCellPadding, sprmTCellPaddingDefault, sprmTWidthIndent, sprmTTlp
 };
 
 }
@@ -1671,6 +1673,10 @@ static wwTableSprm GetTableSprm(sal_uInt16 nId, ww::WordVersion eVer)
                     return sprmTCellPadding;
                 case NS_sprm::TCellPaddingDefault::val:
                     return sprmTCellPaddingDefault;
+                case NS_sprm::TWidthIndent::val:
+                    return sprmTWidthIndent;
+                case NS_sprm::TTlp::val:
+                    return sprmTTlp;
             }
             break;
         case ww::eWW7:
@@ -1751,6 +1757,8 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
     m_nSwWidth(0),
     m_nPreferredWidth(0),
     m_nPercentWidth(0),
+    m_bWidthAuto(false),
+    m_nTableLook(-1),
     m_bOk(true),
     m_bClaimLineFormat(false),
     m_eOri(text::HoriOrientation::LEFT),
@@ -1789,6 +1797,9 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
     do
     {
         short nTabeDxaNew      = SHRT_MAX;
+        // tblInd (sprmTWidthIndent, ftsDxa): Word 2002+ writes it beside the
+        // old sprmTDxaLeft and follows it when both differ
+        short nTableIndent     = SHRT_MAX;
         bool bTabRowJustRead   = false;
         const sal_uInt8* pShadeSprm = nullptr;
         const sal_uInt8* pNewShadeSprm[3] = {nullptr, nullptr, nullptr};
@@ -1830,6 +1841,8 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
                         const sal_uInt8 b0 = pParams[0];
                         const sal_uInt8 b1 = pParams[1];
                         const sal_uInt8 b2 = pParams[2];
+                        if (b0 == 1 && m_nRows == 0) // ftsAuto
+                            m_bWidthAuto = true;
                         if (b0 == 3) // Twips
                             m_nPreferredWidth = b2 * 0x100 + b1;
                         else if (b0 == 2) // percent in fiftieths of a percent
@@ -1905,6 +1918,16 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
                                 nTabeDxaNew = nDxaNew;
                         }
                         break;
+                    case sprmTTlp:
+                        // TLP: itl (2 bytes) + grpfTLP (2 bytes), the flags are w:tblLook w:val
+                        if (nLen >= 4 && m_nRows == 0)
+                            m_nTableLook = SVBT16ToUInt16(pParams + 2);
+                        break;
+                    case sprmTWidthIndent:
+                        // FtsWWidth_Indent: ftsWidth (1 byte) + wWidth (2 bytes)
+                        if (nLen >= 3 && pParams[0] == 3) // ftsDxa
+                            nTableIndent = SVBT16ToInt16(pParams + 1);
+                        break;
                     case sprmTSetBrc:
                         aTSetBrcs.emplace_back(pParams, nLen); // process at end
                         break;
@@ -1966,6 +1989,11 @@ WW8TabDesc::WW8TabDesc(SwWW8ImplReader* pIoClass, WW8_CP nStartCp) :
             for (const auto& a : aTSetBrc90s)
                 pNewBand->ProcessSprmTSetBRC(9, a.first, a.second);
         }
+
+        // Like sprmTDxaLeft, tblInd is the position of the first cell text
+        // (compatibility mode < 15), so it replaces the old value.
+        if (nTableIndent != SHRT_MAX && nTabeDxaNew != SHRT_MAX && !m_bIsBiDi)
+            nTabeDxaNew = nTableIndent;
 
         if( nTabeDxaNew < SHRT_MAX )
         {
@@ -2466,6 +2494,29 @@ void WW8TabDesc::CreateSwTable()
     SvxFrameDirectionItem aDirection(
         m_bIsBiDi ? SvxFrameDirection::Horizontal_RL_TB : SvxFrameDirection::Horizontal_LR_TB, RES_FRAMEDIR );
     m_pTable->GetFrameFormat()->SetFormatAttr(aDirection);
+
+    // Keep Word table properties that Writer has no own place for, the same
+    // way as the DOCX import does, so the DOCX export can write them back.
+    if (m_bWidthAuto || m_nTableLook >= 0)
+    {
+        std::map<OUString, css::uno::Any> aGrabBag(
+            m_pTable->GetFrameFormat()->GetAttrSet().Get(RES_FRMATR_GRABBAG).GetGrabBag());
+        if (m_bWidthAuto && !m_nPercentWidth)
+            aGrabBag[u"TableWidthAuto"_ustr] <<= true;
+        if (m_nTableLook >= 0)
+        {
+            const sal_Int32 n = m_nTableLook;
+            aGrabBag[u"TableStyleLook"_ustr] <<= css::uno::Sequence<css::beans::PropertyValue>{
+                comphelper::makePropertyValue(u"firstRow"_ustr, sal_Int32((n & 0x0020) ? 1 : 0)),
+                comphelper::makePropertyValue(u"lastRow"_ustr, sal_Int32((n & 0x0040) ? 1 : 0)),
+                comphelper::makePropertyValue(u"firstColumn"_ustr, sal_Int32((n & 0x0080) ? 1 : 0)),
+                comphelper::makePropertyValue(u"lastColumn"_ustr, sal_Int32((n & 0x0100) ? 1 : 0)),
+                comphelper::makePropertyValue(u"noHBand"_ustr, sal_Int32((n & 0x0200) ? 1 : 0)),
+                comphelper::makePropertyValue(u"noVBand"_ustr, sal_Int32((n & 0x0400) ? 1 : 0)),
+                comphelper::makePropertyValue(u"val"_ustr, n) };
+        }
+        m_pTable->GetFrameFormat()->SetFormatAttr(SfxGrabBagItem(RES_FRMATR_GRABBAG, std::move(aGrabBag)));
+    }
 
     if (text::HoriOrientation::LEFT_AND_WIDTH == m_eOri)
     {

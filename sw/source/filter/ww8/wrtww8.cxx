@@ -104,6 +104,8 @@
 #include <sfx2/docfile.hxx>
 #include <sfx2/frame.hxx>
 #include <svl/stritem.hxx>
+#include <svl/grabbagitem.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
 #include <tools/globname.hxx>
 #include <unotools/tempfile.hxx>
 #include <filter/msfilter/mscodec.hxx>
@@ -2581,6 +2583,37 @@ void WW8AttributeOutput::TableDefinition(const ww8::WW8TableNodeInfoInner::Point
         m_rWW8Export.InsUInt16( NS_sprm::TTableWidth::val );
         m_rWW8Export.m_pO->push_back( sal_uInt8/*ftsPercent*/ (2) );
         m_rWW8Export.InsUInt16( o3tl::narrowing<sal_uInt16>(nWidthPercent) * 50 );
+    }
+
+    // Word table properties kept in the table grab bag by the DOC/DOCX import:
+    // automatic preferred width and the table style options (tblLook)
+    const std::map<OUString, uno::Any>& rTableGrabBag
+        = pFormat->GetAttrSet().Get(RES_FRMATR_GRABBAG).GetGrabBag();
+    if (!(nWidthPercent > 0 && nWidthPercent <= 600))
+    {
+        auto it = rTableGrabBag.find(u"TableWidthAuto"_ustr);
+        bool bAuto = false;
+        if (it != rTableGrabBag.end() && (it->second >>= bAuto) && bAuto)
+        {
+            m_rWW8Export.InsUInt16( NS_sprm::TTableWidth::val );
+            m_rWW8Export.m_pO->push_back( sal_uInt8/*ftsAuto*/ (1) );
+            m_rWW8Export.InsUInt16( 0 );
+        }
+    }
+    if (auto it = rTableGrabBag.find(u"TableStyleLook"_ustr); it != rTableGrabBag.end())
+    {
+        uno::Sequence<beans::PropertyValue> aLook;
+        it->second >>= aLook;
+        for (const auto& rProp : aLook)
+        {
+            sal_Int32 nVal = 0;
+            if (rProp.Name == "val" && (rProp.Value >>= nVal))
+            {
+                m_rWW8Export.InsUInt16( NS_sprm::TTlp::val );
+                m_rWW8Export.InsUInt16( 0 ); // itl
+                m_rWW8Export.InsUInt16( o3tl::narrowing<sal_uInt16>(nVal & 0xffff) );
+            }
+        }
     }
 
     // Write table positioning properties in case this is a floating table.

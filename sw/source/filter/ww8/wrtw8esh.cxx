@@ -33,6 +33,7 @@
 #include <svx/svdobj.hxx>
 #include <svx/svdotext.hxx>
 #include <svx/svdpage.hxx>
+#include <svx/sdtaitm.hxx>
 #include <editeng/colritem.hxx>
 #include <editeng/outlobj.hxx>
 #include <editeng/editobj.hxx>
@@ -1652,6 +1653,13 @@ sal_Int32 SwBasicEscherEx::WriteGrfFlyFrame(const SwFrameFormat& rFormat, sal_uI
     aPropOpt.AddOpt( ESCHER_Prop_pibFlags, nFlags );
     nBorderThick = WriteFlyFrameAttr(rFormat,mso_sptPictureFrame,aPropOpt);
     WriteGrfAttr(*pGrfNd, rFormat, aPropOpt);
+    // alternative text, Word keeps it in wzDescription
+    if (auto pFlyFormat = dynamic_cast<const SwFlyFrameFormat*>(&rFormat))
+    {
+        const OUString aDescr = pFlyFormat->GetObjDescription();
+        if (!aDescr.isEmpty())
+            aPropOpt.AddOpt(ESCHER_Prop_wzDescription, aDescr);
+    }
 
     aPropOpt.Commit( GetStream() );
 
@@ -2880,13 +2888,27 @@ sal_Int32 SwEscherEx::WriteTextFlyFrame(const DrawObj &rObj, sal_uInt32 nShapeId
         break;
         case SvxFrameDirection::Vertical_LR_TB: //not really possible in word
         case SvxFrameDirection::Vertical_RL_TB:
-            nFlow=mso_txflTtoBA;
+            // what Word writes for its vertical (East Asian) text box
+            nFlow=mso_txflVertN;
         break;
         case SvxFrameDirection::Vertical_LR_BT:
             nFlow = mso_txflBtoT;
         break;
     }
     aPropOpt.AddOpt( ESCHER_Prop_txflTextFlow, nFlow );
+
+    // text anchor (top is the default)
+    switch (rFormat.GetAttrSet().Get(RES_TEXT_VERT_ADJUST).GetValue())
+    {
+        case SDRTEXTVERTADJUST_CENTER:
+            aPropOpt.AddOpt(ESCHER_Prop_AnchorText, ESCHER_AnchorMiddle);
+            break;
+        case SDRTEXTVERTADJUST_BOTTOM:
+            aPropOpt.AddOpt(ESCHER_Prop_AnchorText, ESCHER_AnchorBottom);
+            break;
+        default:
+            break;
+    }
 
     aPropOpt.Commit( GetStream() );
 

@@ -684,6 +684,15 @@ SwFrameFormat* SwWW8ImplReader::ImportGraf(SdrTextObj const * pTextObj,
                     if (pRecord)
                         SetAttributesAtGrfNode(*pRecord, *pRet, nullptr);
 
+                    // alternative text (wzDescription) of the inline picture shape
+                    if (auto pFlyFormat = dynamic_cast<SwFlyFrameFormat*>(pRet))
+                    {
+                        if (!pObject->GetDescription().isEmpty())
+                            pFlyFormat->SetObjDescription(pObject->GetDescription());
+                        if (!pObject->GetTitle().isEmpty())
+                            pFlyFormat->SetObjTitle(pObject->GetTitle());
+                    }
+
                     OUString aObjectName(pObject->GetName());
                     if (aObjectName.isEmpty() || !m_rDoc.FindFlyByName(UIName(aObjectName), GetNodeType(*pRet)))
                         pRet->SetFormatName(UIName(aObjectName));

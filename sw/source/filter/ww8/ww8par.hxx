@@ -1426,6 +1426,10 @@ private:
 
     bool m_bNotifyMacroEventRead;
     bool m_bFuzzing;
+    bool m_bKernMinSize = false; // CharKernMinSize is open in the character grab bag
+    bool m_bFitText = false; // CharFitText is open in the character grab bag
+    bool m_bNoProof = false; // CharNoProof is open in the character grab bag
+    bool m_bBarTabs = false; // ParaBarTabs is open in the paragraph grab bag
 
     const SprmReadInfo& GetSprmReadInfo(sal_uInt16 nId) const;
 
@@ -1732,6 +1736,7 @@ private:
 
     bool SetSpacing(SwPaM &rMyPam, int nSpace, bool bIsUpper);
     bool SetUpperSpacing(SwPaM &pMyPam, int nSpace);
+    void SetAutoSpacingGrabBag(SwPaM& rMyPam, int nBefore, int nAfter);
     bool SetLowerSpacing(SwPaM &rMyPam, int nSpace);
 
     bool IsInlineEscherHack() const
@@ -1785,6 +1790,11 @@ public:     // really private, but can only be done public
     void Read_CColl(            sal_uInt16, const sal_uInt8*, short nLen );
     void Read_Kern(             sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_FontKern(         sal_uInt16, const sal_uInt8* pData, short nLen );
+    void Read_FitText(sal_uInt16, const sal_uInt8* pData, short nLen);
+    void Read_MirrorIndents(sal_uInt16, const sal_uInt8* pData, short nLen);
+    void Read_NoProof(sal_uInt16, const sal_uInt8* pData, short nLen);
+    void SetCharGrabBagValue(const OUString& rName, const css::uno::Any& rValue);
+    void EndCharGrabBag(bool& rbOpen);
     void Read_Emphasis(         sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_ScaleWidth(       sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_Relief(           sal_uInt16, const sal_uInt8* pData, short nLen);

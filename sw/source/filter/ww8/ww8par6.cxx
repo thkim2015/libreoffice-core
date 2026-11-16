@@ -1481,8 +1481,8 @@ static void GetLineIndex(SvxBoxItem &rBox, short nLineThickness, short nSpace,
         ::editeng::ConvertBorderWidthFromWord(eStyle, nLineThickness, nIdx));
     aLine.SetWidth(fConverted);
 
-    //No AUTO for borders as yet, so if AUTO, use BLACK
-    Color col = (cv==0xff000000) ? COL_BLACK : msfilter::util::BGRToRGB(cv);
+    // automatic colour: COL_AUTO like the DOCX import (w:color="auto"), drawn black
+    Color col = (cv==0xff000000) ? COL_AUTO : msfilter::util::BGRToRGB(cv);
 
     aLine.SetColor(col);
 
@@ -4193,10 +4193,74 @@ void SwWW8ImplReader::Read_FontKern( sal_uInt16, const sal_uInt8* pData, short n
     if (nLen < 2) // end of attribute
     {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_CHRATR_AUTOKERN );
+        if (m_bKernMinSize)
+        {
+            m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_CHRATR_GRABBAG);
+            m_bKernMinSize = false;
+        }
         return;
     }
-    sal_Int16 nAutoKern = SVBT16ToUInt16( pData );    // Kerning in Twips
+    sal_Int16 nAutoKern = SVBT16ToUInt16( pData );    // minimum font size in half points
     NewAttr(SvxAutoKernItem(static_cast<bool>(nAutoKern), RES_CHRATR_AUTOKERN));
+    // Writer auto kerning is just a boolean: keep the minimum font size of Word for
+    // the export, the same way as the DOCX import (CharKernMinSize in the grab bag)
+    if (nAutoKern > 2)
+    {
+        const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_CHRATR_GRABBAG);
+        std::map<OUString, css::uno::Any> aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"CharKernMinSize"_ustr] <<= sal_Int32(nAutoKern);
+        NewAttr(SfxGrabBagItem(RES_CHRATR_GRABBAG, std::move(aGrabBagMap)));
+        m_bKernMinSize = true;
+    }
+}
+
+// Word character properties without a Writer attribute, kept in the character grab bag
+// with the names of the DOCX import (w:fitText, w:noProof) for the DOC/DOCX export
+void SwWW8ImplReader::SetCharGrabBagValue(const OUString& rName, const css::uno::Any& rValue)
+{
+    const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_CHRATR_GRABBAG);
+    std::map<OUString, css::uno::Any> aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[rName] = rValue;
+    NewAttr(SfxGrabBagItem(RES_CHRATR_GRABBAG, std::move(aGrabBagMap)));
+}
+
+void SwWW8ImplReader::EndCharGrabBag(bool& rbOpen)
+{
+    if (!rbOpen)
+        return;
+    m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_CHRATR_GRABBAG);
+    rbOpen = false;
+}
+
+// sprmCFitText: dxaFitText (int32, twips) + fitTextID (int32)
+void SwWW8ImplReader::Read_FitText(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (nLen < 8)
+    {
+        EndCharGrabBag(m_bFitText);
+        return;
+    }
+    sal_Int32 nWidth = static_cast<sal_Int32>(SVBT32ToUInt32(pData));
+    if (nWidth <= 0)
+        return;
+    SetCharGrabBagValue(u"CharFitText"_ustr, css::uno::Any(nWidth));
+    SetCharGrabBagValue(u"CharFitTextId"_ustr,
+                        css::uno::Any(static_cast<sal_Int32>(SVBT32ToUInt32(pData + 4))));
+    m_bFitText = true;
+}
+
+// sprmCFNoProof: do not check spelling or grammar
+void SwWW8ImplReader::Read_NoProof(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (nLen < 1)
+    {
+        EndCharGrabBag(m_bNoProof);
+        return;
+    }
+    if (!(*pData & 1))
+        return;
+    SetCharGrabBagValue(u"CharNoProof"_ustr, css::uno::Any(true));
+    m_bNoProof = true;
 }
 
 void SwWW8ImplReader::Read_CharShadow(  sal_uInt16, const sal_uInt8* pData, short nLen )
@@ -4634,14 +4698,23 @@ void SwWW8ImplReader::Read_ParaAutoBefore(sal_uInt16, const sal_uInt8 *pData, sh
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_UL_SPACE);
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
         return;
     }
 
     if (*pData)
     {
         SvxULSpaceItem aUL(*GetFormatAttr(RES_UL_SPACE));
-        aUL.SetUpper(GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
+        const sal_uInt16 nAutoSpace = GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing);
+        aUL.SetUpper(nAutoSpace);
         NewAttr(aUL);
+        // keep the "auto" of Word for the export, like the DOCX import (value in mm100)
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaTopMarginBeforeAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nAutoSpace, o3tl::Length::twip, o3tl::Length::mm100));
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
         if (m_pCurrentColl && m_nCurrentColl < m_vColl.size())
             m_vColl[m_nCurrentColl].m_bParaAutoBefore = true;
         else
@@ -4661,14 +4734,23 @@ void SwWW8ImplReader::Read_ParaAutoAfter(sal_uInt16, const sal_uInt8 *pData, sho
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_UL_SPACE);
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
         return;
     }
 
     if (*pData)
     {
         SvxULSpaceItem aUL(*GetFormatAttr(RES_UL_SPACE));
-        aUL.SetLower(GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
+        const sal_uInt16 nAutoSpace = GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing);
+        aUL.SetLower(nAutoSpace);
         NewAttr(aUL);
+        // keep the "auto" of Word for the export, like the DOCX import (value in mm100)
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaBottomMarginAfterAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nAutoSpace, o3tl::Length::twip, o3tl::Length::mm100));
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
         if (m_pCurrentColl && m_nCurrentColl < m_vColl.size())
             m_vColl[m_nCurrentColl].m_bParaAutoAfter = true;
         else
@@ -4953,6 +5035,24 @@ void SwWW8ImplReader::Read_WordWrap(sal_uInt16, const sal_uInt8* pData, short nL
     if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
         aGrabBagMap = pGrabBag->GetGrabBag();
     aGrabBagMap[u"ParaWordWrap"_ustr] <<= (0 != *pData);
+    NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+}
+
+// Mirror indents (inside/outside instead of left/right): Writer has no such setting, keep it in
+// the paragraph grab bag for the export, like the DOCX import (w:mirrorIndents).
+void SwWW8ImplReader::Read_MirrorIndents(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (nLen < 1)
+    {
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+        return;
+    }
+    if (!*pData)
+        return;
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[u"MirrorIndents"_ustr] <<= true;
     NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
 }
 
@@ -6059,6 +6159,7 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::CFBoldBi::val,          &SwWW8ImplReader::Read_BoldBiDiUsw},
         {NS_sprm::CFItalicBi::val,        &SwWW8ImplReader::Read_BoldBiDiUsw},
         {NS_sprm::CFUsePgsuSettings::val, nullptr},                                       // chp.fUsePgsuSettings; 1 or 0;bit;
+        {NS_sprm::CFNoProof::val,         &SwWW8ImplReader::Read_NoProof},                // chp.fNoProof
         {0x2205,                          nullptr},                                       // ???? "sprmSDxaLeft" sep.dxaLeft;
         {NS_sprm::PJc80::val,             &SwWW8ImplReader::Read_Justify},                // pap.jc;jc (justification);byte;
         {NS_sprm::LN_PFSideBySide,        nullptr},                                       // pap.fSideBySide;0 or 1;byte;
@@ -6093,6 +6194,7 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::PFDyaAfterAuto::val,    &SwWW8ImplReader::Read_ParaAutoAfter},
         {NS_sprm::PJc::val,               &SwWW8ImplReader::Read_RTLJustify},
         {NS_sprm::PFContextualSpacing::val, &SwWW8ImplReader::Read_ParaContextualSpacing},
+        {NS_sprm::PFMirrorIndents::val,   &SwWW8ImplReader::Read_MirrorIndents},
         {NS_sprm::PIncLvl::val,           nullptr},                                       // pap.istd, pap.lvl;difference between
                                                                                          // istd of base PAP and istd of
                                                                                          // PAP to be produced;byte;
@@ -6357,6 +6459,7 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
                                                                                          // always recorded as 39 bytes;
         {NS_sprm::CShd::val,              &SwWW8ImplReader::Read_TextBackColor},
         {NS_sprm::CBrc::val,              &SwWW8ImplReader::Read_CharBorder},             // chp.brc;BRC;long;
+        {NS_sprm::CFitText::val,          &SwWW8ImplReader::Read_FitText},                // chp.dxaFitText, fitTextID
         {NS_sprm::CFELayout::val,         &SwWW8ImplReader::Read_DoubleLine_Rotate},
         {NS_sprm::LN_PicScale,            nullptr},                                       // pic.mx, pic.my, pic.dxaCropleft,
                                                                                          // pic.dyaCropTop pic.dxaCropRight,

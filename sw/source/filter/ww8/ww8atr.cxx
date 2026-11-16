@@ -1377,7 +1377,19 @@ void WW8AttributeOutput::CharAutoKern( const SvxAutoKernItem& rAutoKern )
 {
     m_rWW8Export.InsUInt16( NS_sprm::CHpsKern::val );
 
-    m_rWW8Export.InsUInt16( rAutoKern.GetValue() ? 2 : 0 );
+    sal_uInt16 nMinSize = rAutoKern.GetValue() ? 2 : 0;
+    // the minimum font size read from DOC/DOCX (kept in the character grab bag)
+    if (nMinSize)
+    {
+        if (const SfxGrabBagItem* pGrabBag = GetExport().HasItem(RES_CHRATR_GRABBAG))
+        {
+            auto it = pGrabBag->GetGrabBag().find(u"CharKernMinSize"_ustr);
+            sal_Int32 nStored = 0;
+            if (it != pGrabBag->GetGrabBag().end() && (it->second >>= nStored) && nStored > 0)
+                nMinSize = o3tl::narrowing<sal_uInt16>(nStored);
+        }
+    }
+    m_rWW8Export.InsUInt16( nMinSize );
 }
 
 void WW8AttributeOutput::CharOpticalSizing( const SvxOpticalSizingItem& )
@@ -5004,8 +5016,10 @@ WW8_BRCVer9 WW8Export::TranslateBorderLine(const SvxBorderLine& rLine,
         if( 0 == nWidth )                       // really thin line
             nWidth = 1;                         // don't omit
 
-        // BRC.cv
-        nColBGR = wwUtility::RGBToBGR(rLine.GetColor().GetRGBColor());
+        // BRC.cv (automatic colour is cvAuto, not white)
+        nColBGR = rLine.GetColor() == COL_AUTO
+                      ? 0xFF000000
+                      : wwUtility::RGBToBGR(rLine.GetColor().GetRGBColor());
     }
 
     // BRC.dptSpace
@@ -5040,7 +5054,8 @@ void WW8Export::Out_BorderLine(ww::bytes& rO, const SvxBorderLine* pLine,
     if( pLine && pLine->GetBorderLineStyle() != SvxBorderLineStyle::NONE )
     {
         aBrcVer9 = TranslateBorderLine( *pLine, nDist, bShadow );
-        sal_uInt8 ico = msfilter::util::TransColToIco( msfilter::util::BGRToRGB(aBrcVer9.cv()) );
+        sal_uInt8 ico = aBrcVer9.cv() == 0xFF000000 ? 0 // auto
+                        : msfilter::util::TransColToIco( msfilter::util::BGRToRGB(aBrcVer9.cv()) );
         aBrcVer8 = WW8_BRC( aBrcVer9.dptLineWidth(), aBrcVer9.brcType(), ico,
             aBrcVer9.dptSpace(), aBrcVer9.fShadow(), aBrcVer9.fFrame() );
     }
@@ -5538,10 +5553,79 @@ void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         m_rWW8Export.InsUInt16(NS_sprm::PFWordWrap::val);
         m_rWW8Export.m_pO->push_back(bWordWrap ? 1 : 0);
     }
+
+    // bar tabs kept by the DOC/DOCX import: an extra sprmPChgTabsPapx that only adds them
+    it = rMap.find(u"ParaBarTabs"_ustr);
+    css::uno::Sequence<sal_Int32> aBarTabs;
+    if (it != rMap.end() && (it->second >>= aBarTabs) && aBarTabs.hasElements())
+    {
+        const sal_uInt8 nCount = static_cast<sal_uInt8>(std::min<sal_Int32>(aBarTabs.getLength(), 64));
+        m_rWW8Export.InsUInt16(NS_sprm::PChgTabsPapx::val);
+        m_rWW8Export.m_pO->push_back(static_cast<sal_uInt8>(2 + 3 * nCount));
+        m_rWW8Export.m_pO->push_back(0); // nothing deleted
+        m_rWW8Export.m_pO->push_back(nCount);
+        for (sal_uInt8 i = 0; i < nCount; ++i)
+            m_rWW8Export.InsUInt16(static_cast<sal_uInt16>(aBarTabs[i]));
+        for (sal_uInt8 i = 0; i < nCount; ++i)
+            m_rWW8Export.m_pO->push_back(4); // jc = bar, no leader
+    }
+
+    // mirror indents kept by the DOC/DOCX import
+    it = rMap.find(u"MirrorIndents"_ustr);
+    if (it != rMap.end())
+    {
+        bool bMirror = true;
+        it->second >>= bMirror;
+        if (bMirror)
+        {
+            m_rWW8Export.InsUInt16(NS_sprm::PFMirrorIndents::val);
+            m_rWW8Export.m_pO->push_back(1);
+        }
+    }
+
+    // automatic space before/after (HTML auto spacing) kept by the DOC/DOCX import, as long as
+    // the space is still the value set by the import
+    const SvxULSpaceItem* pUL = m_rWW8Export.HasItem(RES_UL_SPACE);
+    for (bool bBefore : { true, false })
+    {
+        it = rMap.find(bBefore ? u"ParaTopMarginBeforeAutoSpacing"_ustr
+                               : u"ParaBottomMarginAfterAutoSpacing"_ustr);
+        sal_Int32 nAuto = -1;
+        if (it == rMap.end() || !(it->second >>= nAuto) || nAuto < 0 || !pUL)
+            continue;
+        const sal_Int32 nTwips = o3tl::toTwips(nAuto, o3tl::Length::mm100);
+        if (nTwips != (bBefore ? pUL->GetUpper() : pUL->GetLower()))
+            continue;
+        m_rWW8Export.InsUInt16(bBefore ? NS_sprm::PFDyaBeforeAuto::val
+                                       : NS_sprm::PFDyaAfterAuto::val);
+        m_rWW8Export.m_pO->push_back(1);
+    }
 }
 
-void WW8AttributeOutput::CharGrabBag(const SfxGrabBagItem& /*rItem*/)
+void WW8AttributeOutput::CharGrabBag(const SfxGrabBagItem& rItem)
 {
+    // character properties read from DOC/DOCX without a Writer attribute
+    const std::map<OUString, css::uno::Any>& rMap = rItem.GetGrabBag();
+    auto it = rMap.find(u"CharFitText"_ustr);
+    sal_Int32 nWidth = 0;
+    if (it != rMap.end() && (it->second >>= nWidth) && nWidth > 0)
+    {
+        sal_Int32 nId = 0;
+        auto itId = rMap.find(u"CharFitTextId"_ustr);
+        if (itId != rMap.end())
+            itId->second >>= nId;
+        m_rWW8Export.InsUInt16(NS_sprm::CFitText::val);
+        m_rWW8Export.m_pO->push_back(8);
+        m_rWW8Export.InsUInt32(static_cast<sal_uInt32>(nWidth));
+        m_rWW8Export.InsUInt32(static_cast<sal_uInt32>(nId));
+    }
+    it = rMap.find(u"CharNoProof"_ustr);
+    bool bNoProof = false;
+    if (it != rMap.end() && (it->second >>= bNoProof) && bNoProof)
+    {
+        m_rWW8Export.InsUInt16(NS_sprm::CFNoProof::val);
+        m_rWW8Export.m_pO->push_back(1);
+    }
 }
 
 void WW8AttributeOutput::ParaOutlineLevel(const SfxUInt16Item& rItem)

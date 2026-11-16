@@ -32,6 +32,7 @@
 
 #include <i18nlangtag/languagetag.hxx>
 
+#include <comphelper/sequence.hxx>
 #include <comphelper/configuration.hxx>
 #include <comphelper/string.hxx>
 #include <unotools/ucbstreamhelper.hxx>
@@ -121,6 +122,7 @@
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/document/XViewDataSupplier.hpp>
 
+#include <svl/grabbagitem.hxx>
 #include <svl/lngmisc.hxx>
 #include <svl/itemiter.hxx>
 #include <svl/whiter.hxx>
@@ -745,10 +747,13 @@ rtl::Reference<SdrObject> SwMSDffManager::ProcessObj(SvStream& rSt,
                     case mso_txflBtoT:
                         nTextRotationAngle = 9000_deg100;
                     break;
-                    case mso_txflVertN:
                     case mso_txflTtoBN:
                         nTextRotationAngle = 27000_deg100;
                         break;
+                    // vertical, glyphs not rotated: the East Asian vertical text box of
+                    // Word (DOCX layout-flow:vertical;mso-layout-flow-alt:top-to-bottom),
+                    // not a text rotated by 270 degrees in a turned box
+                    case mso_txflVertN:
                     case mso_txflTtoBA:
                         bVerticalText = true;
                     break;
@@ -909,14 +914,17 @@ rtl::Reference<SdrObject> SwMSDffManager::ProcessObj(SvStream& rSt,
 
             if (pObj != nullptr)
             {
-                pObj->SetMergedItemSet(aSet);
-
+                // Switch to vertical writing first: SdrTextObj::SetVerticalWriting swaps the
+                // horizontal and vertical text adjustment, but eTHA/eTVA above are already
+                // meant for vertical writing (anchor top = right).
                 if (bVerticalText)
                 {
                     SdrTextObj *pTextObj = DynCastSdrTextObj(pObj.get());
                     if (pTextObj)
                         pTextObj->SetVerticalWriting(true);
                 }
+
+                pObj->SetMergedItemSet(aSet);
 
                 if ( bIsSimpleDrawingTextBox )
                 {
@@ -1763,6 +1771,11 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
     if (nLen < 0)
     {
         m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_TABSTOP);
+        if (m_bBarTabs)
+        {
+            m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+            m_bBarTabs = false;
+        }
         return;
     }
 
@@ -1842,6 +1855,7 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
     }
 
     SvxTabStop aTabStop;
+    std::vector<sal_Int32> aBarTabs; // Writer has no bar tabs: kept in the paragraph grab bag
     for (short i=0; i < nDel; ++i)
     {
         sal_uInt16 nPos = aAttr->GetPos(SVBT16ToUInt16(pDel + i*2));
@@ -1868,7 +1882,8 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
                 aTabStop.GetAdjustment() = SvxTabAdjust::Decimal;
                 break;
             case 4:
-                continue; // Ignore Bar
+                aBarTabs.push_back(nPos);
+                continue; // no Writer tab stop for a bar
         }
 
         switch( pTyp[i].aBits1 >> 3 & 0x7 )
@@ -1894,7 +1909,25 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
         aAttr->Insert(aTabStop);
     }
 
-    if (nIns || nDel)
+    if (!aBarTabs.empty())
+    {
+        // like the DOCX import (w:tab w:val="bar"), positions in twips
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaBarTabs"_ustr] <<= comphelper::containerToSequence(aBarTabs);
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+        if (!m_pCurrentColl)
+            m_bBarTabs = true;
+    }
+
+    // a sprm that only adds bar tabs (as written by our export next to the real tab stops)
+    // must not reset the Writer tab stops of an earlier sprm of the same paragraph
+    const bool bOnlyBarTabs = !nDel && nIns && aBarTabs.size() == size_t(nIns);
+    if (bOnlyBarTabs)
+    {
+    }
+    else if (nIns || nDel)
         NewAttr(*aAttr);
     else
     {
@@ -2677,7 +2710,17 @@ void SwWW8ImplReader::FinalizeTextNode(SwPosition& rPos, bool bAddNew)
     // Auto-spacing before paragraph is set,
     // set the upper spacing value to 0
     if(m_bParaAutoBefore && m_bFirstPara && !m_xWDop->fDontUseHTMLAutoSpacing)
+    {
         SetUpperSpacing(*m_pPaM, 0);
+        // SetSpacing may start from the space below of the style: keep the automatic one
+        if (m_bParaAutoAfter)
+            SetLowerSpacing(*m_pPaM, GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
+        // still "auto" for the export (the automatic space before is 0 here)
+        SetAutoSpacingGrabBag(*m_pPaM, 0,
+                              m_bParaAutoAfter
+                                  ? GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing)
+                                  : -1);
+    }
 
     m_bFirstPara = false;
 
@@ -2712,6 +2755,29 @@ bool SwWW8ImplReader::SetSpacing(SwPaM &rMyPam, int nSpace, bool bIsUpper )
             bRet = true;
         }
         return bRet;
+}
+
+// Update the value of an automatic paragraph space kept in the paragraph grab bag (mm100), like
+// SetSpacing does for the space itself.
+void SwWW8ImplReader::SetAutoSpacingGrabBag(SwPaM& rMyPam, int nBefore, int nAfter)
+{
+    const SwPosition* pPos = rMyPam.GetPoint();
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag
+        = static_cast<const SfxGrabBagItem*>(m_xCtrlStck->GetFormatAttr(*pPos, RES_PARATR_GRABBAG)))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    // the stack may still hold the grab bag of the first auto sprm only: set both
+    if (nBefore >= 0)
+        aGrabBagMap[u"ParaTopMarginBeforeAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nBefore, o3tl::Length::twip, o3tl::Length::mm100));
+    if (nAfter >= 0)
+        aGrabBagMap[u"ParaBottomMarginAfterAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nAfter, o3tl::Length::twip, o3tl::Length::mm100));
+    const sal_Int32 nEnd = pPos->GetContentIndex();
+    rMyPam.GetPoint()->SetContent(0);
+    m_xCtrlStck->NewAttr(*pPos, SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+    rMyPam.GetPoint()->SetContent(nEnd);
+    m_xCtrlStck->SetAttr(*pPos, RES_PARATR_GRABBAG);
 }
 
 bool SwWW8ImplReader::SetLowerSpacing(SwPaM &rMyPam, int nSpace)

@@ -219,6 +219,12 @@ sal_uInt32 ImplEESdrWriter::ImplWriteShape( ImplEESdrObject& rObj,
         // #i51348# shape name
         if (!aShapeName.isEmpty())
             aPropOpt.AddOpt( ESCHER_Prop_wzName, aShapeName );
+        // alternative text
+        if (SdrObject* pSdrObj = SdrObject::getSdrObjectFromXShape(rObj.GetShapeRef()))
+        {
+            if (!pSdrObj->GetDescription().isEmpty())
+                aPropOpt.AddOpt( ESCHER_Prop_wzDescription, pSdrObj->GetDescription() );
+        }
         if ( InteractionInfo* pInteraction = mpHostAppData ? mpHostAppData->GetInteractionInfo():nullptr )
         {
             const std::unique_ptr< SvMemoryStream >& pMemStrm = pInteraction->getHyperlinkRecord();
