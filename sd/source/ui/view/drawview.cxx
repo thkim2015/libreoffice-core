@@ -67,6 +67,8 @@ DrawView::DrawView(
     ,mnPOCHSmph(0)
 {
     SetCurrentObj(SdrObjKind::Rectangle);
+    // PowerPoint: bring forward / send backward is one step in the z-order
+    SetZOrderOneStep(true);
 }
 
 DrawView::~DrawView()
