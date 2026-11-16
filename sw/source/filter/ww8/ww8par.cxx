@@ -2716,7 +2716,10 @@ void SwWW8ImplReader::FinalizeTextNode(SwPosition& rPos, bool bAddNew)
         if (m_bParaAutoAfter)
             SetLowerSpacing(*m_pPaM, GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
         // still "auto" for the export (the automatic space before is 0 here)
-        SetAutoSpacingGrabBag(*m_pPaM, u"ParaTopMarginBeforeAutoSpacing"_ustr, 0);
+        SetAutoSpacingGrabBag(*m_pPaM, 0,
+                              m_bParaAutoAfter
+                                  ? GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing)
+                                  : -1);
     }
 
     m_bFirstPara = false;
@@ -2756,14 +2759,20 @@ bool SwWW8ImplReader::SetSpacing(SwPaM &rMyPam, int nSpace, bool bIsUpper )
 
 // Update the value of an automatic paragraph space kept in the paragraph grab bag (mm100), like
 // SetSpacing does for the space itself.
-void SwWW8ImplReader::SetAutoSpacingGrabBag(SwPaM& rMyPam, const OUString& rName, int nSpace)
+void SwWW8ImplReader::SetAutoSpacingGrabBag(SwPaM& rMyPam, int nBefore, int nAfter)
 {
     const SwPosition* pPos = rMyPam.GetPoint();
     std::map<OUString, css::uno::Any> aGrabBagMap;
     if (const SfxGrabBagItem* pGrabBag
         = static_cast<const SfxGrabBagItem*>(m_xCtrlStck->GetFormatAttr(*pPos, RES_PARATR_GRABBAG)))
         aGrabBagMap = pGrabBag->GetGrabBag();
-    aGrabBagMap[rName] <<= sal_Int32(o3tl::convert(nSpace, o3tl::Length::twip, o3tl::Length::mm100));
+    // the stack may still hold the grab bag of the first auto sprm only: set both
+    if (nBefore >= 0)
+        aGrabBagMap[u"ParaTopMarginBeforeAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nBefore, o3tl::Length::twip, o3tl::Length::mm100));
+    if (nAfter >= 0)
+        aGrabBagMap[u"ParaBottomMarginAfterAutoSpacing"_ustr]
+            <<= sal_Int32(o3tl::convert(nAfter, o3tl::Length::twip, o3tl::Length::mm100));
     const sal_Int32 nEnd = pPos->GetContentIndex();
     rMyPam.GetPoint()->SetContent(0);
     m_xCtrlStck->NewAttr(*pPos, SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
