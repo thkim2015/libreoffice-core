@@ -621,6 +621,9 @@ private:
     OUString                                                                        m_sCurrentBkmkId;
     OUString                                                                        m_sCurrentBkmkName;
     OUString                                                                        m_sCurrentBkmkPrefix;
+    // names of legacy form fields: Word wraps each in a bookmark of the same name, which
+    // would collide with the fieldmark name (the export writes that bookmark again)
+    o3tl::sorted_vector<OUString>                                                   m_aFormFieldNames;
 
     PermMap_t                                                                       m_aPermMap;
     sal_Int32                                                                       m_sCurrentPermId;

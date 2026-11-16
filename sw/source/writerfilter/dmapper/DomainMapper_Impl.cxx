@@ -8564,7 +8564,10 @@ void DomainMapper_Impl::CloseFieldCommand()
                             if ( xFieldmark.is() )
                             {
                                 if ( pFFDataHandler && !pFFDataHandler->getName().isEmpty() )
+                                {
                                     xFieldmark->setName(  pFFDataHandler->getName() );
+                                    m_aFormFieldNames.insert(pFFDataHandler->getName());
+                                }
                                 pContext->SetFormField( xFieldmark );
                             }
                             InsertFieldmark(m_aTextAppendStack,
@@ -9785,7 +9788,14 @@ void DomainMapper_Impl::StartOrEndBookmark( const OUString& rId )
     //is the bookmark name already registered?
     try
     {
-        if( aBookmarkIter != m_aBookmarkMap.end() )
+        if (aBookmarkIter != m_aBookmarkMap.end()
+            && m_aFormFieldNames.find(aBookmarkIter->second.m_sBookmarkName) != m_aFormFieldNames.end())
+        {
+            // the form field's own bookmark: the fieldmark already has this name
+            m_aBookmarkMap.erase(aBookmarkIter);
+            m_sCurrentBkmkId.clear();
+        }
+        else if( aBookmarkIter != m_aBookmarkMap.end() )
         {
             if (m_xTextDocument)
             {

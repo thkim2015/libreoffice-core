@@ -210,6 +210,12 @@ void FormControlHelper::processField(rtl::Reference<SwXFieldmark> const& xFormFi
     if ( !sTmp.isEmpty() )
         xNameCont->insertByName( u"Hint"_ustr, uno::Any(sTmp) );
 
+    // w:enabled / w:calcOnExit, written back by the DOCX export
+    if (!m_pFFData->getEnabled())
+        xNameCont->insertByName(u"Enabled"_ustr, uno::Any(false));
+    if (m_pFFData->getCalcOnExit())
+        xNameCont->insertByName(u"CalcOnExit"_ustr, uno::Any(true));
+
     if (m_eFieldId == FIELD_FORMTEXT )
     {
         sTmp = m_pFFData->getName();
@@ -246,6 +252,13 @@ void FormControlHelper::processField(rtl::Reference<SwXFieldmark> const& xFormFi
         uno::Any aAny;
         aAny <<= m_pFFData->getCheckboxChecked();
         xFormField->setPropertyValue(u"Checked"_ustr, aAny);
+        // exact size (half-points) instead of w:sizeAuto, and the default state
+        if (!m_pFFData->getCheckboxAutoHeight() && m_pFFData->getCheckboxHeight())
+            xNameCont->insertByName(u"CheckboxSize"_ustr,
+                                    uno::Any(sal_Int32(m_pFFData->getCheckboxHeight())));
+        if (m_pFFData->getCheckboxDefault() != -1)
+            xNameCont->insertByName(u"CheckboxDefault"_ustr,
+                                    uno::Any(m_pFFData->getCheckboxDefault() != 0));
     }
     else if (m_eFieldId == FIELD_FORMDROPDOWN )
     {

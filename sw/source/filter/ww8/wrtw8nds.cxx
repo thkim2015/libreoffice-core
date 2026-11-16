@@ -2643,6 +2643,13 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
                         {
                            AppendBookmark( pFieldmark->GetName().toString() );
                         }
+                        else if (pFieldmark->GetFieldname() == ODF_FORMTEXT
+                                 && !pFieldmark->GetName().toString().startsWith("__"))
+                        {
+                            // Word wraps a named text form field in a bookmark of the same name
+                            // (the import drops it, as the fieldmark carries the name)
+                            AppendBookmarkStart(pFieldmark->GetName().toString());
+                        }
                         ww::eField eFieldId = lcl_getFieldId( pFieldmark );
                         OUString sCode = lcl_getFieldCode( pFieldmark );
                         if (pFieldmark->GetFieldname() == ODF_UNHANDLED )
@@ -2737,6 +2744,11 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
                                     && GetExportFormat() != MSWordExportBase::ExportFormat::DOCX )
                             {
                                 AppendBookmark( pFieldmark->GetName().toString() );
+                            }
+                            else if (pFieldmark->GetFieldname() == ODF_FORMTEXT
+                                     && !pFieldmark->GetName().toString().startsWith("__"))
+                            {
+                                AppendBookmarkEnd(pFieldmark->GetName().toString(), false);
                             }
                         }
                     }
