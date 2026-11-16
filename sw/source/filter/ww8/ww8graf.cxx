@@ -3230,6 +3230,11 @@ SwFlyFrameFormat* SwWW8ImplReader::ImportReplaceableDrawables(rtl::Reference<Sdr
     {
         if (SdrObjKind::OLE2 != rpObject->GetObjIdentifier())
             SetAttributesAtGrfNode(rRecord, *pRetFrameFormat, &rF);
+        // alternative text (wzDescription) of the replaced drawing object
+        if (!rpObject->GetDescription().isEmpty())
+            pRetFrameFormat->SetObjDescription(rpObject->GetDescription());
+        if (!rpObject->GetTitle().isEmpty())
+            pRetFrameFormat->SetObjTitle(rpObject->GetTitle());
         // avoid multiple occurrences of the same graphic name
         m_aGrfNameGenerator.SetUniqueGraphName(pRetFrameFormat, aObjectName);
     }

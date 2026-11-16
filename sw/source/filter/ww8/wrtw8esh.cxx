@@ -1652,6 +1652,13 @@ sal_Int32 SwBasicEscherEx::WriteGrfFlyFrame(const SwFrameFormat& rFormat, sal_uI
     aPropOpt.AddOpt( ESCHER_Prop_pibFlags, nFlags );
     nBorderThick = WriteFlyFrameAttr(rFormat,mso_sptPictureFrame,aPropOpt);
     WriteGrfAttr(*pGrfNd, rFormat, aPropOpt);
+    // alternative text, Word keeps it in wzDescription
+    if (auto pFlyFormat = dynamic_cast<const SwFlyFrameFormat*>(&rFormat))
+    {
+        const OUString aDescr = pFlyFormat->GetObjDescription();
+        if (!aDescr.isEmpty())
+            aPropOpt.AddOpt(ESCHER_Prop_wzDescription, aDescr);
+    }
 
     aPropOpt.Commit( GetStream() );
 
