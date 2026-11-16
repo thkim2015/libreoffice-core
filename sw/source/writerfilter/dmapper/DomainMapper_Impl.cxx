@@ -9958,7 +9958,16 @@ void DomainMapper_Impl::startOrEndPermissionRange(sal_Int32 permissinId)
                 // then  move the bookmark-End to the earlier paragraph
                 if (IsOutsideAParagraph())
                 {
+                    // keep the permission range like StartOrEndBookmark does: goLeft(1, false)
+                    // alone collapsed it, so a w:permEnd after the paragraph (Word writes that
+                    // for whole-paragraph editing exceptions) gave an empty range
+                    uno::Reference< text::XTextRange > xStart = xCursor->getStart();
                     xCursor->goLeft(1, false);
+                    if (m_StreamStateStack.top().nTableDepth == 0
+                        || !m_StreamStateStack.top().bFirstParagraphInCell)
+                    {
+                        xCursor->gotoRange(xStart, true);
+                    }
                 }
 
                 // create a new bookmark using specific bookmark name pattern for permissions
