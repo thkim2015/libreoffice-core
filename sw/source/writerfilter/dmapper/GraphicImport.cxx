@@ -659,7 +659,8 @@ void GraphicImport::lcl_attribute(Id nName, const Value& rValue)
             m_bHidden = (nIntValue == 1);
         break;
         case NS_ooxml::LN_CT_GraphicalObjectFrameLocking_noChangeAspect:
-            //disallow aspect ratio change - ignored
+            //disallow aspect ratio change - only kept for DOCX export
+            m_bNoChangeAspect = nIntValue != 0;
         break;
         case NS_ooxml::LN_CT_GraphicalObjectFrameLocking_noMove:
             m_bPositionProtected = true;
@@ -1821,6 +1822,18 @@ rtl::Reference<SwXTextGraphicObject> GraphicImport::createGraphicObject(uno::Ref
             if( m_bSizeProtected )
                 xGraphicObject->setPropertyValue(getPropertyName( PROP_SIZE_PROTECTED ),
                     uno::Any(true));
+            // Word writes a:graphicFrameLocks noChangeAspect="1" only for pictures with a locked
+            // aspect ratio; remember an unlocked one, so DOCX export does not lock it.
+            if (!m_bNoChangeAspect && m_rDomainMapper.IsOOXMLImport()
+                && (m_rGraphicImportType == IMPORT_AS_DETECTED_INLINE
+                    || m_rGraphicImportType == IMPORT_AS_DETECTED_ANCHOR))
+            {
+                comphelper::SequenceAsHashMap aFrameGrabBag(
+                    xGraphicObject->getPropertyValue(u"FrameInteropGrabBag"_ustr));
+                aFrameGrabBag[u"AspectUnlocked"_ustr] <<= true;
+                xGraphicObject->setPropertyValue(u"FrameInteropGrabBag"_ustr,
+                    uno::Any(aFrameGrabBag.getAsConstPropertyValueList()));
+            }
 
             xGraphicObject->setPropertyValue(getPropertyName(PROP_DECORATIVE), uno::Any(m_bDecorative));
             if (m_rGraphicImportType == IMPORT_AS_DETECTED_ANCHOR)
