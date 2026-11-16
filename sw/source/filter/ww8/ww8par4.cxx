@@ -542,7 +542,30 @@ void SwWW8ImplReader::Read_CPropRMark(sal_uInt16 , const sal_uInt8* pData, short
     // 1 byte  - chp.fPropRMark
     // 2 bytes - chp.ibstPropRMark
     // 4 bytes - chp.dttmPropRMark;
+    if (nLen >= 1 && !pData[0])
+        return; // fPropRMark off
     Read_CRevisionMark( RedlineType::Format, pData, nLen );
+}
+
+// paragraph formatting changed with revision tracking (sprmPPropRMark, same 7 bytes): a paragraph
+// formatting redline over the paragraph, like the DOCX import of w:pPrChange (the old paragraph
+// properties are not kept)
+void SwWW8ImplReader::Read_PPropRMark(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (m_pCurrentColl || m_xCurrentItemSet)
+        return;
+    if (nLen < 0)
+    {
+        m_xRedlineStack->close(*m_pPaM->GetPoint(), RedlineType::ParagraphFormat);
+        return;
+    }
+    if (nLen < 7 || !pData[0])
+        return;
+    sal_uInt16 nWWAutNo = SVBT16ToUInt16(pData + 1);
+    sal_uInt32 nWWDate = SVBT32ToUInt32(pData + 3);
+    DateTime aStamp(msfilter::util::DTTM2DateTime(nWWDate));
+    std::size_t nAuthorNo = m_aAuthorInfos[nWWAutNo];
+    NewAttr(SwFltRedline(RedlineType::ParagraphFormat, nAuthorNo, aStamp));
 }
 
 /* vim:set shiftwidth=4 softtabstop=4 expandtab: */

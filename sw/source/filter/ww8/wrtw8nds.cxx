@@ -3725,7 +3725,8 @@ void WW8AttributeOutput::Redline( const SwRedlineData* pRedline )
         break;
 
     case RedlineType::Format:
-        m_rWW8Export.InsUInt16( NS_sprm::CPropRMark90::val );
+        // like Word 2002+ (sprmCPropRMark90 is not read back by Word)
+        m_rWW8Export.InsUInt16( NS_sprm::CPropRMark::val );
         m_rWW8Export.m_pO->push_back( 7 );       // len
         m_rWW8Export.m_pO->push_back( 1 );
         m_rWW8Export.InsUInt16( m_rWW8Export.AddRedlineAuthor( pRedline->GetAuthor() ) );
@@ -3749,6 +3750,24 @@ void WW8AttributeOutput::Redline( const SwRedlineData* pRedline )
         m_rWW8Export.InsUInt32(sw::ms::DateTime2DTTM(
             bRemovePersonalInfo ? DateTime(DateTime::EMPTY) : pRedline->GetTimeStamp()));
     }
+}
+
+void WW8AttributeOutput::EndParagraphProperties(const SfxItemSet&, const SwRedlineData* pRedlineData,
+                                                const SwRedlineData*, const SwRedlineData*)
+{
+    // paragraph formatting changed with revision tracking, like Word: sprmPPropRMark
+    if (!pRedlineData || pRedlineData->GetType() != RedlineType::ParagraphFormat)
+        return;
+    bool bRemovePersonalInfo
+        = SvtSecurityOptions::IsOptionSet(SvtSecurityOptions::EOption::DocWarnRemovePersonalInfo)
+          && !SvtSecurityOptions::IsOptionSet(
+                 SvtSecurityOptions::EOption::DocWarnKeepRedlineInfo);
+    m_rWW8Export.InsUInt16(NS_sprm::PPropRMark::val);
+    m_rWW8Export.m_pO->push_back(7); // len
+    m_rWW8Export.m_pO->push_back(1);
+    m_rWW8Export.InsUInt16(m_rWW8Export.AddRedlineAuthor(pRedlineData->GetAuthor()));
+    m_rWW8Export.InsUInt32(sw::ms::DateTime2DTTM(
+        bRemovePersonalInfo ? DateTime(DateTime::EMPTY) : pRedlineData->GetTimeStamp()));
 }
 
 void MSWordExportBase::OutputContentNode( SwContentNode& rNode )

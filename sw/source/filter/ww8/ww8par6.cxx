@@ -6471,6 +6471,8 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::PBrcBottom::val,        &SwWW8ImplReader::Read_Border},
         {NS_sprm::PBrcRight::val,         &SwWW8ImplReader::Read_Border},
         {NS_sprm::PBrcBetween::val,       &SwWW8ImplReader::Read_Border},
+        {NS_sprm::PPropRMark::val,        &SwWW8ImplReader::Read_PPropRMark},             // pap.fPropRMark (paragraph formatting
+                                                                                         // changed with revision tracking)
         {NS_sprm::CIstdPermute::val,      nullptr},                                       // chp.istd;permutation vector;
                                                                                          // variable length;
         {NS_sprm::CMajority::val,         &SwWW8ImplReader::Read_Majority},               // chp.fBold, chp.fItalic, chp.fStrike,
@@ -6500,6 +6502,8 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::CBrc::val,              &SwWW8ImplReader::Read_CharBorder},             // chp.brc;BRC;long;
         {NS_sprm::CFitText::val,          &SwWW8ImplReader::Read_FitText},                // chp.dxaFitText, fitTextID
         {NS_sprm::CFELayout::val,         &SwWW8ImplReader::Read_DoubleLine_Rotate},
+        {NS_sprm::CPropRMark::val,        &SwWW8ImplReader::Read_CPropRMark},             // written by Word 2002+ instead of
+                                                                                         // sprmCPropRMark90
         {NS_sprm::LN_PicScale,            nullptr},                                       // pic.mx, pic.my, pic.dxaCropleft,
                                                                                          // pic.dyaCropTop pic.dxaCropRight,
                                                                                          // pic.dyaCropBottom;Complex;

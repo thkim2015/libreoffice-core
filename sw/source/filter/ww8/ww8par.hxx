@@ -1848,6 +1848,7 @@ public:     // really private, but can only be done public
     void Read_CFRMarkDel(sal_uInt16 , const sal_uInt8* pData, short nLen);
     // change properties of content (e.g. char formatting)
     void Read_CPropRMark(sal_uInt16 , const sal_uInt8* pData, short nLen); // complex!
+    void Read_PPropRMark(sal_uInt16, const sal_uInt8* pData, short nLen);
 
     void Read_TabRowEnd(        sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_TabCellEnd(        sal_uInt16, const sal_uInt8* pData, short nLen );
