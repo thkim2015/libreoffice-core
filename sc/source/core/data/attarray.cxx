@@ -1705,6 +1705,7 @@ void ScAttrArray::ChangeIndent( SCROW nStartRow, SCROW nEndRow, bool bIncrement 
     Search( nStartRow, nIndex );
     SCROW nThisStart = (nIndex>0) ? mvData[nIndex-1].nEndRow+1 : 0;
     if (nThisStart < nStartRow) nThisStart = nStartRow;
+    tools::Long nStep = 0;
 
     while ( nThisStart <= nEndRow )
     {
@@ -1712,33 +1713,24 @@ void ScAttrArray::ChangeIndent( SCROW nStartRow, SCROW nEndRow, bool bIncrement 
         const SfxItemSet& rOldSet = pOldPattern->GetItemSet();
         const SvxHorJustifyItem* pItem;
 
+        // weboffice: Excel keeps left, right and distributed alignment, the others become left
         bool bNeedJust = !( pItem = rOldSet.GetItemIfSet( ATTR_HOR_JUSTIFY, false ) )
                            || (pItem->GetValue() != SvxCellHorJustify::Left &&
-                               pItem->GetValue() != SvxCellHorJustify::Right );
+                               pItem->GetValue() != SvxCellHorJustify::Right &&
+                               !(pItem->GetValue() == SvxCellHorJustify::Block &&
+                                 rOldSet.Get( ATTR_HOR_JUSTIFY_METHOD ).GetValue() == SvxCellJustifyMethod::Distribute));
         sal_uInt16 nOldValue = rOldSet.Get( ATTR_INDENT ).GetValue();
         sal_uInt16 nNewValue = nOldValue;
-        // To keep Increment indent from running outside the cell
-        tools::Long nColWidth = static_cast<tools::Long>(
-            rDocument.GetColWidth(nCol == -1 ? rDocument.MaxCol() : nCol,nTab));
+        // weboffice: step by one Excel indent level (three spaces of the default font) up to
+        // Excel's 250 levels; Excel lets the indent run past the column width.
+        if ( nStep <= 0 )
+            nStep = std::max< tools::Long >( 1, rDocument.GetExcelIndentStep() );
+        const tools::Long nMaxLevel = std::min< tools::Long >( 250, SAL_MAX_INT16 / nStep );
+        const tools::Long nLevel = ( nOldValue + nStep / 2 ) / nStep;
         if ( bIncrement )
-        {
-            if ( nNewValue < nColWidth-SC_INDENT_STEP )
-            {
-                nNewValue += SC_INDENT_STEP;
-                if ( nNewValue > nColWidth-SC_INDENT_STEP )
-                    nNewValue = nColWidth-SC_INDENT_STEP;
-            }
-        }
+            nNewValue = static_cast< sal_uInt16 >( std::min( nLevel + 1, nMaxLevel ) * nStep );
         else
-        {
-            if ( nNewValue > 0 )
-            {
-                if ( nNewValue > SC_INDENT_STEP )
-                    nNewValue -= SC_INDENT_STEP;
-                else
-                    nNewValue = 0;
-            }
-        }
+            nNewValue = static_cast< sal_uInt16 >( std::max< tools::Long >( nLevel - 1, 0 ) * nStep );
 
         if ( bNeedJust || nNewValue != nOldValue )
         {

@@ -202,6 +202,7 @@ static std::span<const SfxItemPropertyMapEntry> lcl_GetDocOptPropertyMap()
         { SC_UNO_THEME,                   0, cppu::UnoType<util::XTheme>::get(), 0,  0},
         { u"ZetaThemeColors"_ustr,        0, cppu::UnoType<uno::Sequence<beans::PropertyValue>>::get(), 0,  0},
         { u"ZetaNoTableAutoCalc"_ustr,    0, cppu::UnoType<bool>::get(),                            0, 0},
+        { u"ZetaIndentStep"_ustr,         0, cppu::UnoType<sal_Int32>::get(),                       beans::PropertyAttribute::READONLY, 0},
         { u"ZetaCalculateSheet"_ustr,     0, cppu::UnoType<sal_Int32>::get(),                       0, 0},
         { SC_UNO_DATABASERNG,             0, cppu::UnoType<sheet::XDatabaseRanges>::get(),          0, 0},
         { SC_UNO_NULLDATE,                static_cast<sal_uInt16>(ScPropUnoId::NullDate), cppu::UnoType<util::Date>::get(),                      0, 0},
@@ -3927,6 +3928,11 @@ uno::Any SAL_CALL ScModelObj::getPropertyValue( const OUString& aPropertyName )
         else if (aPropertyName == "ZetaCalculateSheet")
         {
             aRet <<= sal_Int32(-1);
+        }
+        else if (aPropertyName == "ZetaIndentStep")
+        {
+            // weboffice: one Excel indent level in twips (Format Cells dialog of the web UI)
+            aRet <<= static_cast<sal_Int32>(rDoc.GetExcelIndentStep());
         }
         else if (aPropertyName == "ZetaThemeColors")
         {
