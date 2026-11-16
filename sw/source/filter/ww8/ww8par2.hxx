@@ -230,6 +230,8 @@ class WW8TabDesc
     SwTwips m_nSwWidth;
     short m_nPreferredWidth;
     short m_nPercentWidth;
+    bool m_bWidthAuto;      // sprmTTableWidth ftsAuto: keep Word automatic width
+    sal_Int32 m_nTableLook; // sprmTTlp grpfTLP (= w:tblLook w:val), -1 if none
 
     bool m_bOk;
     bool m_bClaimLineFormat;
