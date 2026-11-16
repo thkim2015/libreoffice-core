@@ -5570,7 +5570,9 @@ void SwWW8ImplReader::Read_Hyphenation( sal_uInt16, const sal_uInt8* pData, shor
 
         SvxHyphenZoneItem aAttr( *GetFormatAttr( RES_PARATR_HYPHENZONE ) );
 
-        aAttr.SetHyphen( 0 == *pData ); // sic !
+        // sic ! -- but nothing hyphenates in Word while the document's automatic hyphenation is
+        // off, even with fNoAutoHyph 0 (which the DOC export writes for the Normal style)
+        aAttr.SetHyphen( 0 == *pData && !(m_xWDop && !m_xWDop->fAutoHyphen) );
 
         if( !*pData )
         {
