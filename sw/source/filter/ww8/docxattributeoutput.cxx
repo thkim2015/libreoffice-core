@@ -6000,11 +6000,18 @@ void DocxAttributeOutput::FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size
 
     m_pSerializer->endElementNS( XML_wp, XML_docPr );
 
+    // A picture imported from DOCX without noChangeAspect has an unlocked aspect ratio.
+    bool bAspectUnlocked = false;
+    if (const SfxGrabBagItem* pItem = pFrameFormat->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false))
+    {
+        auto it = pItem->GetGrabBag().find(u"AspectUnlocked"_ustr);
+        if (it != pItem->GetGrabBag().end())
+            it->second >>= bAspectUnlocked;
+    }
     m_pSerializer->startElementNS(XML_wp, XML_cNvGraphicFramePr);
-    // TODO change aspect?
     m_pSerializer->singleElementNS( XML_a, XML_graphicFrameLocks,
             FSNS( XML_xmlns, XML_a ), GetExport().GetFilter().getNamespaceURL(OOX_NS(dml)),
-            XML_noChangeAspect, "1" );
+            XML_noChangeAspect, bAspectUnlocked ? nullptr : "1" );
     m_pSerializer->endElementNS( XML_wp, XML_cNvGraphicFramePr );
 
     m_pSerializer->startElementNS( XML_a, XML_graphic,
@@ -6025,9 +6032,8 @@ void DocxAttributeOutput::FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size
     m_pSerializer->endElementNS( XML_pic, XML_cNvPr );
 
     m_pSerializer->startElementNS(XML_pic, XML_cNvPicPr);
-    // TODO change aspect?
     m_pSerializer->singleElementNS( XML_a, XML_picLocks,
-            XML_noChangeAspect, "1", XML_noChangeArrowheads, "1" );
+            XML_noChangeAspect, bAspectUnlocked ? nullptr : "1", XML_noChangeArrowheads, "1" );
     m_pSerializer->endElementNS( XML_pic, XML_cNvPicPr );
     m_pSerializer->endElementNS( XML_pic, XML_nvPicPr );
 

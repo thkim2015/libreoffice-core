@@ -105,6 +105,14 @@ void SmOoxmlExport::HandleText( const SmNode* pNode, int /*nLevel*/)
         m_pSerializer->singleElementNS(XML_m, XML_nor);
         m_pSerializer->endElementNS( XML_m, XML_rPr );
     }
+    else if (static_cast<const SmTextNode*>(pNode)->GetFontDesc() == FNT_FUNCTION)
+    {
+        // Function names (sin, lim, func ...) are upright; without m:sty Word draws them
+        // in math italic like variables.
+        m_pSerializer->startElementNS(XML_m, XML_rPr);
+        m_pSerializer->singleElementNS(XML_m, XML_sty, FSNS(XML_m, XML_val), "p");
+        m_pSerializer->endElementNS( XML_m, XML_rPr );
+    }
     if (drawingml::DOCUMENT_DOCX == m_DocumentType && ECMA_376_1ST_EDITION == version)
     { // HACK: MSOffice2007 does not import characters properly unless this font is explicitly given
         m_pSerializer->startElementNS(XML_w, XML_rPr);

@@ -23,6 +23,7 @@
 #include "LoggedResources.hxx"
 
 #include <com/sun/star/table/BorderLine2.hpp>
+#include <docmodel/color/ComplexColor.hxx>
 
 #include <vector>
 
@@ -32,6 +33,7 @@ class PgBorder
 {
 public:
     css::table::BorderLine2 m_rLine;
+    model::ComplexColor m_aComplexColor;
     sal_Int32 m_nDistance;
     BorderPosition m_ePos;
     bool m_bShadow;

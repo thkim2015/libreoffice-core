@@ -56,6 +56,8 @@ class TDefTableHandler : public LoggedProperties
     model::ThemeColorType m_eThemeColorType = model::ThemeColorType::Unknown;
     sal_Int32 m_nThemeShade = 0;
     sal_Int32 m_nThemeTint = 0;
+    /// Line colour and theme colour of the cell border lines that refer to a theme colour.
+    std::vector<std::pair<sal_Int32, model::ComplexColor>> m_aThemeColors;
 
     OUString m_aInteropGrabBagName;
     std::vector<css::beans::PropertyValue> m_aInteropGrabBag;
@@ -72,6 +74,7 @@ public:
     virtual ~TDefTableHandler() override;
 
     void fillCellProperties( const ::tools::SvRef< TablePropertyMap >& pCellProperties) const;
+    const std::vector<std::pair<sal_Int32, model::ComplexColor>>& getThemeColors() const { return m_aThemeColors; }
     void enableInteropGrabBag(const OUString& aName);
     css::beans::PropertyValue getInteropGrabBag(const OUString& aName = OUString());
 

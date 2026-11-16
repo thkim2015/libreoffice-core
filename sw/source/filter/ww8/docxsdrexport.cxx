@@ -39,6 +39,7 @@
 #include <comphelper/sequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <frmfmt.hxx>
+#include <svl/grabbagitem.hxx>
 #include <IDocumentDrawModelAccess.hxx>
 
 #include <svx/svdtrans.hxx>
@@ -881,7 +882,19 @@ void DocxSdrExport::startDMLAnchorInline(const SwFrameFormat* pFrameFormat, cons
         // Mandatory attribute, write 0 if pObj is null.
         attrList->add(XML_relativeHeight, pObj ? OString::number(pObj->GetOrdNum() + 2) : "0"_ostr);
         attrList->add(XML_behindDoc, bOpaque ? "0" : "1");
-        attrList->add(XML_locked, "0");
+        // Anchor lock from DOCX import: drawing shapes keep it in their grab bag, pictures
+        // (SwXTextGraphicObject) in the frame format grab bag.
+        bool bLocked = pObj && lclGetBoolFromGrabBag(pObj, u"AnchorLocked"_ustr);
+        if (!bLocked)
+        {
+            if (const SfxGrabBagItem* pItem = pFrameFormat->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false))
+            {
+                auto it = pItem->GetGrabBag().find(u"AnchorLocked"_ustr);
+                if (it != pItem->GetGrabBag().end())
+                    it->second >>= bLocked;
+            }
+        }
+        attrList->add(XML_locked, bLocked ? "1" : "0");
 
         bool bLclInTabCell = true;
         if (pObj)
