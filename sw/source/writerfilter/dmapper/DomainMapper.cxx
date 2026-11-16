@@ -504,6 +504,11 @@ DomainMapper::~DomainMapper()
         // Add the saved w:doNotHyphenateCaps setting
         aProperties[u"NoHyphenateCaps"_ustr] <<= m_pImpl->GetSettingsTable()->GetNoHyphenateCaps();
 
+        // Word automatic hyphenation off (no w:autoHyphenation): the DOCX export keeps it off and
+        // writes w:suppressAutoHyphens only for the explicit paragraphs, like for DOC import
+        if (!m_pImpl->GetSettingsTable()->GetAutoHyphenation())
+            aProperties[u"WordAutoHyphenation"_ustr] <<= false;
+
         // STYLEREF and TOC \t style names written in Word's UI language, see
         // DomainMapper_Impl::ConvertTOCStyleName()
         if (!m_pImpl->m_aStyleRefUINames.empty())
@@ -2320,6 +2325,10 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         break;
     case NS_ooxml::LN_CT_PPrBase_suppressAutoHyphens:
         rContext->Insert(PROP_PARA_IS_HYPHENATION, uno::Any( nIntValue == 0 ));
+        // explicit "do not hyphenate": with Word automatic hyphenation off the DOCX export writes
+        // w:suppressAutoHyphens only here, see DocxAttributeOutput::ParaHyphenZone()
+        if (nIntValue != 0)
+            rContext->Insert(PROP_PARA_SUPPRESS_AUTO_HYPHENS, uno::Any(true), true, PARA_GRAB_BAG);
         // if hyphenation is enabled, don't lose other paragraph-level
         // hyphenation settings of SvxHyphenZoneItem
         if ( nIntValue == 0 )

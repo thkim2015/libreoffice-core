@@ -573,6 +573,11 @@ bool SettingsTable::GetNoHyphenateCaps() const
     return m_bNoHyphenateCaps;
 }
 
+bool SettingsTable::GetAutoHyphenation() const
+{
+    return m_bAutoHyphenation;
+}
+
 bool SettingsTable::GetMsWordUlTrailSpace() const
 {
     return m_bMsWordUlTrailSpace;

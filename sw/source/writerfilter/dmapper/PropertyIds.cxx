@@ -348,6 +348,7 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_PARA_PAGE_BREAK_BEFORE, u"ParaPageBreakBefore"_ustr},
         { PROP_PARA_THAI_DISTRIBUTE, u"ParaThaiDistribute"_ustr},
         { PROP_PARA_ADJUST_RIGHT_IND, u"ParaAdjustRightInd"_ustr},
+        { PROP_PARA_SUPPRESS_AUTO_HYPHENS, u"ParaSuppressAutoHyphens"_ustr},
         { PROP_PARA_BAR_TABS, u"ParaBarTabs"_ustr},
         { PROP_SURROUND_TEXT_WRAP_SMALL, u"SurroundTextWrapSmall"_ustr},
         { PROP_PARA_SHADOW_FORMAT, u"ParaShadowFormat"_ustr},
