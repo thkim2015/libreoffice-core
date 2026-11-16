@@ -1736,6 +1736,7 @@ private:
 
     bool SetSpacing(SwPaM &rMyPam, int nSpace, bool bIsUpper);
     bool SetUpperSpacing(SwPaM &pMyPam, int nSpace);
+    void SetAutoSpacingGrabBag(SwPaM& rMyPam, const OUString& rName, int nSpace);
     bool SetLowerSpacing(SwPaM &rMyPam, int nSpace);
 
     bool IsInlineEscherHack() const

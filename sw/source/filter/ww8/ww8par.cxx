@@ -2704,7 +2704,14 @@ void SwWW8ImplReader::FinalizeTextNode(SwPosition& rPos, bool bAddNew)
     // Auto-spacing before paragraph is set,
     // set the upper spacing value to 0
     if(m_bParaAutoBefore && m_bFirstPara && !m_xWDop->fDontUseHTMLAutoSpacing)
+    {
         SetUpperSpacing(*m_pPaM, 0);
+        // SetSpacing may start from the space below of the style: keep the automatic one
+        if (m_bParaAutoAfter)
+            SetLowerSpacing(*m_pPaM, GetParagraphAutoSpace(m_xWDop->fDontUseHTMLAutoSpacing));
+        // still "auto" for the export (the automatic space before is 0 here)
+        SetAutoSpacingGrabBag(*m_pPaM, u"ParaTopMarginBeforeAutoSpacing"_ustr, 0);
+    }
 
     m_bFirstPara = false;
 
@@ -2739,6 +2746,23 @@ bool SwWW8ImplReader::SetSpacing(SwPaM &rMyPam, int nSpace, bool bIsUpper )
             bRet = true;
         }
         return bRet;
+}
+
+// Update the value of an automatic paragraph space kept in the paragraph grab bag (mm100), like
+// SetSpacing does for the space itself.
+void SwWW8ImplReader::SetAutoSpacingGrabBag(SwPaM& rMyPam, const OUString& rName, int nSpace)
+{
+    const SwPosition* pPos = rMyPam.GetPoint();
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag
+        = static_cast<const SfxGrabBagItem*>(m_xCtrlStck->GetFormatAttr(*pPos, RES_PARATR_GRABBAG)))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[rName] <<= sal_Int32(o3tl::convert(nSpace, o3tl::Length::twip, o3tl::Length::mm100));
+    const sal_Int32 nEnd = pPos->GetContentIndex();
+    rMyPam.GetPoint()->SetContent(0);
+    m_xCtrlStck->NewAttr(*pPos, SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+    rMyPam.GetPoint()->SetContent(nEnd);
+    m_xCtrlStck->SetAttr(*pPos, RES_PARATR_GRABBAG);
 }
 
 bool SwWW8ImplReader::SetLowerSpacing(SwPaM &rMyPam, int nSpace)
