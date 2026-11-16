@@ -8099,6 +8099,13 @@ void DomainMapper_Impl::handleIndex
         {
             xTOC->setPropertyValue(u"UseAlphabeticalSeparators"_ustr, uno::Any(true));
         }
+        // Word draws page numbers of XE \b marks bold: use the bold
+        // "Main Index Entry" character style for main entries
+        if (sUserIndex.isEmpty())
+        {
+            xTOC->setPropertyValue(u"MainEntryCharacterStyleName"_ustr,
+                                   uno::Any(u"Main index entry"_ustr));
+        }
         if( !sUserIndex.isEmpty() )
         {
             xTOC->setPropertyValue(u"UserIndexName"_ustr, uno::Any(sUserIndex));
@@ -9118,6 +9125,14 @@ void DomainMapper_Impl::CloseFieldCommand()
                     {
                         xTC->setPropertyValue(u"UserIndexName"_ustr,
                                 uno::Any(sUserIndex));
+                    }
+                    // XE \b: bold page number = Writer main entry (INDEX gets the
+                    // main entry character style, see handleIndex)
+                    OUString sBold;
+                    if (sUserIndex.isEmpty()
+                        && lcl_FindInCommand(pContext->GetCommand(), 'b', sBold))
+                    {
+                        xTC->setPropertyValue(u"IsMainEntry"_ustr, uno::Any(true));
                     }
                     uno::Reference< text::XTextContent > xToInsert( xTC, uno::UNO_QUERY );
                     uno::Reference< text::XTextAppend >  xTextAppend = m_aTextAppendStack.top().xTextAppend;
