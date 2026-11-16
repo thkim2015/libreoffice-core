@@ -2364,7 +2364,8 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
     // end ToX fields
     for (auto it = m_Fields.rbegin(); it != m_Fields.rend(); )
     {
-        if (it->bClose && !it->pField)
+        // (not the HYPERLINK field of a URL + mark link whose text continues in the next run)
+        if (it->bClose && !it->pField && (bUrlEndsInThisRun || !IsUrlField(*it)))
         {
             EndField_Impl( pNode, nPos, *it );
             it = decltype(m_Fields)::reverse_iterator(m_Fields.erase(it.base() - 1));
