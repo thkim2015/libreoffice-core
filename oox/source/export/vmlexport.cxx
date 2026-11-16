@@ -49,6 +49,8 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/beans/XPropertySetInfo.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
+#include <com/sun/star/awt/Size.hpp>
+#include <basegfx/numeric/ftools.hxx>
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/VertOrientation.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
@@ -376,6 +378,32 @@ void  VMLExport::AddSdrObjectVMLObject( const SdrObject& rObj)
 {
    m_pSdrObject = &rObj;
 }
+
+/// A text path shape imported with trim="f" keeps the size of the file and the size fitted to the
+/// text in its grab bag; while the shape still has the fitted size, rRatio is file height / fitted
+/// height.
+static bool lcl_getTextpathOrigHeightRatio(const SdrObject* pSdrObject, double& rRatio)
+{
+    if (!pSdrObject)
+        return false;
+    uno::Reference<drawing::XShape> xShape(const_cast<SdrObject*>(pSdrObject)->getUnoShape(), uno::UNO_QUERY);
+    uno::Reference<beans::XPropertySet> xProps(xShape, uno::UNO_QUERY);
+    if (!xProps.is() || !xProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+        return false;
+    comphelper::SequenceAsHashMap aGrabBag(xProps->getPropertyValue(u"InteropGrabBag"_ustr));
+    awt::Size aOrig, aFit;
+    auto itOrig = aGrabBag.find(u"VML-TextpathOrigSize"_ustr);
+    auto itFit = aGrabBag.find(u"VML-TextpathFitSize"_ustr);
+    if (itOrig == aGrabBag.end() || itFit == aGrabBag.end() || !(itOrig->second >>= aOrig)
+        || !(itFit->second >>= aFit) || aFit.Height <= 0 || aOrig.Height <= 0)
+        return false;
+    const awt::Size aNow = xShape->getSize();
+    if (std::abs(aNow.Width - aFit.Width) > 2 || std::abs(aNow.Height - aFit.Height) > 2)
+        return false;
+    rRatio = static_cast<double>(aOrig.Height) / aFit.Height;
+    return true;
+}
+
 void VMLExport::Commit( EscherPropertyContainer& rProps, const tools::Rectangle& rRect )
 {
     if ( m_nShapeType == ESCHER_ShpInst_Nil )
@@ -385,12 +413,25 @@ void VMLExport::Commit( EscherPropertyContainer& rProps, const tools::Rectangle&
     // inside the shapes
     m_pSerializer->mark(Tag_Commit);
 
+    // A text path shape imported with trim="f" whose height the import fitted to the text (see
+    // TextpathModel::pushToPropMap): while its size is unchanged, write the size of the file back
+    // with trim="f" instead of the fitted height with trim="t".
+    double fTextpathHeightRatio = 0;
+    const bool bTextpathOrigSize = m_nShapeType != ESCHER_ShpInst_Line
+                                   && lcl_getTextpathOrigHeightRatio(m_pSdrObject, fTextpathHeightRatio);
+
     // dimensions
     if ( m_nShapeType == ESCHER_ShpInst_Line )
         AddLineDimensions( rRect );
     else
     {
-        if ( IsWaterMarkShape( m_pSdrObject->GetName() ) )
+        if (bTextpathOrigSize)
+        {
+            tools::Rectangle aRect(rRect);
+            aRect.setHeight(basegfx::fround<tools::Long>(rRect.getOpenHeight() * fTextpathHeightRatio));
+            AddRectangleDimensions(m_ShapeStyle, aRect);
+        }
+        else if ( IsWaterMarkShape( m_pSdrObject->GetName() ) )
         {
             // Watermark need some padding to be compatible with MSO
             tools::Long nPaddingY = 0;
@@ -1009,7 +1050,10 @@ void VMLExport::Commit( EscherPropertyContainer& rProps, const tools::Rectangle&
                         // tdf#153260. LO renders all Fontwork shapes as if trim="t" is set. Default
                         // value is "f". So always write out "t", otherwise import will reduce the
                         // shape height as workaround for "f".
-                        pAttrList->add(XML_trim, "t");
+                        // The original size of an unchanged trim="f" shape is written back with
+                        // trim="f" (the default), so the import fits the height again.
+                        if (!bTextpathOrigSize)
+                            pAttrList->add(XML_trim, "t");
 
                         m_pSerializer->singleElementNS(XML_v, XML_textpath, pAttrList);
                     }
