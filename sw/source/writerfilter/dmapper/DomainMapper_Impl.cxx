@@ -8729,11 +8729,20 @@ void DomainMapper_Impl::CloseFieldCommand()
                 {
                     if (xFieldInterface.is())
                     {
-                        sal_Int32 nIndex = sizeof(" MACROBUTTON ");
                         OUString sCommand = pContext->GetCommand();
+                        // The macro name is the first word after the field name. sizeof(" MACROBUTTON ")
+                        // counts the terminating NUL, so it ate the first letter ("NoMacro" -> "oMacro")
+                        // whenever a single space separated the name.
+                        sal_Int32 nIndex = sCommand.indexOf("MACROBUTTON");
+                        if (nIndex >= 0)
+                        {
+                            nIndex += RTL_CONSTASCII_LENGTH("MACROBUTTON");
+                            while (nIndex < sCommand.getLength() && sCommand[nIndex] == ' ')
+                                ++nIndex;
+                        }
 
                         //extract macro name
-                        if (sCommand.getLength() >= nIndex)
+                        if (nIndex >= 0 && sCommand.getLength() > nIndex)
                         {
                             OUString sMacro = sCommand.getToken(0, ' ', nIndex);
                             xFieldInterface->setPropertyValue(
