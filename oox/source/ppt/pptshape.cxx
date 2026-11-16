@@ -644,6 +644,8 @@ void PPTShape::addShape(
 
                 for (size_t i = 0; i < this->getChildren().size(); i++)
                 {
+                    // URL이 없는 자식은 >>=가 sURL을 그대로 두므로 먼저 비운다(앞 자식의 링크가 옆 도형으로 새던 문제)
+                    sURL.clear();
                     this->getChildren()[i]->getShapeProperties().getProperty(PROP_URL) >>= sURL;
                     if (!sURL.isEmpty())
                     {
