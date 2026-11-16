@@ -107,6 +107,8 @@ public:
     AnchorType          getEditAs() const { return meEditAs; }
 
     AnchorType getAnchorType() const { return meAnchorType; }
+    /** ZetaOffice: clientData fPrintsWithSheet ('Print object'). */
+    bool isPrintsWithSheet() const { return maClientData.mbPrintsWithSheet; }
 private:
     /** Converts the passed anchor to an absolute position in EMUs. */
     ::oox::drawingml::EmuPoint calcCellAnchorEmu( const CellAnchorModel& rModel ) const;

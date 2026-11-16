@@ -396,6 +396,11 @@ void DrawingFragment::onEndElement()
 
                     mxShape->addShape( getOoxFilter(), &getTheme(), mxDrawPage, aTransformation, mxShape->getFillProperties() );
 
+                    // ZetaOffice: 'Print object' off (clientData fPrintsWithSheet="0")
+                    if( !mxAnchor->isPrintsWithSheet() )
+                        if( SdrObject* pPrintObj = SdrObject::getSdrObjectFromXShape( mxShape->getXShape() ) )
+                            pPrintObj->SetPrintable( false );
+
                     /*  Collect all shape positions in the WorksheetHelper base
                         class. But first, scale EMUs to 1/100 mm. */
                     Rectangle aShapeRectHmm(

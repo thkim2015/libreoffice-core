@@ -1412,10 +1412,15 @@ void XclObjAny::SaveXml( XclExpXmlStream& rStrm )
         }
     }
 
-    pDrawing->singleElement( FSNS( XML_xdr, XML_clientData)
-            // OOXTODO: XML_fLocksWithSheet
-            // OOXTODO: XML_fPrintsWithSheet
-    );
+    {
+        // ZetaOffice: 'Print object' off -> fPrintsWithSheet="0"
+        SdrObject* pPrintObj = SdrObject::getSdrObjectFromXShape( mxShape );
+        const bool bNoPrint = pPrintObj && !pPrintObj->IsPrintable();
+        pDrawing->singleElement( FSNS( XML_xdr, XML_clientData),
+                // OOXTODO: XML_fLocksWithSheet
+                XML_fPrintsWithSheet, sax_fastparser::UseIf("0", bNoPrint)
+        );
+    }
     pDrawing->endElement( FSNS( XML_xdr, XML_twoCellAnchor ) );
 }
 
