@@ -32,6 +32,8 @@
 #include <editeng/flditem.hxx>
 #include <drawinglayer/primitive2d/Primitive2DContainer.hxx>
 #include <basegfx/matrix/b2dhommatrix.hxx>
+#include <basegfx/range/b2drange.hxx>
+#include <vector>
 
 namespace com::sun::star::lang
 {
@@ -60,6 +62,8 @@ public:
     const com::sun::star::lang::Locale* mpLocale;
     const Color maOverlineColor;
     const Color maTextLineColor;
+    // zeta: 글자 그라데이션 채우기(CharInteropGrabBag 'ZetaTextGradient', 글자색이 열 때 그대로일 때만) — 비면 단색
+    OUString maZetaTextGradient;
 
     bool IsRTL() const { return mnBiDiLevel % 2 == 1; }
 
@@ -123,6 +127,17 @@ class EDITENG_DLLPUBLIC TextHierarchyBreakup : public StripPortionsHelper
     drawinglayer::primitive2d::Primitive2DContainer maParagraphPrimitives;
     basegfx::B2DHomMatrix maNewTransformA;
     basegfx::B2DHomMatrix maNewTransformB;
+
+    // zeta: 이 줄에서 그라데이션으로 칠할 글 조각(maTextPortionPrimitives 구간)과 글꼴 위아래 범위
+    struct ZetaGradientPortion
+    {
+        size_t mnStart;
+        size_t mnEnd;
+        OUString maSpec;
+        basegfx::B2DRange maVertical;
+    };
+    std::vector<ZetaGradientPortion> maZetaGradientPortions;
+    void zetaApplyTextGradients();
 
 protected:
     void flushTextPortionPrimitivesToLinePrimitives();

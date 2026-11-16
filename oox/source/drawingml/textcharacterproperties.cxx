@@ -23,6 +23,11 @@
 #include <com/sun/star/awt/FontWeight.hpp>
 #include <com/sun/star/i18n/ScriptType.hpp>
 #include <comphelper/sequence.hxx>
+#include <comphelper/propertyvalue.hxx>
+#include <com/sun/star/geometry/IntegerRectangle2D.hpp>
+#include <rtl/ustrbuf.hxx>
+#include <algorithm>
+#include <vector>
 #include <i18nlangtag/languagetag.hxx>
 #include <i18nlangtag/mslangid.hxx>
 #include <editeng/escapementitem.hxx>
@@ -246,12 +251,74 @@ static void pushToGrabBag( PropertySet& rPropSet, const std::vector<PropertyValu
     rPropSet.setAnyProperty(PROP_CharInteropGrabBag, Any(comphelper::concatSequences(aGrabBag, aVectorOfPropertyValues)));
 }
 
+// zeta: 글자 그라데이션(a:rPr/a:gradFill)을 화면에 그리도록 editeng에 넘길 글 —
+// 'ZG1 <글자색(첫 색)> <L|R|Q> <각도 1/10도> <X 중심%> <Y 중심%> <위치>:<색> ...'(색은 16진 RGB).
+// 글자색은 LibreOffice가 넣는 단색(getBestSolidColor)과 같다 — 글자색을 바꾸면 editeng이 단색으로 그린다.
+static OUString lclZetaTextGradientSpec(const FillProperties& rFill, const GraphicHelper& rGraphicHelper)
+{
+    const GradientFillProperties& rGrad = rFill.maGradientProps;
+    if (rGrad.maGradientStops.size() < 2)
+        return OUString();
+    OUStringBuffer aBuf("ZG1 "
+                        + OUString::number(sal_uInt32(rFill.getBestSolidColor().getColor(rGraphicHelper).GetRGBColor()), 16));
+    bool bReverse = false;
+    if (rGrad.moGradientPath.has_value())
+    {
+        // fillproperties.cxx 도형 그라데이션과 같은 중심·차례(경로 그라데이션은 멈춤점을 뒤집는다)
+        const css::geometry::IntegerRectangle2D aFillToRect = rGrad.moFillToRect.value_or(
+            css::geometry::IntegerRectangle2D(0, 0, MAX_PERCENT, MAX_PERCENT));
+        const sal_Int32 nCenterX = (MAX_PERCENT + aFillToRect.X1 - aFillToRect.X2) / 2 / PER_PERCENT;
+        const sal_Int32 nCenterY = (MAX_PERCENT + aFillToRect.Y1 - aFillToRect.Y2) / 2 / PER_PERCENT;
+        aBuf.append(rGrad.moGradientPath.value() == XML_circle ? u" R 0 " : u" Q 0 ");
+        aBuf.append(OUString::number(std::clamp<sal_Int32>(nCenterX, 0, 100)) + " "
+                    + OUString::number(std::clamp<sal_Int32>(nCenterY, 0, 100)));
+        bReverse = true;
+    }
+    else
+    {
+        const sal_Int32 nDmlAngle = rGrad.moShadeAngle.value_or(0);
+        aBuf.append(" L " + OUString::number((8100 - (nDmlAngle / (PER_DEGREE / 10))) % 3600) + " 0 0");
+    }
+    for (const auto& rStop : rGrad.maGradientStops)
+    {
+        const double fPos = bReverse ? 1.0 - rStop.first : rStop.first;
+        aBuf.append(" " + OUString::number(fPos) + ":"
+                    + OUString::number(sal_uInt32(rStop.second.getColor(rGraphicHelper).GetRGBColor()), 16));
+    }
+    return aBuf.makeStringAndClear();
+}
+
 void TextCharacterProperties::pushToPropSet( PropertySet& rPropSet, const XmlFilterBase& rFilter ) const
 {
     PropertyMap aPropMap;
     pushToPropMap( aPropMap, rFilter );
     rPropSet.setProperties( aPropMap );
     pushToGrabBag(rPropSet, maTextEffectsProperties);
+
+    // zeta: 글자 그라데이션 — 앞 조각에서 이어 받은 것은 지우고, 이 조각이 그라데이션이면 넣는다
+    if (!rPropSet.hasProperty(PROP_CharInteropGrabBag))
+        return;
+    OUString aSpec;
+    if (maFillProperties.moFillType.has_value() && maFillProperties.moFillType.value() == XML_gradFill)
+        aSpec = lclZetaTextGradientSpec(maFillProperties, rFilter.getGraphicHelper());
+    Sequence<PropertyValue> aGrabBag;
+    rPropSet.getAnyProperty(PROP_CharInteropGrabBag) >>= aGrabBag;
+    std::vector<PropertyValue> aNew;
+    bool bChanged = false;
+    for (const PropertyValue& rProp : aGrabBag)
+    {
+        if (rProp.Name == "ZetaTextGradient")
+            bChanged = true;
+        else
+            aNew.push_back(rProp);
+    }
+    if (!aSpec.isEmpty())
+    {
+        aNew.push_back(comphelper::makePropertyValue(u"ZetaTextGradient"_ustr, aSpec));
+        bChanged = true;
+    }
+    if (bChanged)
+        rPropSet.setAnyProperty(PROP_CharInteropGrabBag, Any(comphelper::containerToSequence(aNew)));
 }
 
 float TextCharacterProperties::getCharHeightPoints( float fDefault ) const
