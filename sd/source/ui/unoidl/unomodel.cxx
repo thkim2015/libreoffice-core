@@ -152,6 +152,7 @@
 #include <ClientView.hxx>
 #include <DrawViewShell.hxx>
 #include <ViewShell.hxx>
+#include <View.hxx>
 #include <Window.hxx>
 #include <optsitem.hxx>
 #include <SlideshowLayerRenderer.hxx>
@@ -2756,6 +2757,22 @@ SdXImpressDocument::createInstanceWithArguments(
         if (!sd::SlideShow::StartPreview(pViewShell->GetViewShellBase(), xPage, xRoot))
             return nullptr;
         return xRoot;
+    }
+
+    if (ServiceSpecifier == "com.sun.star.presentation.ShapeFragment")
+    {
+        // PowerPoint "Merge Shapes > Fragment": splits the selected shapes of
+        // the edit view into the pieces their outlines cut each other into.
+        // Returns the current page when pieces were made (null otherwise).
+        ::SolarMutexGuard aGuard;
+        sd::ViewShell* pViewShell = mpDocShell ? mpDocShell->GetViewShell() : nullptr;
+        ::sd::View* pView = pViewShell ? pViewShell->GetView() : nullptr;
+        SdPage* pPage = pViewShell ? pViewShell->GetActualPage() : nullptr;
+        if (!pView || !pPage || pView->IsTextEdit())
+            return nullptr;
+        if (!pView->FragmentMarkedObjects())
+            return nullptr;
+        return pPage->getUnoPage();
     }
 
     if (ServiceSpecifier == "com.sun.star.presentation.AnimationPresetNode")
