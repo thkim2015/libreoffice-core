@@ -122,6 +122,7 @@
 #include <tools/stream.hxx>
 #include <unotools/streamwrap.hxx>
 #include <unotools/mediadescriptor.hxx>
+#include <vcl/gfxlink.hxx>
 #include <vcl/graph.hxx>
 #include <vcl/graphicfilter.hxx>
 #include <vcl/svapp.hxx>
@@ -892,6 +893,78 @@ static void lcl_copyCharPropsToShape(const uno::Reference<drawing::XShape>& xSha
 // Some helper methods for createAndInsert
 namespace
 {
+// ZETA: one DrawingML color element (scheme name or base RGB, plus the unaltered transformations)
+OUString lcl_recolorColorXml(const Color& rColor, const GraphicHelper& rGraphicHelper)
+{
+    OUStringBuffer aBuf;
+    const OUString& rScheme = rColor.getSchemeColorName();
+    OUString aTag(u"a:schemeClr"_ustr);
+    OUString aVal(rScheme);
+    if (rScheme.isEmpty())
+    {
+        Color aBase(rColor);
+        aBase.clearTransformations();
+        aTag = u"a:srgbClr"_ustr;
+        aVal = aBase.getColor(rGraphicHelper).AsRGBHexString().toAsciiUpperCase();
+    }
+    aBuf.append(u"<");
+    aBuf.append(aTag);
+    aBuf.append(u" val=\"");
+    aBuf.append(aVal);
+    aBuf.append(u"\"");
+    const auto& rTransforms = rColor.getTransformations();
+    if (!rTransforms.hasElements())
+    {
+        aBuf.append(u"/>");
+        return aBuf.makeStringAndClear();
+    }
+    aBuf.append(u">");
+    for (const auto& rTransform : rTransforms)
+    {
+        sal_Int32 nValue = 0;
+        rTransform.Value >>= nValue;
+        aBuf.append(u"<a:");
+        aBuf.append(rTransform.Name);
+        aBuf.append(u" val=\"");
+        aBuf.append(nValue);
+        aBuf.append(u"\"/>");
+    }
+    aBuf.append(u"</");
+    aBuf.append(aTag);
+    aBuf.append(u">");
+    return aBuf.makeStringAndClear();
+}
+
+// ZETA: PowerPoint recolor (a:clrChange, a:biLevel other than 50%, a:duotone) gets baked into the
+// imported picture; keep the a:blip children so the export can write them back on the original
+OUString lcl_recolorXml(const BlipFillProperties& rBlip, const GraphicHelper& rGraphicHelper)
+{
+    OUStringBuffer aBuf;
+    if (rBlip.maColorChangeFrom.isUsed() && rBlip.maColorChangeTo.isUsed())
+    {
+        aBuf.append(u"<a:clrChange><a:clrFrom>");
+        aBuf.append(lcl_recolorColorXml(rBlip.maColorChangeFrom, rGraphicHelper));
+        aBuf.append(u"</a:clrFrom><a:clrTo>");
+        aBuf.append(lcl_recolorColorXml(rBlip.maColorChangeTo, rGraphicHelper));
+        aBuf.append(u"</a:clrTo></a:clrChange>");
+    }
+    if (rBlip.moColorEffect.value_or(XML_TOKEN_INVALID) == XML_biLevel && rBlip.moBiLevelThreshold.has_value()
+        && *rBlip.moBiLevelThreshold != 50000)
+    {
+        aBuf.append(u"<a:biLevel thresh=\"");
+        aBuf.append(*rBlip.moBiLevelThreshold);
+        aBuf.append(u"\"/>");
+    }
+    if (rBlip.maDuotoneColors[0].isUsed() && rBlip.maDuotoneColors[1].isUsed())
+    {
+        aBuf.append(u"<a:duotone>");
+        aBuf.append(lcl_recolorColorXml(rBlip.maDuotoneColors[0], rGraphicHelper));
+        aBuf.append(lcl_recolorColorXml(rBlip.maDuotoneColors[1], rGraphicHelper));
+        aBuf.append(u"</a:duotone>");
+    }
+    return aBuf.makeStringAndClear();
+}
+
 // mirrors aTransformation at its center axis
 // only valid if neither rotation or shear included
 void lcl_mirrorAtCenter(basegfx::B2DHomMatrix& aTransformation, bool bFlipH, bool bFlipV)
@@ -1883,6 +1956,9 @@ Reference< XShape > const & Shape::createAndInsert(
         if(nShapeRotateInclCamera != 0 && bIsCustomShape)
             aShapeProps.setProperty(PROP_RotateAngle,
                                     sal_Int32(lcl_MSORotateAngleToAPIAngle(nShapeRotateInclCamera)));
+        // ZETA: the recolor XML has to be taken before pushToPropMap resolves (finalizes) the RGB colors
+        const OUString aRecolorXml = mpGraphicPropertiesPtr->maBlipProps.mxFillGraphic.is()
+            ? lcl_recolorXml(mpGraphicPropertiesPtr->maBlipProps, rGraphicHelper) : OUString();
         if( bIsEmbMedia ||
             bIsCustomShape ||
             aServiceName == "com.sun.star.drawing.GraphicObjectShape" ||
@@ -2304,6 +2380,24 @@ Reference< XShape > const & Shape::createAndInsert(
             if( !mpGraphicPropertiesPtr->maBlipProps.maEffect.isEmpty() )
                 putPropertyToGrabBag( u"ArtisticEffectProperties"_ustr,
                                       Any( mpGraphicPropertiesPtr->maBlipProps.maEffect.getEffect() ) );
+
+            // ZETA: baked recolor - original image bytes and the a:blip effect XML (written back on export)
+            const BlipFillProperties& rRecolorBlip = mpGraphicPropertiesPtr->maBlipProps;
+            if (rRecolorBlip.mxFillGraphic.is())
+            {
+                const OUString& aRecolor = aRecolorXml;
+                Graphic aOriginal(rRecolorBlip.mxFillGraphic);
+                if (!aRecolor.isEmpty() && aOriginal.IsGfxLink())
+                {
+                    GfxLink aLink = aOriginal.GetGfxLink();
+                    if (aLink.GetDataSize())
+                    {
+                        Sequence<sal_Int8> aData(reinterpret_cast<const sal_Int8*>(aLink.GetData()), aLink.GetDataSize());
+                        putPropertyToGrabBag(u"BlipRecolorProperties"_ustr, Any(comphelper::InitPropertySequence({
+                            { "OriginalData", Any(aData) }, { "Effects", Any(aRecolor) } })));
+                    }
+                }
+            }
         }
 
         else if (getLockedCanvas())
