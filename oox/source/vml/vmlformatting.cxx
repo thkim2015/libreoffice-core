@@ -1065,7 +1065,15 @@ void TextpathModel::pushToPropMap(ShapePropertyMap& rPropMap, const uno::Referen
         if (xPropertySet.is() && xPropertySet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
         {
             comphelper::SequenceAsHashMap aGrabBag(xPropertySet->getPropertyValue(u"InteropGrabBag"_ustr));
-            aGrabBag[u"VML-TextpathOrigSize"_ustr] <<= aOrigSize;
+            // CustomShape converts the shape properties twice: the second time the size is the
+            // fitted one already, keep the file size of the first time.
+            awt::Size aFitBefore;
+            auto itFit = aGrabBag.find(u"VML-TextpathFitSize"_ustr);
+            const bool bFittedBefore = itFit != aGrabBag.end() && (itFit->second >>= aFitBefore)
+                                       && aFitBefore.Width == aOrigSize.Width
+                                       && aFitBefore.Height == aOrigSize.Height;
+            if (!bFittedBefore)
+                aGrabBag[u"VML-TextpathOrigSize"_ustr] <<= aOrigSize;
             aGrabBag[u"VML-TextpathFitSize"_ustr] <<= xShape->getSize();
             xPropertySet->setPropertyValue(u"InteropGrabBag"_ustr, uno::Any(aGrabBag.getAsConstPropertyValueList()));
         }
