@@ -193,6 +193,9 @@
 
 #include <app.hrc>
 #include <CustomAnimationPreset.hxx>
+#include <CustomAnimationEffect.hxx>
+#include <slideshow.hxx>
+#include <com/sun/star/animations/ParallelTimeContainer.hpp>
 
 using namespace ::cppu;
 using namespace ::com::sun::star;
@@ -2705,6 +2708,56 @@ SdXImpressDocument::createInstanceWithArguments(
     OUString const & ServiceSpecifier,
     css::uno::Sequence<css::uno::Any> const & Arguments)
 {
+    if (ServiceSpecifier == "com.sun.star.presentation.AnimationPreview")
+    {
+        // Arguments: draw page, then optional effect nodes of that page. Plays the
+        // effects (or the whole page animation when none is given) in the edit
+        // view like the auto preview of the custom animation sidebar.
+        ::SolarMutexGuard aGuard;
+        css::uno::Reference<css::drawing::XDrawPage> xPage;
+        if (Arguments.getLength() >= 1)
+            Arguments[0] >>= xPage;
+        sd::ViewShell* pViewShell = mpDocShell ? mpDocShell->GetViewShell() : nullptr;
+        if (!xPage.is() || !pViewShell)
+            return nullptr;
+        css::uno::Reference<css::animations::XAnimationNode> xNode;
+        if (Arguments.getLength() >= 2)
+        {
+            sd::MainSequencePtr pSequence = std::make_shared<sd::MainSequence>();
+            for (sal_Int32 i = 1; i < Arguments.getLength(); ++i)
+            {
+                css::uno::Reference<css::animations::XAnimationNode> xEffect;
+                if (!(Arguments[i] >>= xEffect) || !xEffect.is())
+                    continue;
+                sd::CustomAnimationEffectPtr pEffect
+                    = std::make_shared<sd::CustomAnimationEffect>(xEffect);
+                pSequence->append(pEffect->clone());
+            }
+            xNode = pSequence->getRootNode();
+        }
+        else
+        {
+            css::uno::Reference<css::animations::XAnimationNodeSupplier> xSupplier(
+                xPage, css::uno::UNO_QUERY);
+            if (xSupplier.is())
+                xNode = xSupplier->getAnimationNode();
+        }
+        if (!xNode.is())
+            return nullptr;
+        css::uno::Reference<css::animations::XParallelTimeContainer> xRoot
+            = css::animations::ParallelTimeContainer::create(
+                ::comphelper::getProcessComponentContext());
+        css::uno::Sequence<css::beans::NamedValue> aUserData{
+            { u"node-type"_ustr,
+              css::uno::Any(css::presentation::EffectNodeType::TIMING_ROOT) } };
+        xRoot->setUserData(aUserData);
+        xRoot->appendChild(xNode);
+        // Returns the preview root when the preview started (null otherwise).
+        if (!sd::SlideShow::StartPreview(pViewShell->GetViewShellBase(), xPage, xRoot))
+            return nullptr;
+        return xRoot;
+    }
+
     if (ServiceSpecifier == "com.sun.star.presentation.AnimationPresetNode")
     {
         // Arguments: preset id, optional preset sub type. Returns a clone of

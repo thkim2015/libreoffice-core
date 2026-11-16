@@ -136,7 +136,7 @@ void SdrEditView::MovMarkedToTop()
                 nNewPos--;
                 bEnd=true;
             }
-            else if (rBR.Overlaps(pCmpObj->GetCurrentBoundRect()))
+            else if (m_bZOrderOneStep || rBR.Overlaps(pCmpObj->GetCurrentBoundRect()))
             {
                 nNewPos=nCmpPos;
                 bEnd=true;
@@ -228,7 +228,7 @@ void SdrEditView::MovMarkedToBtm()
                 nNewPos++;
                 bEnd=true;
             }
-            else if (rBR.Overlaps(pCmpObj->GetCurrentBoundRect()))
+            else if (m_bZOrderOneStep || rBR.Overlaps(pCmpObj->GetCurrentBoundRect()))
             {
                 nNewPos=nCmpPos;
                 bEnd=true;

@@ -101,6 +101,9 @@ protected:
     bool m_bShearAllowed : 1;
     bool m_bEdgeRadiusAllowed : 1;
     bool m_bTransparenceAllowed : 1;
+    // Bring forward / send backward move exactly one step in the z-order
+    // (PowerPoint) instead of jumping past objects that do not overlap.
+    bool m_bZOrderOneStep = false;
     bool m_bCropAllowed : 1;
     bool m_bGradientAllowed : 1;
     bool m_bCanConvToPath : 1;
@@ -376,6 +379,8 @@ public:
     // Align all marked objects vertically. Normally the SnapRect of an object is used.
     void AlignMarkedObjects(SdrHorAlign eHor, SdrVertAlign eVert);
     bool IsAlignPossible() const;
+
+    void SetZOrderOneStep(bool bOn) { m_bZOrderOneStep = bOn; }
 
     // move marked objects "up"
     void MovMarkedToTop();
