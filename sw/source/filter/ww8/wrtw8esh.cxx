@@ -33,6 +33,7 @@
 #include <svx/svdobj.hxx>
 #include <svx/svdotext.hxx>
 #include <svx/svdpage.hxx>
+#include <svx/sdtaitm.hxx>
 #include <editeng/colritem.hxx>
 #include <editeng/outlobj.hxx>
 #include <editeng/editobj.hxx>
@@ -2895,6 +2896,19 @@ sal_Int32 SwEscherEx::WriteTextFlyFrame(const DrawObj &rObj, sal_uInt32 nShapeId
         break;
     }
     aPropOpt.AddOpt( ESCHER_Prop_txflTextFlow, nFlow );
+
+    // text anchor (top is the default)
+    switch (rFormat.GetAttrSet().Get(RES_TEXT_VERT_ADJUST).GetValue())
+    {
+        case SDRTEXTVERTADJUST_CENTER:
+            aPropOpt.AddOpt(ESCHER_Prop_AnchorText, ESCHER_AnchorMiddle);
+            break;
+        case SDRTEXTVERTADJUST_BOTTOM:
+            aPropOpt.AddOpt(ESCHER_Prop_AnchorText, ESCHER_AnchorBottom);
+            break;
+        default:
+            break;
+    }
 
     aPropOpt.Commit( GetStream() );
 

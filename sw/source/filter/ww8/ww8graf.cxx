@@ -48,6 +48,7 @@
 #include <svx/sdshitm.hxx>
 #include <svx/sdsxyitm.hxx>
 #include <svx/sdtagitm.hxx>
+#include <svx/sdtaitm.hxx>
 #include <svx/sdtditm.hxx>
 #include <svx/sdtfsitm.hxx>
 #include <editeng/editeng.hxx>
@@ -3075,7 +3076,25 @@ SwFlyFrameFormat* SwWW8ImplReader::ConvertDrawTextToFly(rtl::Reference<SdrObject
 
         SdrTextObj *pSdrTextObj = DynCastSdrTextObj(rpObject.get());
         if (pSdrTextObj && pSdrTextObj->IsVerticalWriting())
+        {
             rFlySet.Put(SvxFrameDirectionItem(SvxFrameDirection::Vertical_RL_TB, RES_FRAMEDIR));
+            // The draw text keeps the anchor of vertical text as horizontal adjustment
+            // (top = right, see SwMSDffManager::ProcessObj), the frame wants it as text
+            // vertical adjustment in its own writing direction, like the DOCX import.
+            SdrTextVertAdjust eAdjust = SDRTEXTVERTADJUST_TOP;
+            switch (pSdrTextObj->GetMergedItem(SDRATTR_TEXT_HORZADJUST).GetValue())
+            {
+                case SDRTEXTHORZADJUST_CENTER:
+                    eAdjust = SDRTEXTVERTADJUST_CENTER;
+                    break;
+                case SDRTEXTHORZADJUST_LEFT:
+                    eAdjust = SDRTEXTVERTADJUST_BOTTOM;
+                    break;
+                default:
+                    break;
+            }
+            rFlySet.Put(SdrTextVertAdjustItem(eAdjust, RES_TEXT_VERT_ADJUST));
+        }
 
         pRetFrameFormat = m_rDoc.MakeFlySection(eAnchor, m_pPaM->GetPoint(), &rFlySet);
         OSL_ENSURE(pRetFrameFormat->GetAnchor().GetAnchorId() == eAnchor,
