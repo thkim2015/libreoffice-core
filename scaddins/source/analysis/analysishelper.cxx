@@ -30,6 +30,7 @@
 #include <cmath>
 #include <complex>
 #include <memory>
+#include <vector>
 
 #include "analysisdefs.hxx"
 #include "analysishelper.hxx"
@@ -124,7 +125,7 @@ const FuncDataBase pFuncDatas[] =
     FUNCDATA( Convert,          UNIQUE,     STDPAR,     3,          FDCategory::Tech ),
     FUNCDATA( Amordegrc,        UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
     FUNCDATA( Amorlinc,         UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
-    FUNCDATA( Accrint,          UNIQUE,     INTPAR,     7,          FDCategory::Finance ),
+    FUNCDATA( Accrint,          UNIQUE,     INTPAR,     8,          FDCategory::Finance ),
     FUNCDATA( Accrintm,         UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
     FUNCDATA( Received,         UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
     FUNCDATA( Disc,             UNIQUE,     INTPAR,     5,          FDCategory::Finance ),
@@ -1053,12 +1054,30 @@ double GetDuration( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, doub
 }
 
 
+void GetMatFracs( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue, sal_Int32 nBase,
+    double& rIssMat, double& rIssSet, double& rSetMat )
+{
+    // weboffice: PRICEMAT·YIELDMAT의 연 비율을 Excel처럼(실측 tests/tmp/finprobe)
+    rIssSet = GetYearFrac( nNullDate, nIssue, nSettle, nBase );
+    if( nBase == 1 && nSettle > nIssue && rIssSet > 0.0 )
+    {
+        // 기준 1: 세 비율 모두 발행일~결산일 YEARFRAC의 연 길이로 나눈다
+        const double fYearLen = ( nSettle - nIssue ) / rIssSet;
+        rIssMat = ( nMat - nIssue ) / fYearLen;
+        rSetMat = ( nMat - nSettle ) / fYearLen;
+        return;
+    }
+    rIssMat = GetYearFrac( nNullDate, nIssue, nMat, nBase );
+    // 기준 0: 결산일~만기는 (발행일~만기) - (발행일~결산일)
+    rSetMat = nBase == 0 ? rIssMat - rIssSet : GetYearFrac( nNullDate, nSettle, nMat, nBase );
+}
+
+
 double GetYieldmat( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue,
     double fRate, double fPrice, sal_Int32 nBase )
 {
-    double      fIssMat = GetYearFrac( nNullDate, nIssue, nMat, nBase );
-    double      fIssSet = GetYearFrac( nNullDate, nIssue, nSettle, nBase );
-    double      fSetMat = GetYearFrac( nNullDate, nSettle, nMat, nBase );
+    double      fIssMat, fIssSet, fSetMat;
+    GetMatFracs( nNullDate, nSettle, nMat, nIssue, nBase, fIssMat, fIssSet, fSetMat );
 
     double      y = 1.0 + fIssMat * fRate;
     y /= fPrice / 100.0 + fIssSet * fRate;
@@ -1067,14 +1086,218 @@ double GetYieldmat( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_
 }
 
 
-double GetOddfprice( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /*nMat*/, sal_Int32 /*nIssue*/,
-    sal_Int32 /*nFirstCoup*/, double /*fRate*/, double /*fYield*/, double /*fRedemp*/, sal_Int32 /*nFreq*/,
-    sal_Int32 /*nBase*/ )
+// weboffice: Excel 채권 함수. Excel 365 COM 실측(weboffice tests/tmp/finprobe, 3,740경우)에 맞춘
+// 것으로, 거기 JS 원형(proto.cjs)과 같은 알고리즘이다.
+namespace
 {
-    // If you change this to not unconditionally throw, the
-    // SAL_WNOUNREACHABLE_CODE_PUSH/POP around the caller in
-    // financial.cxx can be removed.
-    throw uno::RuntimeException();
+struct ZYmd { sal_Int32 y; sal_Int32 m; sal_Int32 d; };
+
+ZYmd lcl_zYmd( sal_Int32 nNullDate, sal_Int32 nSerial )
+{
+    sal_uInt16 nD, nM, nY;
+    DaysToDate( nNullDate + nSerial, nD, nM, nY );
+    return { nY, nM, nD };
+}
+
+sal_Int32 lcl_zSerial( sal_Int32 nNullDate, const ZYmd& r )
+{
+    return DateToDays( static_cast<sal_uInt16>(r.d), static_cast<sal_uInt16>(r.m), static_cast<sal_uInt16>(r.y) ) - nNullDate;
+}
+
+sal_Int32 lcl_zLastDay( sal_Int32 y, sal_Int32 m )
+{
+    return DaysInMonth( static_cast<sal_uInt16>(m), static_cast<sal_uInt16>(y) );
+}
+
+bool lcl_zIsEom( const ZYmd& r ) { return r.d == lcl_zLastDay( r.y, r.m ); }
+
+ZYmd lcl_zAddMonths( const ZYmd& r, sal_Int32 n, bool bEom )
+{
+    sal_Int32 mm = r.m - 1 + n;
+    sal_Int32 yy = r.y + ( mm >= 0 ? mm / 12 : -( ( -mm + 11 ) / 12 ) );
+    mm = ( ( mm % 12 ) + 12 ) % 12 + 1;
+    const sal_Int32 ld = lcl_zLastDay( yy, mm );
+    return { yy, mm, bEom ? ld : std::min( r.d, ld ) };
+}
+
+// a - b처럼 음수·0·양수
+sal_Int32 lcl_zCmp( const ZYmd& a, const ZYmd& b )
+{
+    if ( a.y != b.y ) return a.y - b.y;
+    if ( a.m != b.m ) return a.m - b.m;
+    return a.d - b.d;
+}
+
+sal_Int32 lcl_zActual( sal_Int32 nNullDate, const ZYmd& a, const ZYmd& b )
+{
+    return lcl_zSerial( nNullDate, b ) - lcl_zSerial( nNullDate, a );
+}
+
+// 채권 함수의 날수: 기준 0은 2월 말일 규칙이 있는 미국 30/360, 기준 4는 유럽 30/360, 나머지는 실제 날수
+sal_Int32 lcl_zDays( sal_Int32 nNullDate, const ZYmd& a, const ZYmd& b, sal_Int32 nBase )
+{
+    if ( nBase != 0 && nBase != 4 )
+        return lcl_zActual( nNullDate, a, b );
+    sal_Int32 d1 = a.d, d2 = b.d;
+    if ( nBase == 4 )
+    {
+        if ( d1 == 31 ) d1 = 30;
+        if ( d2 == 31 ) d2 = 30;
+    }
+    else
+    {
+        const bool bFeb1 = a.m == 2 && a.d == lcl_zLastDay( a.y, 2 );
+        const bool bFeb2 = b.m == 2 && b.d == lcl_zLastDay( b.y, 2 );
+        if ( bFeb1 && bFeb2 ) d2 = 30;
+        if ( bFeb1 ) d1 = 30;
+        if ( d2 == 31 && d1 >= 30 ) d2 = 30;
+        if ( d1 == 31 ) d1 = 30;
+    }
+    return ( b.y - a.y ) * 360 + ( b.m - a.m ) * 30 + ( d2 - d1 );
+}
+
+// (준)쿠폰 기간 a..b의 길이(날)
+double lcl_zPeriodLen( sal_Int32 nNullDate, const ZYmd& a, const ZYmd& b, sal_Int32 nFreq, sal_Int32 nBase )
+{
+    if ( nBase == 1 )
+        return lcl_zActual( nNullDate, a, b );
+    return ( nBase == 3 ? 365.0 : 360.0 ) / nFreq;
+}
+
+double lcl_zOddfprice( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue,
+    sal_Int32 nFirstCoup, double fRate, double fYield, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
+{
+    const sal_Int32 nMonths = 12 / nFreq;
+    const ZYmd aFC = lcl_zYmd( nNullDate, nFirstCoup ), aS = lcl_zYmd( nNullDate, nSettle ),
+               aI = lcl_zYmd( nNullDate, nIssue );
+    const bool bEom = lcl_zIsEom( aFC );
+    // 첫 이자일 뒤 만기까지의 쿠폰 수
+    const sal_Int32 nReg = static_cast<sal_Int32>( GetCoupnum( nNullDate, nFirstCoup, nMat, nFreq, nBase ) );
+    // 첫 이자일에서 발행일까지 거슬러 간 준쿠폰 날짜
+    std::vector<ZYmd> aQ{ aFC };
+    while ( lcl_zCmp( aQ.back(), aI ) > 0 && aQ.size() < 2000 )
+        aQ.push_back( lcl_zAddMonths( aFC, -static_cast<sal_Int32>( aQ.size() ) * nMonths, bEom ) );
+    const size_t nNC = aQ.size() - 1;
+    const double fT = 100.0 * fRate / nFreq, fV = 1.0 + fYield / nFreq;
+
+    if ( nNC <= 1 )
+    {
+        // 짧은 첫 기간
+        const double fE = lcl_zPeriodLen( nNullDate, aQ[1], aQ[0], nFreq, nBase );
+        const double fDFC = lcl_zDays( nNullDate, aI, aFC, nBase );
+        const double fDSC = lcl_zDays( nNullDate, aS, aFC, nBase );
+        const double fA = lcl_zDays( nNullDate, aI, aS, nBase );
+        const sal_Int32 nN = nReg + 1;
+        double fP = fRedemp / pow( fV, nN - 1 + fDSC / fE ) + fT * fDFC / fE / pow( fV, fDSC / fE );
+        for ( sal_Int32 k = 2; k <= nN; ++k )
+            fP += fT / pow( fV, k - 1 + fDSC / fE );
+        return fP - fT * fA / fE;
+    }
+
+    // 긴 첫 기간: 발행일이 없는 준쿠폰 기간은 통째로 1, 발행일이 든 기간만 날수로
+    double fSumDC = 0.0, fSumA = 0.0, fDSC = 0.0, fE = 1.0;
+    sal_Int32 nNq = 0;
+    for ( size_t i = 1; i <= nNC; ++i )
+    {
+        const bool bFull = lcl_zCmp( aQ[i], aI ) >= 0;
+        const ZYmd& rSt = bFull ? aQ[i] : aI;
+        const ZYmd& rEn = aQ[i - 1];
+        const double fNL = lcl_zPeriodLen( nNullDate, aQ[i], aQ[i - 1], nFreq, nBase );
+        fSumDC += bFull ? 1.0 : lcl_zDays( nNullDate, rSt, rEn, nBase ) / fNL;
+        if ( lcl_zCmp( aS, rSt ) > 0 )
+        {
+            if ( bFull && lcl_zCmp( aS, rEn ) >= 0 )
+                fSumA += 1.0;
+            else
+                fSumA += lcl_zDays( nNullDate, rSt, lcl_zCmp( aS, rEn ) < 0 ? aS : rEn, nBase ) / fNL;
+        }
+        if ( lcl_zCmp( aS, aQ[i] ) >= 0 && lcl_zCmp( aS, aQ[i - 1] ) < 0 )
+        {
+            nNq = static_cast<sal_Int32>( i ) - 1;
+            ZYmd aEn = aQ[i - 1];
+            // Excel: 첫 이자일이 말일이면 기준 0의 DSC는 31일을 30일로 본다
+            if ( bEom && nBase == 0 && aEn.d == 31 )
+                aEn.d = 30;
+            fDSC = lcl_zDays( nNullDate, aS, aEn, nBase );
+            fE = fNL;
+            // Excel: 첫 이자일이 말일이고 결산일이 말일이 아니면, 결산일이 다음 준쿠폰일과 같은 달인
+            // 경우(첫 이자일 바로 앞 기간은 빼고)를 빼고 한 기간 더 할인한다(실측 cases5)
+            if ( bEom && !lcl_zIsEom( aS ) && ( aS.m != aQ[i - 1].m || i == 1 ) )
+                ++nNq;
+        }
+    }
+    double fP = fRedemp / pow( fV, nReg + nNq + fDSC / fE ) + fT * fSumDC / pow( fV, nNq + fDSC / fE );
+    for ( sal_Int32 k = 1; k <= nReg; ++k )
+        fP += fT / pow( fV, k + nNq + fDSC / fE );
+    return fP - fT * fSumA;
+}
+
+struct ZOddl { double fDC; double fA; double fDSC; };
+
+ZOddl lcl_zOddlParts( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nLastCoup,
+    sal_Int32 nFreq, sal_Int32 nBase )
+{
+    const sal_Int32 nMonths = 12 / nFreq;
+    const ZYmd aLC = lcl_zYmd( nNullDate, nLastCoup ), aS = lcl_zYmd( nNullDate, nSettle ),
+               aM = lcl_zYmd( nNullDate, nMat );
+    const bool bEom = lcl_zIsEom( aLC );
+    std::vector<ZYmd> aQ{ aLC };
+    while ( lcl_zCmp( aQ.back(), aM ) < 0 && aQ.size() < 2000 )
+        aQ.push_back( lcl_zAddMonths( aLC, static_cast<sal_Int32>( aQ.size() ) * nMonths, bEom ) );
+    ZOddl aRes{ 0.0, 0.0, 0.0 };
+    for ( size_t i = 1; i < aQ.size(); ++i )
+    {
+        const ZYmd& rSt = aQ[i - 1];
+        const ZYmd& rEn = lcl_zCmp( aQ[i], aM ) > 0 ? aM : aQ[i];
+        // 기준 2·3은 여기서 준쿠폰 기간의 실제 길이를 쓴다
+        const double fNL = ( nBase == 2 || nBase == 3 ) ? lcl_zActual( nNullDate, aQ[i - 1], aQ[i] )
+                                                        : lcl_zPeriodLen( nNullDate, aQ[i - 1], aQ[i], nFreq, nBase );
+        aRes.fDC += lcl_zDays( nNullDate, rSt, rEn, nBase ) / fNL;
+        if ( lcl_zCmp( aS, rSt ) > 0 )
+            aRes.fA += lcl_zDays( nNullDate, rSt, lcl_zCmp( aS, rEn ) < 0 ? aS : rEn, nBase ) / fNL;
+        if ( lcl_zCmp( aS, rEn ) < 0 )
+            aRes.fDSC += lcl_zDays( nNullDate, lcl_zCmp( aS, rSt ) > 0 ? aS : rSt, rEn, nBase ) / fNL;
+    }
+    return aRes;
+}
+}
+
+double GetAccrintExcel( sal_Int32 nNullDate, sal_Int32 nIssue, sal_Int32 nFirstInter, sal_Int32 nSettle,
+    double fRate, double fPar, sal_Int32 nFreq, sal_Int32 nBase )
+{
+    // weboffice: Excel(calc_method TRUE)처럼 첫 이자일 기준 준쿠폰 기간을 발행일부터 결산일까지 더한다;
+    // 통째로 든 기간은 1
+    const sal_Int32 nMonths = 12 / nFreq;
+    const ZYmd aFI = lcl_zYmd( nNullDate, nFirstInter ), aI = lcl_zYmd( nNullDate, nIssue ),
+               aS = lcl_zYmd( nNullDate, nSettle );
+    const bool bEom = lcl_zIsEom( aFI );
+    auto qd = [&]( sal_Int32 k ) { return lcl_zAddMonths( aFI, k * nMonths, bEom ); };
+    sal_Int32 k = 0;
+    while ( lcl_zCmp( qd( k ), aI ) > 0 && k > -100000 ) --k;
+    while ( lcl_zCmp( qd( k + 1 ), aI ) <= 0 && k < 100000 ) ++k;
+    double fSum = 0.0;
+    for ( ; lcl_zCmp( qd( k ), aS ) < 0 && k < 100000; ++k )
+    {
+        const ZYmd a = qd( k ), e = qd( k + 1 );
+        double fNL = lcl_zPeriodLen( nNullDate, a, e, nFreq, nBase );
+        // Excel 기준 1: 결산일이 든 기간은 첫 이자일로 끝나는 준쿠폰 기간의 길이로 나눈다(실측 80경우 중 79)
+        if ( nBase == 1 && lcl_zCmp( e, aS ) > 0 )
+            fNL = lcl_zActual( nNullDate, qd( -1 ), aFI );
+        const ZYmd& rSt = lcl_zCmp( a, aI ) < 0 ? aI : a;
+        const ZYmd& rEn = lcl_zCmp( e, aS ) > 0 ? aS : e;
+        const bool bFull = lcl_zCmp( a, aI ) >= 0 && lcl_zCmp( e, aS ) <= 0;
+        fSum += bFull ? 1.0 : lcl_zDays( nNullDate, rSt, rEn, nBase ) / fNL;
+    }
+    return fPar * fRate / nFreq * fSum;
+}
+
+
+double GetOddfprice( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue,
+    sal_Int32 nFirstCoup, double fRate, double fYield, double fRedemp, sal_Int32 nFreq,
+    sal_Int32 nBase )
+{
+    // weboffice: Excel처럼 계산한다(전에는 늘 예외 → #VALUE!)
+    return lcl_zOddfprice( nNullDate, nSettle, nMat, nIssue, nFirstCoup, fRate, fYield, fRedemp, nFreq, nBase );
 }
 
 
@@ -1082,6 +1305,27 @@ double getYield_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double
                     double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
     double      fRate = fCoup;
+    // weboffice: 남은 쿠폰이 하나면 Excel의 닫힌 식(기준 2·3은 실제 날수, 기준 0·4는 결산일~다음 쿠폰 30/360)
+    if( GetCoupnum( nNullDate, nSettle, nMat, nFreq, nBase ) == 1.0 )
+    {
+        double fE = GetCoupdays( nNullDate, nSettle, nMat, nFreq, nBase );
+        double fA = GetCoupdaybs( nNullDate, nSettle, nMat, nFreq, nBase );
+        double fDSR = fE - fA;
+        const ZYmd aPcd = lcl_zYmd( nNullDate, static_cast<sal_Int32>( GetCouppcd( nNullDate, nSettle, nMat, nFreq, nBase ) ) );
+        const ZYmd aNcd = lcl_zYmd( nNullDate, static_cast<sal_Int32>( GetCoupncd( nNullDate, nSettle, nMat, nFreq, nBase ) ) );
+        const ZYmd aS = lcl_zYmd( nNullDate, nSettle );
+        if( nBase == 2 || nBase == 3 )
+        {
+            fE = lcl_zActual( nNullDate, aPcd, aNcd );
+            fA = lcl_zActual( nNullDate, aPcd, aS );
+            fDSR = lcl_zActual( nNullDate, aS, aNcd );
+        }
+        else if( nBase == 0 || nBase == 4 )
+            fDSR = lcl_zDays( nNullDate, aS, aNcd, nBase );
+        const double fFreq = nFreq;
+        const double fPar = fPrice / 100.0 + fA / fE * fRate / fFreq;
+        return ( fRedemp / 100.0 + fRate / fFreq - fPar ) / fPar * fFreq * fE / fDSR;
+    }
     double      fPriceN = 0.0;
     double      fYield1 = 0.0;
     double      fYield2 = 1.0;
@@ -1147,6 +1391,10 @@ double getPrice_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double
     double      fT1 = 100.0 * fRate / fFreq;
     double      fT2 = 1.0 + fYield / fFreq;
 
+    // weboffice: 남은 쿠폰이 하나면 Excel은 단리로 할인한다
+    if( fN == 1.0 )
+        return ( fRedemp + fT1 ) / ( 1.0 + fDSC_E * fYield / fFreq ) - fT1 * fA / fE;
+
     for( double fK = 0.0 ; fK < fN ; fK++ )
         fRet += fT1 / pow( fT2, fK + fDSC_E );
 
@@ -1154,45 +1402,48 @@ double getPrice_( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, double
 }
 
 
-double GetOddfyield( sal_Int32 /*nNullDate*/, sal_Int32 /*nSettle*/, sal_Int32 /*nMat*/, sal_Int32 /*nIssue*/,
-    sal_Int32 /*nFirstCoup*/, double /*fRate*/, double /*fPrice*/, double /*fRedemp*/, sal_Int32 /*nFreq*/,
-    sal_Int32 /*nBase*/ )
+double GetOddfyield( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue,
+    sal_Int32 nFirstCoup, double fRate, double fPrice, double fRedemp, sal_Int32 nFreq,
+    sal_Int32 nBase )
 {
-    // If you change this to not unconditionally throw, the
-    // SAL_WNOUNREACHABLE_CODE_PUSH/POP around the caller in
-    // financial.cxx can be removed.
-    throw uno::RuntimeException();
+    // weboffice: ODDFPRICE를 뉴턴 반복으로 푼다(전에는 늘 예외 → #VALUE!)
+    double fY = fRate > 0.0 ? fRate : 0.05;
+    for ( int i = 0; i < 200; ++i )
+    {
+        const double fP = lcl_zOddfprice( nNullDate, nSettle, nMat, nIssue, nFirstCoup, fRate, fY, fRedemp, nFreq, nBase ) - fPrice;
+        if ( fabs( fP ) < 1e-12 )
+            return fY;
+        const double fH = 1e-7;
+        const double fD = ( lcl_zOddfprice( nNullDate, nSettle, nMat, nIssue, nFirstCoup, fRate, fY + fH, fRedemp, nFreq, nBase )
+                          - lcl_zOddfprice( nNullDate, nSettle, nMat, nIssue, nFirstCoup, fRate, fY - fH, fRedemp, nFreq, nBase ) ) / ( 2 * fH );
+        if ( fD == 0.0 || !std::isfinite( fD ) )
+            break;
+        fY -= fP / fD;
+    }
+    const double fP = lcl_zOddfprice( nNullDate, nSettle, nMat, nIssue, nFirstCoup, fRate, fY, fRedemp, nFreq, nBase ) - fPrice;
+    if ( !std::isfinite( fY ) || fabs( fP ) > 1e-6 )
+        throw lang::IllegalArgumentException();
+    return fY;
 }
 
 
 double GetOddlprice( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nLastCoup,
     double fRate, double fYield, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
-    double      fFreq = double( nFreq );
-    double      fDCi = GetYearFrac( nNullDate, nLastCoup, nMat, nBase ) * fFreq;
-    double      fDSCi = GetYearFrac( nNullDate, nSettle, nMat, nBase ) * fFreq;
-    double      fAi = GetYearFrac( nNullDate, nLastCoup, nSettle, nBase ) * fFreq;
-
-    double      p = fRedemp + fDCi * 100.0 * fRate / fFreq;
-    p /= fDSCi * fYield / fFreq + 1.0;
-    p -= fAi * 100.0 * fRate / fFreq;
-
-    return p;
+    // weboffice: Excel처럼 마지막 이자일에서 준쿠폰 기간을 나눠 센다
+    const ZOddl a = lcl_zOddlParts( nNullDate, nSettle, nMat, nLastCoup, nFreq, nBase );
+    const double fT = 100.0 * fRate / nFreq;
+    return ( fRedemp + a.fDC * fT ) / ( 1.0 + a.fDSC * fYield / nFreq ) - a.fA * fT;
 }
 
 
 double GetOddlyield( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nLastCoup,
     double fRate, double fPrice, double fRedemp, sal_Int32 nFreq, sal_Int32 nBase )
 {
-    double      fFreq = double( nFreq );
-    double      fDCi = GetYearFrac( nNullDate, nLastCoup, nMat, nBase ) * fFreq;
-    double      fDSCi = GetYearFrac( nNullDate, nSettle, nMat, nBase ) * fFreq;
-    double      fAi = GetYearFrac( nNullDate, nLastCoup, nSettle, nBase ) * fFreq;
-
-    double      y = fRedemp + fDCi * 100.0 * fRate / fFreq;
-    y /= fPrice + fAi * 100.0 * fRate / fFreq;
-    y--;
-    return y * o3tl::div_allow_zero(fFreq, fDSCi);
+    const ZOddl a = lcl_zOddlParts( nNullDate, nSettle, nMat, nLastCoup, nFreq, nBase );
+    const double fT = 100.0 * fRate / nFreq;
+    const double y = ( fRedemp + a.fDC * fT ) / ( fPrice + a.fA * fT ) - 1.0;
+    return y * o3tl::div_allow_zero( double( nFreq ), a.fDSC );
 }
 
 
@@ -1301,6 +1552,12 @@ double GetCoupdaysnc( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sa
         ScaDate aDate;
         lcl_GetCoupncd( aDate, aSettle, ScaDate( nNullDate, nMat, nBase ), nFreq );
         return ScaDate::getDiff( aSettle, aDate );
+    }
+    if( nBase == 4 )
+    {
+        // weboffice: Excel 기준 4는 결산일~다음 쿠폰일의 유럽 30/360
+        const double fNcd = GetCoupncd( nNullDate, nSettle, nMat, nFreq, nBase );
+        return lcl_zDays( nNullDate, lcl_zYmd( nNullDate, nSettle ), lcl_zYmd( nNullDate, static_cast<sal_Int32>( fNcd ) ), 4 );
     }
     return GetCoupdays( nNullDate, nSettle, nMat, nFreq, nBase ) - GetCoupdaybs( nNullDate, nSettle, nMat, nFreq, nBase );
 }

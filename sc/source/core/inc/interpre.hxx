@@ -311,6 +311,9 @@ private:
     bool SearchVectorForValue( VectorSearchArguments& );
     bool SearchMatrixForValue( VectorSearchArguments&, const ScQueryParam&, const ScQueryEntry&, const ScQueryEntry::Item& );
     bool SearchRangeForValue( VectorSearchArguments&, ScQueryParam&, const ScQueryEntry& );
+    // weboffice: Excel's approximate/binary search of a one row or column cell range
+    sal_Int32 ExcelRangeLookup( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, SCTAB nTab,
+                                const ScQueryEntry::Item& rItem, bool bDescending, int nMode );
 
 public:
     static double ScGetGCD(double fx, double fy);

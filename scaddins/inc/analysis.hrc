@@ -603,7 +603,9 @@ const TranslateId ANALYSIS_Accrint[] =
     NC_("ANALYSIS_Accrint", "Frequency"),
     NC_("ANALYSIS_Accrint", "The frequency"),
     NC_("ANALYSIS_Accrint", "Basis"),
-    NC_("ANALYSIS_Accrint", "The basis")
+    NC_("ANALYSIS_Accrint", "The basis"),
+    NC_("ANALYSIS_Accrint", "Calc method"),
+    NC_("ANALYSIS_Accrint", "TRUE (default) accrues from the issue date, FALSE from the first interest date")
 };
 
 const TranslateId ANALYSIS_Accrintm[] =

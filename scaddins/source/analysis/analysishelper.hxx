@@ -119,6 +119,10 @@ double              GetYieldmat( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int
                                 double fRate, double fPrice, sal_Int32 nBase );
 /// @throws css::uno::RuntimeException
 /// @throws css::lang::IllegalArgumentException
+void                GetMatFracs( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue, sal_Int32 nBase,
+                                double& rIssMat, double& rIssSet, double& rSetMat );
+double              GetAccrintExcel( sal_Int32 nNullDate, sal_Int32 nIssue, sal_Int32 nFirstInter, sal_Int32 nSettle,
+                                double fRate, double fPar, sal_Int32 nFreq, sal_Int32 nBase );
 double              GetOddfprice( sal_Int32 nNullDate, sal_Int32 nSettle, sal_Int32 nMat, sal_Int32 nIssue,
                                 sal_Int32 nFirstCoup, double fRate, double fYield, double fRedemp,
                                 sal_Int32 nFreq, sal_Int32 nBase );

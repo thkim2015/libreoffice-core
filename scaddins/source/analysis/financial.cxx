@@ -53,15 +53,31 @@ double SAL_CALL AnalysisAddIn::getAmorlinc( const css::uno::Reference< css::bean
 
 
 double SAL_CALL AnalysisAddIn::getAccrint( const css::uno::Reference< css::beans::XPropertySet >& xOpt,
-    sal_Int32 nIssue, sal_Int32 /*nFirstInter*/, sal_Int32 nSettle, double fRate,
-    const css::uno::Any &rVal, sal_Int32 nFreq, const css::uno::Any& rOB )
+    sal_Int32 nIssue, sal_Int32 nFirstInter, sal_Int32 nSettle, double fRate,
+    const css::uno::Any &rVal, sal_Int32 nFreq, const css::uno::Any& rOB, const css::uno::Any& rCalcMethod )
 {
     double      fVal = aAnyConv.getDouble( xOpt, rVal, 1000.0 );
 
     if( fRate <= 0.0 || fVal <= 0.0 || isFreqInvalid(nFreq) || nIssue >= nSettle)
         throw css::lang::IllegalArgumentException();
 
-    double fRet = fVal * fRate * GetYearDiff( GetNullDate( xOpt ), nIssue, nSettle, getDateMode( xOpt, rOB ) );
+    // weboffice: Excel의 8번째 인수 calc_method. FALSE면 전처럼 발행일부터의 연 비율(Excel과 대부분 같음)
+    bool bFromIssue = true;
+    if( rCalcMethod.getValueTypeClass() == css::uno::TypeClass_BOOLEAN )
+        rCalcMethod >>= bFromIssue;
+    else
+        bFromIssue = aAnyConv.getDouble( xOpt, rCalcMethod, 1.0 ) != 0.0;
+    if( !bFromIssue )
+    {
+        double fOld = fVal * fRate * GetYearDiff( GetNullDate( xOpt ), nIssue, nSettle, getDateMode( xOpt, rOB ) );
+        return finiteOrThrow( fOld );
+    }
+
+    // weboffice: Excel처럼 첫 이자일 기준 쿠폰 기간으로 센다(전에는 첫 이자일을 무시한 연 비율)
+    sal_Int32 nBase = getDateMode( xOpt, rOB );
+    if( nBase < 0 || nBase > 4 )
+        throw css::lang::IllegalArgumentException();
+    double fRet = GetAccrintExcel( GetNullDate( xOpt ), nIssue, nFirstInter, nSettle, fRate, fVal, nFreq, nBase );
     return finiteOrThrow( fRet );
 }
 
@@ -217,7 +233,8 @@ double SAL_CALL AnalysisAddIn::getPricedisc( const css::uno::Reference< css::bea
     if( fDisc <= 0.0 || fRedemp <= 0.0 || nSettle >= nMat )
         throw css::lang::IllegalArgumentException();
 
-    double fRet = fRedemp * ( 1.0 - fDisc * GetYearDiff( GetNullDate( xOpt ), nSettle, nMat, getDateMode( xOpt, rOB ) ) );
+    // weboffice: Excel은 YEARFRAC과 같은 연 비율(기준 0·4는 30/360, 기준 1은 실제/실제)
+    double fRet = fRedemp * ( 1.0 - fDisc * GetYearFrac( GetNullDate( xOpt ), nSettle, nMat, getDateMode( xOpt, rOB ) ) );
     return finiteOrThrow( fRet );
 }
 
@@ -231,9 +248,8 @@ double SAL_CALL AnalysisAddIn::getPricemat( const css::uno::Reference< css::bean
     sal_Int32   nNullDate = GetNullDate( xOpt );
     sal_Int32   nBase = getDateMode( xOpt, rOB );
 
-    double      fIssMat = GetYearFrac( nNullDate, nIssue, nMat, nBase );
-    double      fIssSet = GetYearFrac( nNullDate, nIssue, nSettle, nBase );
-    double      fSetMat = GetYearFrac( nNullDate, nSettle, nMat, nBase );
+    double      fIssMat, fIssSet, fSetMat;
+    GetMatFracs( nNullDate, nSettle, nMat, nIssue, nBase, fIssMat, fIssSet, fSetMat );
 
     double      fRet = 1.0 + fIssMat * fRate;
     fRet /= 1.0 + fSetMat * fYield;

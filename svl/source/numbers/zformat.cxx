@@ -1137,6 +1137,13 @@ SvNumberformat::SvNumberformat(OUString& rString,
                 {
                     eOp2 = NUMBERFORMAT_OP_LT;  // undefined condition, default: < 0
                 }
+                if (sStr.isEmpty() && NumFor[nIndex].GetNatNum().IsSet() &&
+                    NumFor[nIndex].GetNatNum().GetLang() == LANGUAGE_DONTKNOW)
+                {
+                    // weboffice: like Excel a subformat of only a [DBNum]/[NatNum] modifier
+                    // is General with that numeral, e.g. TEXT(1234.5,"[DBNum4]").
+                    sStr = pSc->GetStandardName();
+                }
                 if (sStr.isEmpty())
                 {
                     // Empty sub format.
@@ -2043,6 +2050,19 @@ OUString SvNumberformat::StripNewCurrencyDelimiters( const OUString& rStr )
     return aTmp.makeStringAndClear();
 }
 
+namespace
+{
+// weboffice: the subformat whose General output is being written, so that "General" in the
+// second subformat uses that subformat's [DBNum]/[NatNum] like Excel (e.g. "[DBNum1];[DBNum2]").
+thread_local sal_uInt16 g_nZetaStdIx = 0;
+struct ZetaStdIxGuard
+{
+    sal_uInt16 mnOld;
+    explicit ZetaStdIxGuard(sal_uInt16 nIx) : mnOld(g_nZetaStdIx) { g_nZetaStdIx = nIx; }
+    ~ZetaStdIxGuard() { g_nZetaStdIx = mnOld; }
+};
+}
+
 void SvNumberformat::ImpGetOutputStandard(double& fNumber, OUStringBuffer& rOutString,
                                           const NativeNumberWrapper& rNatNum,
                                           const SvNFLanguageData& rCurrentLang) const
@@ -2243,10 +2263,11 @@ void SvNumberformat::ImpGetOutputStdToPrecision(double& rNumber, OUString& rOutS
     {
         rOutString = comphelper::string::stripStart(rOutString, '-'); // not -0
     }
-    if (const int nDB = lcl_ZetaKoreanDBNum(NumFor[0].GetNatNum()))
+    const sal_uInt16 nStdIx = g_nZetaStdIx < 4 ? g_nZetaStdIx : 0;
+    if (const int nDB = lcl_ZetaKoreanDBNum(NumFor[nStdIx].GetNatNum()))
         rOutString = lcl_ZetaDBNum(rOutString, nDB, ZetaDBNumMode::General);
     else
-        rOutString = ::impTransliterate(rOutString, NumFor[0].GetNatNum(), rNatNum);
+        rOutString = ::impTransliterate(rOutString, NumFor[nStdIx].GetNatNum(), rNatNum);
 }
 
 void SvNumberformat::ImpGetOutputInputLine(double fNumber, OUString& OutString,
@@ -2753,6 +2774,7 @@ bool SvNumberformat::GetOutputString(double fNumber,
     if ( !bHadStandard )
     {
         sal_uInt16 nIx = GetSubformatIndex ( fNumber ); // Index of the partial format
+        ZetaStdIxGuard aZetaStdIx(nIx);
         if (fNumber < 0.0 &&
                 ((nIx == 0 && IsFirstSubformatRealNegative()) || // 1st, usually positive subformat
                  (nIx == 1 && IsSecondSubformatRealNegative()) || // 2nd, usually negative subformat
