@@ -923,6 +923,14 @@ inline constexpr OUString UNO_NAME_CHAR_LEFT_BORDER_DISTANCE = u"CharLeftBorderD
 inline constexpr OUString UNO_NAME_CHAR_RIGHT_BORDER_DISTANCE = u"CharRightBorderDistance"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_TOP_BORDER_DISTANCE = u"CharTopBorderDistance"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_BOTTOM_BORDER_DISTANCE = u"CharBottomBorderDistance"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_LEFT_BORDER_COLOR_THEME = u"CharLeftBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_LEFT_BORDER_COLOR_TINT = u"CharLeftBorderColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_RIGHT_BORDER_COLOR_THEME = u"CharRightBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_RIGHT_BORDER_COLOR_TINT = u"CharRightBorderColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_TOP_BORDER_COLOR_THEME = u"CharTopBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_TOP_BORDER_COLOR_TINT = u"CharTopBorderColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_BOTTOM_BORDER_COLOR_THEME = u"CharBottomBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_CHAR_BOTTOM_BORDER_COLOR_TINT = u"CharBottomBorderColorTintOrShade"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_BORDER_LEFT_COMPLEX_COLOR
     = u"CharLeftBorderComplexColor"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_BORDER_RIGHT_COMPLEX_COLOR
