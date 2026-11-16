@@ -1789,6 +1789,7 @@ public:     // really private, but can only be done public
     void Read_Kern(             sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_FontKern(         sal_uInt16, const sal_uInt8* pData, short nLen );
     void Read_FitText(sal_uInt16, const sal_uInt8* pData, short nLen);
+    void Read_MirrorIndents(sal_uInt16, const sal_uInt8* pData, short nLen);
     void Read_NoProof(sal_uInt16, const sal_uInt8* pData, short nLen);
     void SetCharGrabBagValue(const OUString& rName, const css::uno::Any& rValue);
     void EndCharGrabBag(bool& rbOpen);

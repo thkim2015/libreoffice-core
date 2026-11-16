@@ -5038,6 +5038,24 @@ void SwWW8ImplReader::Read_WordWrap(sal_uInt16, const sal_uInt8* pData, short nL
     NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
 }
 
+// Mirror indents (inside/outside instead of left/right): Writer has no such setting, keep it in
+// the paragraph grab bag for the export, like the DOCX import (w:mirrorIndents).
+void SwWW8ImplReader::Read_MirrorIndents(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (nLen < 1)
+    {
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+        return;
+    }
+    if (!*pData)
+        return;
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[u"MirrorIndents"_ustr] <<= true;
+    NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+}
+
 // Asian/number spacing: Writer's single flag (RES_PARATR_SCRIPTSPACE, from fAutoSpaceDE) covers
 // both, so only switching it off can be represented, like the DOCX import (w:autoSpaceDN).
 void SwWW8ImplReader::Read_AutoSpaceDN(sal_uInt16, const sal_uInt8* pData, short nLen)
@@ -6176,6 +6194,7 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::PFDyaAfterAuto::val,    &SwWW8ImplReader::Read_ParaAutoAfter},
         {NS_sprm::PJc::val,               &SwWW8ImplReader::Read_RTLJustify},
         {NS_sprm::PFContextualSpacing::val, &SwWW8ImplReader::Read_ParaContextualSpacing},
+        {NS_sprm::PFMirrorIndents::val,   &SwWW8ImplReader::Read_MirrorIndents},
         {NS_sprm::PIncLvl::val,           nullptr},                                       // pap.istd, pap.lvl;difference between
                                                                                          // istd of base PAP and istd of
                                                                                          // PAP to be produced;byte;

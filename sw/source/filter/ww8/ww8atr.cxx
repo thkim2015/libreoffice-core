@@ -5551,6 +5551,19 @@ void WW8AttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         m_rWW8Export.m_pO->push_back(bWordWrap ? 1 : 0);
     }
 
+    // mirror indents kept by the DOC/DOCX import
+    it = rMap.find(u"MirrorIndents"_ustr);
+    if (it != rMap.end())
+    {
+        bool bMirror = true;
+        it->second >>= bMirror;
+        if (bMirror)
+        {
+            m_rWW8Export.InsUInt16(NS_sprm::PFMirrorIndents::val);
+            m_rWW8Export.m_pO->push_back(1);
+        }
+    }
+
     // automatic space before/after (HTML auto spacing) kept by the DOC/DOCX import, as long as
     // the space is still the value set by the import
     const SvxULSpaceItem* pUL = m_rWW8Export.HasItem(RES_UL_SPACE);
