@@ -1822,8 +1822,23 @@ void DocxSdrExport::writeBoxItemLine(const SvxBoxItem& rBox)
     pFS->singleElementNS(XML_a, XML_srgbClr, XML_val, sColor);
     pFS->endElementNS(XML_a, XML_solidFill);
 
-    if (SvxBorderLineStyle::DASHED == pBorderLine->GetBorderLineStyle()) // Line Style is Dash type
-        pFS->singleElementNS(XML_a, XML_prstDash, XML_val, "dash");
+    switch (pBorderLine->GetBorderLineStyle())
+    {
+        case SvxBorderLineStyle::DASHED: // Line Style is Dash type
+            pFS->singleElementNS(XML_a, XML_prstDash, XML_val, "dash");
+            break;
+        case SvxBorderLineStyle::DOTTED:
+            pFS->singleElementNS(XML_a, XML_prstDash, XML_val, "sysDot");
+            break;
+        case SvxBorderLineStyle::DASH_DOT:
+            pFS->singleElementNS(XML_a, XML_prstDash, XML_val, "sysDashDot");
+            break;
+        case SvxBorderLineStyle::DASH_DOT_DOT:
+            pFS->singleElementNS(XML_a, XML_prstDash, XML_val, "sysDashDotDot");
+            break;
+        default:
+            break;
+    }
 
     pFS->endElementNS(XML_a, XML_ln);
 }
