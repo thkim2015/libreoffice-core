@@ -734,6 +734,37 @@ ErrCode DocxExport::ExportDocument_Impl()
         if (const SvxHyphenZoneItem* pZone = pStd ? pStd->GetItemIfSet(RES_PARATR_HYPHENZONE, false) : nullptr;
             pZone && pZone->IsHyphen())
             m_bWordAutoHyphenationOff = false;
+        // or on a single paragraph or paragraph style: Word can only hyphenate it with the
+        // document's automatic hyphenation on, and "do not hyphenate" on the other paragraphs
+        if (m_bWordAutoHyphenationOff)
+        {
+            for (const SwTextFormatColl* pColl : *m_rDoc.GetTextFormatColls())
+            {
+                const SvxHyphenZoneItem* pZone = pColl->GetItemIfSet(RES_PARATR_HYPHENZONE, false);
+                if (pZone && pZone->IsHyphen())
+                {
+                    m_bWordAutoHyphenationOff = false;
+                    break;
+                }
+            }
+        }
+        if (m_bWordAutoHyphenationOff)
+        {
+            const SwNodes& rNodes = m_rDoc.GetNodes();
+            for (SwNodeOffset n(0); n < rNodes.Count(); ++n)
+            {
+                const SwTextNode* pText = rNodes[n]->GetTextNode();
+                if (!pText || !pText->HasSwAttrSet())
+                    continue;
+                const SvxHyphenZoneItem* pZone
+                    = pText->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_HYPHENZONE, false);
+                if (pZone && pZone->IsHyphen())
+                {
+                    m_bWordAutoHyphenationOff = false;
+                    break;
+                }
+            }
+        }
     }
 
     InitStyles();
