@@ -1471,7 +1471,8 @@ bool XclExpCellAlign::FillFromItemSet(const XclRoot& rRoot, const SfxItemSet& rI
             tools::Long nTmpIndent = rItemSet.Get( ATTR_INDENT ).GetValue();    // already in twips
             tools::Long nSpaceWidth = rRoot.GetSpaceWidth();
             sal_Int32 nIndent = static_cast<double>(nTmpIndent) / (3.0 * nSpaceWidth) + 0.5;
-            mnIndent = limit_cast< sal_uInt8 >( nIndent, 0, 15 );
+            // weboffice: xlsx (Excel 2007+) allows 250 levels, BIFF8 4 bits
+            mnIndent = limit_cast< sal_uInt8 >( nIndent, 0, rRoot.GetOutput() == EXC_OUTPUT_XML_2007 ? 250 : 15 );
             bUsed |= ScfTools::CheckItem( rItemSet, ATTR_INDENT, bStyle );
 
             // shrink to fit

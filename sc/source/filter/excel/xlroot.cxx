@@ -47,6 +47,7 @@
 #include <editeng/eeitem.hxx>
 #include <editeng/fhgtitem.hxx>
 #include <document.hxx>
+#include <global.hxx>
 #include <docpool.hxx>
 #include <docuno.hxx>
 #include <docsh.hxx>
@@ -230,6 +231,10 @@ void XclRoot::SetCharWidth( const XclFontData& rFontData )
 
         // Set the width of space ' ' character.
         mrData.mnSpaceWidth = pPrinter->GetTextWidth(OUString(' '));
+        // weboffice: the space as Excel measures it (whole pixels, the Excel font's own
+        // advance), matching the import (oox UnitConverter) and the indent commands
+        mrData.mnSpaceWidth = ScGlobal::GetExcelIndentStep( rFontData.maName, rFontData.mnHeight,
+                                                            mrData.mnSpaceWidth ) / 3;
     }
     if( mrData.mnCharWidth <= 0 )
     {

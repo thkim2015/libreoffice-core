@@ -610,6 +610,12 @@ public:
     SC_DLLPUBLIC static OUString            GetDocTabName( std::u16string_view rFileName,
                                                 std::u16string_view rTabName );
     SC_DLLPUBLIC static sal_uInt32 GetStandardFormat( ScInterpreterContext&, sal_uInt32 nFormat, SvNumFormatType nType );
+    /** weboffice: width of one Excel indent level in twips: three spaces of the workbook
+        default font, the space rounded to whole pixels at 96 dpi (Malgun Gothic 11pt = 225,
+        Calibri 11pt = 135, Arial 10pt = 180). Known Excel fonts use their own space advance so
+        the result does not depend on the substitute font; others use nMeasuredSpaceTwips. */
+    SC_DLLPUBLIC static tools::Long GetExcelIndentStep( std::u16string_view aFontName,
+                                                tools::Long nFontHeightTwips, tools::Long nMeasuredSpaceTwips );
 
     /// Horizontal pixel per twips factor.
     SC_DLLPUBLIC static double              nScreenPPTX;

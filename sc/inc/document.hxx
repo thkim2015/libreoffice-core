@@ -2416,6 +2416,8 @@ public:
     void                        SetPrinter( VclPtr<SfxPrinter> const & pNewPrinter );
     VirtualDevice*              GetVirtualDevice_100th_mm();
     SC_DLLPUBLIC OutputDevice*  GetRefDevice(bool bForceVirtDev = false); // WYSIWYG: Printer, otherwise VirtualDevice...
+    /// weboffice: one Excel indent level in twips for the Default cell style font
+    SC_DLLPUBLIC tools::Long    GetExcelIndentStep();
 
     bool            GetNextSpellingCell( SCCOL& nCol, SCROW& nRow, SCTAB nTab,
                                          bool bInSel, const ScMarkData& rMark) const;

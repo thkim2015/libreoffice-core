@@ -35,6 +35,8 @@
 #include <stylesbuffer.hxx>
 #include <biffhelper.hxx>
 #include <docuno.hxx>
+#include <global.hxx>
+#include <cmath>
 
 namespace com::sun::star::awt { struct FontDescriptor; }
 
@@ -141,8 +143,11 @@ void UnitConverter::finalizeImport()
     if( nDigitWidth > 0 )
         maCoeffs[ Unit::Digit ] = nDigitWidth;
     // get width of space character
-    sal_Int64 nSpaceWidth
-        = o3tl::convert(xFont->getCharWidth(' '), o3tl::Length::twip, o3tl::Length::emu);
+    // weboffice: Excel rounds the space to whole pixels at 96 dpi and uses the Excel font's own
+    // space even when a substitute is installed; indent levels are three spaces.
+    const tools::Long nIndentStep = ScGlobal::GetExcelIndentStep( pDefFont->getModel().maName,
+        static_cast< tools::Long >( std::round( pDefFont->getModel().mfHeight * 20.0 ) ), xFont->getCharWidth(' ') );
+    sal_Int64 nSpaceWidth = o3tl::convert( nIndentStep / 3, o3tl::Length::twip, o3tl::Length::emu );
     if( nSpaceWidth > 0 )
         maCoeffs[ Unit::Space ] = nSpaceWidth;
 }

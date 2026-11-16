@@ -17,6 +17,7 @@
  *   the License at http://www.apache.org/licenses/LICENSE-2.0 .
  */
 
+#include <cmath>
 #include <memory>
 #include <stylesbuffer.hxx>
 #include <patterncache.hxx>
@@ -1267,7 +1268,13 @@ void Alignment::finalizeImport()
         OOXML. */
     UnitConverter& rUnitConverter = getUnitConverter();
     // Note: indents are stored in twips
-    sal_Int32 nIndent = rUnitConverter.scaleValue( 3.0 * maModel.mnIndent, Unit::Space, Unit::Twip);
+    // weboffice: round (whole levels of whole pixels), keep the deepest level that fits
+    // instead of dropping indents beyond SAL_MAX_INT16 twips (Excel allows 250 levels)
+    const double fLevel = rUnitConverter.scaleValue( 3.0, Unit::Space, Unit::Twip );
+    sal_Int32 nLevels = maModel.mnIndent;
+    if( fLevel > 0 && nLevels * fLevel > SAL_MAX_INT16 )
+        nLevels = static_cast< sal_Int32 >( SAL_MAX_INT16 / fLevel );
+    sal_Int32 nIndent = static_cast< sal_Int32 >( std::round( nLevels * fLevel ) );
     if( (0 <= nIndent) && (nIndent <= SAL_MAX_INT16) )
         maApiData.mnIndent = static_cast< sal_Int16 >( nIndent );
 

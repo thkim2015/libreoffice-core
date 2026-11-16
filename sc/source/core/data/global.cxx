@@ -46,6 +46,8 @@
 #include <osl/diagnose.h>
 
 #include <i18nlangtag/mslangid.hxx>
+#include <algorithm>
+#include <cmath>
 #include <comphelper/doublecheckedinit.hxx>
 #include <comphelper/processfactory.hxx>
 #include <comphelper/string.hxx>
@@ -162,6 +164,50 @@ sal_uInt32 ScGlobal::GetStandardFormat( ScInterpreterContext& rContext,
     if (const SvNumberformat* pFormat = rContext.NFGetFormatEntry(nFormat))
         return rContext.NFGetStandardFormat( nFormat, nType, pFormat->GetLanguage() );
     return rContext.NFGetStandardFormat( nType, eLnge );
+}
+
+tools::Long ScGlobal::GetExcelIndentStep( std::u16string_view aFontName,
+        tools::Long nFontHeightTwips, tools::Long nMeasuredSpaceTwips )
+{
+    // Space advance (fraction of the em) of the usual Excel default fonts, read from the
+    // Windows font files. Excel draws with GDI at 96 dpi: the font size in pixels is the
+    // point size * 96 / 72 rounded, the space width is rounded to whole pixels.
+    static constexpr struct { std::u16string_view aName; double fEm; } aSpaceEm[] = {
+        { u"Malgun Gothic", 0.3516 }, { u"맑은 고딕", 0.3516 },
+        { u"Calibri", 0.2261 }, { u"Carlito", 0.2261 },
+        { u"Arial", 0.2778 }, { u"Liberation Sans", 0.2778 },
+        { u"Cambria", 0.2202 }, { u"Caladea", 0.2202 },
+        { u"Times New Roman", 0.25 }, { u"Liberation Serif", 0.25 },
+        { u"Gulim", 0.333 }, { u"굴림", 0.333 },
+        { u"Dotum", 0.334 }, { u"돋움", 0.334 },
+        { u"Batang", 0.333 }, { u"바탕", 0.333 },
+        { u"Gungsuh", 0.333 }, { u"궁서", 0.333 },
+        { u"GulimChe", 0.5 }, { u"굴림체", 0.5 },
+        { u"DotumChe", 0.5 }, { u"돋움체", 0.5 },
+        { u"BatangChe", 0.5 }, { u"바탕체", 0.5 },
+        { u"Yu Gothic", 0.2852 }, { u"游ゴシック", 0.2852 },
+        { u"MS PGothic", 0.3047 }, { u"ＭＳ Ｐゴシック", 0.3047 },
+        { u"MS Gothic", 0.5 }, { u"ＭＳ ゴシック", 0.5 },
+        { u"Tahoma", 0.3125 }, { u"Verdana", 0.3516 }, { u"Segoe UI", 0.2739 },
+        { u"Georgia", 0.2412 }, { u"Consolas", 0.5498 }, { u"Courier New", 0.6001 },
+        { u"Microsoft YaHei", 0.2959 }, { u"Microsoft JhengHei", 0.25 }, { u"SimSun", 0.5 },
+    };
+    std::u16string_view aName = o3tl::trim( aFontName );
+    tools::Long nSpacePx = 0;
+    for( const auto& rEntry : aSpaceEm )
+    {
+        if( o3tl::equalsIgnoreAsciiCase( aName, rEntry.aName ) )
+        {
+            const double fPpem = std::round( nFontHeightTwips / 15.0 );
+            nSpacePx = std::max< tools::Long >( 1, static_cast< tools::Long >( std::round( rEntry.fEm * fPpem ) ) );
+            break;
+        }
+    }
+    if( nSpacePx <= 0 && nMeasuredSpaceTwips > 0 )
+        nSpacePx = std::max< tools::Long >( 1, ( nMeasuredSpaceTwips + 7 ) / 15 );
+    if( nSpacePx <= 0 )
+        nSpacePx = 3;
+    return 3 * nSpacePx * 15;
 }
 
 SvNumberFormatter* ScGlobal::GetEnglishFormatter()

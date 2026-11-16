@@ -42,6 +42,8 @@
 #include <vcl/svapp.hxx>
 #include <vcl/vclenum.hxx>
 #include <vcl/virdev.hxx>
+#include <editeng/fontitem.hxx>
+#include <editeng/fhgtitem.hxx>
 #include <vcl/weld/MessageDialog.hxx>
 #include <vcl/weld/WaitObject.hxx>
 #include <vcl/TaskStopwatch.hxx>
@@ -208,6 +210,30 @@ OutputDevice* ScDocument::GetRefDevice(bool bForceVirtDev)
     if (!pRefDevice)
         pRefDevice = GetVirtualDevice_100th_mm();
     return pRefDevice;
+}
+
+tools::Long ScDocument::GetExcelIndentStep()
+{
+    // weboffice: Excel indent levels are three spaces of the workbook default font (the
+    // Default cell style), see ScGlobal::GetExcelIndentStep.
+    ScStyleSheetPool* pStylePool = GetStyleSheetPool();
+    SfxStyleSheetBase* pStyle = pStylePool
+        ? pStylePool->Find( ScResId( STR_STYLENAME_STANDARD ), SfxStyleFamily::Para ) : nullptr;
+    const SfxItemSet& rSet = pStyle ? pStyle->GetItemSet()
+                                     : getCellAttributeHelper().getDefaultCellAttribute().GetItemSet();
+    const SvxFontItem& rFont = rSet.Get( ATTR_FONT );
+    const tools::Long nHeight = rSet.Get( ATTR_FONT_HEIGHT ).GetHeight();
+    tools::Long nMeasured = 0;
+    if( OutputDevice* pDev = GetRefDevice() )
+    {
+        pDev->Push( vcl::PushFlags::FONT | vcl::PushFlags::MAPMODE );
+        pDev->SetMapMode( MapMode( MapUnit::MapTwip ) );
+        vcl::Font aFont( rFont.GetFamilyName(), Size( 0, nHeight ) );
+        pDev->SetFont( aFont );
+        nMeasured = pDev->GetTextWidth( u" "_ustr );
+        pDev->Pop();
+    }
+    return ScGlobal::GetExcelIndentStep( rFont.GetFamilyName(), nHeight, nMeasured );
 }
 
 void ScDocument::ModifyStyleSheet( SfxStyleSheetBase& rStyleSheet,
