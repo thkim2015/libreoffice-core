@@ -861,7 +861,10 @@ void wwSectionManager::SetNumberingType(const wwSection &rNewSection,
     };
 
     SvxNumberType aType;
-    aType.SetNumberingType( aNumTyp[rNewSection.maSep.nfcPgn] );
+    const sal_uInt8 nNfc = rNewSection.maSep.nfcPgn;
+    // Other formats (numberInDash "- 1 -", Korean, ...) are the same nfc values as the lists use.
+    aType.SetNumberingType(nNfc < SAL_N_ELEMENTS(aNumTyp) ? aNumTyp[nNfc]
+                                                         : WW8ListManager::GetSvxNumTypeFromMSONFC(nNfc));
     rPageDesc.SetNumType(aType);
 }
 
@@ -981,7 +984,7 @@ void wwSectionManager::CreateSep(const tools::Long nTextPos)
 
     // sprmSNfcPgn
     aNewSection.maSep.nfcPgn = ReadBSprm( pSep, pIds[2], 0 );
-    if (aNewSection.maSep.nfcPgn > 4)
+    if (aNewSection.maSep.nfcPgn > 4 && eVer <= ww::eWW7)
         aNewSection.maSep.nfcPgn = 0;
 
     aNewSection.maSep.fUnlocked = eVer > ww::eWW2 ? ReadBSprm(pSep, (eVer <= ww::eWW7 ? NS_sprm::v6::sprmSFProtected : NS_sprm::SFProtected::val), 0 ) : 0;

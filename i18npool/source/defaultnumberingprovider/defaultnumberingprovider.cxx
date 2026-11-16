@@ -1035,6 +1035,11 @@ DefaultNumberingProvider::makeNumberingString( const Sequence<beans::PropertyVal
                result += lcl_formatArabicZero(number, 5);
                break;
 
+          // Word's numberInDash "- 1 -" (no IDL constant, see sw/inc/numberindash.hxx)
+          case 76:
+               result += "- " + OUString::number(number) + " -";
+               break;
+
           case SZEKELY_ROVAS: // Old Hungarian
                natNum = NativeNumberMode::NATNUM12;
                locale.Language = "hu-Hung";
@@ -1154,6 +1159,7 @@ const Supported_NumberingType aSupportedTypes[] =
         {style::NumberingType::ARABIC_ZERO3, "001, 002, 003, ...", LANG_ALL},
         {style::NumberingType::ARABIC_ZERO4, "0001, 0002, 0003, ...", LANG_ALL},
         {style::NumberingType::ARABIC_ZERO5, "00001, 00002, 00003, ...", LANG_ALL},
+        {76 /* numberInDash */, "- 1 -, - 2 -, - 3 -, ...", LANG_ALL},
 };
 const sal_Int32 nSupported_NumberingTypes = std::size(aSupportedTypes);
 

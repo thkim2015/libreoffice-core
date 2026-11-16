@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <hintids.hxx>
+#include <numberindash.hxx>
 
 #include <o3tl/safeint.hxx>
 #include <vcl/svapp.hxx>
@@ -839,6 +840,7 @@ sal_uInt8 WW8Export::GetNumId( sal_uInt16 eNumType )
     case style::NumberingType::NUMBER_UPPER_ZH_TW: nRet = 34;break;
     case style::NumberingType::NUMBER_UPPER_ZH: nRet = 38; break;
     case style::NumberingType::NUMBER_DIGITAL_KO: nRet = 41; break;
+    case SW_NUMBERING_NUMBER_IN_DASH: nRet = 57; break; // numberInDash
     case style::NumberingType::NUMBER_HANGUL_KO: nRet = 42; break;
     case style::NumberingType::NUMBER_LEGAL_KO: nRet = 43; break;
     case style::NumberingType::NUMBER_DIGITAL2_KO: nRet = 44; break;
