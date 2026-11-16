@@ -279,6 +279,12 @@ void FormControlHelper::processField(rtl::Reference<SwXFieldmark> const& xFormFi
                 else
                     xNameCont->insertByName(ODF_FORMDROPDOWN_RESULT, uno::Any( nResult ) );
             }
+
+            // w:ddList/w:default (Word's default entry), written back by the DOCX export
+            const OUString& rDefault = m_pFFData->getDropDownDefault();
+            const sal_Int32 nDefault = rDefault.toInt32();
+            if (!rDefault.isEmpty() && 0 <= nDefault && o3tl::make_unsigned(nDefault) < rEntries.size())
+                xNameCont->insertByName(u"DropdownDefault"_ustr, uno::Any(nDefault));
         }
     }
 }

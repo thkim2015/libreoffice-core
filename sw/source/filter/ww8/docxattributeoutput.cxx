@@ -279,6 +279,29 @@ public:
         writeFinish();
     }
 
+    // legacy FORMDROPDOWN: shares enabled/calcOnExit/macros/help/status with the other types
+    void WriteFormDropdown( const OUString& rName,
+                            const OUString& rEntryMacro,
+                            const OUString& rExitMacro,
+                            const OUString& rHelp,
+                            const OUString& rHint,
+                            sal_Int32 nResult,
+                            sal_Int32 nDefault,
+                            const uno::Sequence<OUString>& rListItems )
+    {
+        writeCommonStart( rName, rEntryMacro, rExitMacro, rHelp, rHint );
+        m_pSerializer->startElementNS(XML_w, XML_ddList);
+        m_pSerializer->singleElementNS(XML_w, XML_result, FSNS(XML_w, XML_val), OString::number(nResult));
+        if (nDefault > 0)
+            m_pSerializer->singleElementNS(XML_w, XML_default, FSNS(XML_w, XML_val), OString::number(nDefault));
+        // unfortunately Word 2013 refuses to load DOCX with more than 25 listEntry
+        auto const nSize(std::min(sal_Int32(25), rListItems.getLength()));
+        for (auto i = 0; i < nSize; ++i)
+            m_pSerializer->singleElementNS(XML_w, XML_listEntry, FSNS(XML_w, XML_val), rListItems[i]);
+        m_pSerializer->endElementNS( XML_w, XML_ddList );
+        writeFinish();
+    }
+
     void WriteFormText(  const OUString& rName,
                          const OUString& rEntryMacro,
                          const OUString& rExitMacro,
@@ -2627,7 +2650,6 @@ void DocxAttributeOutput::WriteFFData(  const FieldInfos& rInfos )
     {
         uno::Sequence< OUString> vListEntries;
         SwMarkName sName;
-        OUString sSelected;
 
         params.extractParam( ODF_FORMDROPDOWN_LISTENTRY, vListEntries );
         if (vListEntries.getLength() > ODF_FORMDROPDOWN_ENTRY_COUNT_LIMIT)
@@ -2635,14 +2657,20 @@ void DocxAttributeOutput::WriteFFData(  const FieldInfos& rInfos )
 
         sName = params.getName();
         sal_Int32 nSelectedIndex = 0;
+        params.extractParam( ODF_FORMDROPDOWN_RESULT, nSelectedIndex );
 
-        if ( params.extractParam( ODF_FORMDROPDOWN_RESULT, nSelectedIndex ) )
-        {
-            if (nSelectedIndex < vListEntries.getLength() )
-                sSelected = vListEntries[ nSelectedIndex ];
-        }
+        // was DocxExport::DoComboBox, which dropped enabled/calcOnExit/help/status/default
+        const sal_Int32 nResult
+            = (0 <= nSelectedIndex && nSelectedIndex < vListEntries.getLength()) ? nSelectedIndex : 0;
+        sal_Int32 nDefault = 0;
+        params.extractParam(u"DropdownDefault"_ustr, nDefault);
+        if (nDefault < 0 || nDefault >= vListEntries.getLength())
+            nDefault = 0;
 
-        GetExport().DoComboBox( sName.toString(), OUString(), OUString(), sSelected, vListEntries );
+        FFDataWriterHelper ffdataOut( m_pSerializer );
+        ffdataOut.setFlags(bEnabled, bCalcOnExit);
+        ffdataOut.WriteFormDropdown( sName.toString(), sEntryMacro, sExitMacro, sHelp, sHint,
+                                     nResult, nDefault, vListEntries );
     }
     else if ( rInfos.eType == ww::eFORMCHECKBOX )
     {

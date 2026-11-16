@@ -64,6 +64,8 @@ public:
 
     // member: dropDownResult
     const OUString& getDropDownResult() const { return m_sDropDownResult; }
+    // member: dropDownDefault (w:ddList/w:default, empty if absent)
+    const OUString& getDropDownDefault() const { return m_sDropDownDefault; }
 
     // member: dropDownEntries
     const DropDownEntries_t& getDropDownEntries() const { return m_DropDownEntries; }
@@ -89,6 +91,7 @@ private:
     int m_nCheckboxChecked;
     int m_nCheckboxDefault;
     OUString m_sDropDownResult;
+    OUString m_sDropDownDefault;
     DropDownEntries_t m_DropDownEntries;
     OUString m_sTextDefault;
     OUString m_sTextType;
