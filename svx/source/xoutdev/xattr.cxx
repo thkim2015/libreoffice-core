@@ -97,6 +97,47 @@ using namespace ::com::sun::star;
 
 typedef std::map<OUString, OUString> StringMap;
 
+namespace
+{
+// A theme color as text, "<theme index> [lumMod=n] [lumOff=n] [tint=n] [shade=n]" (DrawingML
+// values in 100th percent, e.g. "4 shade=1500" = accent 1 shaded to 15% like an Office style
+// outline). Script cannot build an XComplexColor with tint/shade any other way.
+bool lcl_complexColorFromText(std::u16string_view aText, model::ComplexColor& rColor)
+{
+    sal_Int32 nIndex = 0;
+    std::u16string_view aTheme = o3tl::getToken(aText, 0, u' ', nIndex);
+    if (aTheme.empty())
+        return false;
+    sal_Int32 nTheme = o3tl::toInt32(aTheme);
+    model::ComplexColor aColor;
+    if (nTheme >= 0)
+        aColor.setThemeColor(model::convertToThemeColorType(nTheme));
+    while (nIndex >= 0)
+    {
+        std::u16string_view aToken = o3tl::getToken(aText, 0, u' ', nIndex);
+        size_t nEq = aToken.find(u'=');
+        if (nEq == std::u16string_view::npos)
+            continue;
+        std::u16string_view aName = aToken.substr(0, nEq);
+        sal_Int16 nValue = sal_Int16(o3tl::toInt32(aToken.substr(nEq + 1)));
+        model::TransformationType eType;
+        if (aName == u"lumMod")
+            eType = model::TransformationType::LumMod;
+        else if (aName == u"lumOff")
+            eType = model::TransformationType::LumOff;
+        else if (aName == u"tint")
+            eType = model::TransformationType::Tint;
+        else if (aName == u"shade")
+            eType = model::TransformationType::Shade;
+        else
+            continue;
+        aColor.addTransformation({ eType, nValue });
+    }
+    rColor = aColor;
+    return true;
+}
+}
+
 NameOrIndex::NameOrIndex()
     : SfxStringItem(0)
 {
@@ -1103,6 +1144,15 @@ bool XLineColorItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId)
         break;
         case MID_COMPLEX_COLOR:
         {
+            OUString aText;
+            if (rVal >>= aText)
+            {
+                model::ComplexColor aColor;
+                if (!lcl_complexColorFromText(aText, aColor))
+                    return false;
+                setComplexColor(aColor);
+                break;
+            }
             css::uno::Reference<css::util::XComplexColor> xComplexColor;
             if (!(rVal >>= xComplexColor))
                 return false;
