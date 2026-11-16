@@ -59,10 +59,10 @@
 #include <unotbl.hxx>
 #include <unoparagraph.hxx>
 #include <unotextrange.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 
 #ifdef DBG_UTIL
 #include "PropertyMapHelper.hxx"
-#include <docmodel/uno/UnoComplexColor.hxx>
 #include <rtl/ustring.hxx>
 #include <utility>
 #endif
