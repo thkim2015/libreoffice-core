@@ -4193,10 +4193,25 @@ void SwWW8ImplReader::Read_FontKern( sal_uInt16, const sal_uInt8* pData, short n
     if (nLen < 2) // end of attribute
     {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_CHRATR_AUTOKERN );
+        if (m_bKernMinSize)
+        {
+            m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_CHRATR_GRABBAG);
+            m_bKernMinSize = false;
+        }
         return;
     }
-    sal_Int16 nAutoKern = SVBT16ToUInt16( pData );    // Kerning in Twips
+    sal_Int16 nAutoKern = SVBT16ToUInt16( pData );    // minimum font size in half points
     NewAttr(SvxAutoKernItem(static_cast<bool>(nAutoKern), RES_CHRATR_AUTOKERN));
+    // Writer auto kerning is just a boolean: keep the minimum font size of Word for
+    // the export, the same way as the DOCX import (CharKernMinSize in the grab bag)
+    if (nAutoKern > 2)
+    {
+        const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_CHRATR_GRABBAG);
+        std::map<OUString, css::uno::Any> aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"CharKernMinSize"_ustr] <<= sal_Int32(nAutoKern);
+        NewAttr(SfxGrabBagItem(RES_CHRATR_GRABBAG, std::move(aGrabBagMap)));
+        m_bKernMinSize = true;
+    }
 }
 
 void SwWW8ImplReader::Read_CharShadow(  sal_uInt16, const sal_uInt8* pData, short nLen )

@@ -1426,6 +1426,7 @@ private:
 
     bool m_bNotifyMacroEventRead;
     bool m_bFuzzing;
+    bool m_bKernMinSize = false; // CharKernMinSize is open in the character grab bag
 
     const SprmReadInfo& GetSprmReadInfo(sal_uInt16 nId) const;
 

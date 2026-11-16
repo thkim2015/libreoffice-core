@@ -1377,7 +1377,19 @@ void WW8AttributeOutput::CharAutoKern( const SvxAutoKernItem& rAutoKern )
 {
     m_rWW8Export.InsUInt16( NS_sprm::CHpsKern::val );
 
-    m_rWW8Export.InsUInt16( rAutoKern.GetValue() ? 2 : 0 );
+    sal_uInt16 nMinSize = rAutoKern.GetValue() ? 2 : 0;
+    // the minimum font size read from DOC/DOCX (kept in the character grab bag)
+    if (nMinSize)
+    {
+        if (const SfxGrabBagItem* pGrabBag = GetExport().HasItem(RES_CHRATR_GRABBAG))
+        {
+            auto it = pGrabBag->GetGrabBag().find(u"CharKernMinSize"_ustr);
+            sal_Int32 nStored = 0;
+            if (it != pGrabBag->GetGrabBag().end() && (it->second >>= nStored) && nStored > 0)
+                nMinSize = o3tl::narrowing<sal_uInt16>(nStored);
+        }
+    }
+    m_rWW8Export.InsUInt16( nMinSize );
 }
 
 void WW8AttributeOutput::CharOpticalSizing( const SvxOpticalSizingItem& )
