@@ -29,6 +29,7 @@
 #include <com/sun/star/text/WrapTextMode.hpp>
 #include <com/sun/star/uno/Any.h>
 #include <com/sun/star/drawing/XShape.hpp>
+#include <docmodel/color/ComplexColor.hxx>
 #include "PropertyIds.hxx"
 #include <unofootnote.hxx>
 #include <unoxstyle.hxx>
@@ -265,6 +266,8 @@ private:
     rtl::Reference<SwXPageStyle>                    m_aPageStyle;
 
     std::optional< css::table::BorderLine2 >      m_oBorderLines[4];
+    // Theme colour of the page border lines (w:pgBorders w:themeColor), l-r-t-b.
+    model::ComplexColor                             m_aBorderComplexColors[4];
     sal_Int32                                       m_nBorderDistances[4];
     BorderApply                                     m_eBorderApply;
     BorderOffsetFrom                                m_eBorderOffsetFrom;
@@ -387,6 +390,7 @@ public:
     void InheritOrFinalizePageStyles( DomainMapper_Impl& rDM_Impl );
 
     void SetBorder( BorderPosition ePos, sal_Int32 nLineDistance, const css::table::BorderLine2& rBorderLine, bool bShadow );
+    void SetBorderComplexColor(BorderPosition ePos, const model::ComplexColor& rColor) { m_aBorderComplexColors[ePos] = rColor; }
     void SetBorderApply( BorderApply nSet ) { m_eBorderApply = nSet; }
     void SetBorderOffsetFrom( BorderOffsetFrom nSet ) { m_eBorderOffsetFrom = nSet; }
 

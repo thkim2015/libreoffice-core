@@ -146,6 +146,10 @@ void BorderHandler::lcl_sprm(Sprm & rSprm)
             aSavedGrabBag = m_aInteropGrabBag;
             m_aInteropGrabBag.clear();
         }
+        // The theme colour belongs to this border line only.
+        m_eThemeColorType = model::ThemeColorType::Unknown;
+        m_nThemeTint = 0;
+        m_nThemeShade = 0;
         pProperties->resolve(*this);
         if (!m_aInteropGrabBagName.isEmpty())
         {
@@ -156,6 +160,8 @@ void BorderHandler::lcl_sprm(Sprm & rSprm)
     ConversionHelper::MakeBorderLine( m_nLineWidth,   m_nLineType, m_nLineColor,
                            m_aBorderLines[ pos ], m_bOOXML );
     m_aFilledLines[ pos ] = true;
+    if (m_eThemeColorType != model::ThemeColorType::Unknown)
+        m_aThemeColors.emplace_back(m_aBorderLines[pos].Color, getComplexColor());
 }
 
 PropertyMapPtr  BorderHandler::getProperties()

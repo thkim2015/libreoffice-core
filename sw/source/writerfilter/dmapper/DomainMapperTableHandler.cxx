@@ -62,6 +62,7 @@
 
 #ifdef DBG_UTIL
 #include "PropertyMapHelper.hxx"
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <rtl/ustring.hxx>
 #include <utility>
 #endif
@@ -994,6 +995,24 @@ CellPropertyValuesSeq_t DomainMapperTableHandler::endTableGetCellProperties(Tabl
                 const sal_uInt32 nFirstCell = m_rDMapper_Impl.getTableManager().getGridBefore(nRow);
                 const sal_uInt32 nLastCell = m_aCellProperties[nRow].size() - m_rDMapper_Impl.getTableManager().getGridAfter(nRow) - 1;
                 lcl_computeCellBorders( rInfo.pTableBorders, *aCellIterator, nCell, nFirstCell, nLastCell, nRow, bIsEndRow, bMergedVertically );
+                // Border lines lose their w:themeColor in BorderLine2: give the cell border the
+                // theme colour of the imported table/cell border with the same line colour.
+                {
+                    static const std::pair<PropertyIds, PropertyIds> aBorderThemeIds[] = {
+                        { PROP_TOP_BORDER, PROP_BORDER_TOP_COMPLEX_COLOR },
+                        { PROP_BOTTOM_BORDER, PROP_BORDER_BOTTOM_COMPLEX_COLOR },
+                        { PROP_LEFT_BORDER, PROP_BORDER_LEFT_COMPLEX_COLOR },
+                        { PROP_RIGHT_BORDER, PROP_BORDER_RIGHT_COMPLEX_COLOR } };
+                    for (const auto& [eBorder, eComplexColor] : aBorderThemeIds)
+                    {
+                        std::optional<PropertyMap::Property> oBorder = (*aCellIterator)->getProperty(eBorder);
+                        table::BorderLine2 aLine;
+                        if (!oBorder || !(oBorder->second >>= aLine) || aLine.LineWidth == 0)
+                            continue;
+                        if (const model::ComplexColor* pTheme = m_rDMapper_Impl.getTableManager().findBorderThemeColor(aLine.Color))
+                            (*aCellIterator)->Insert(eComplexColor, uno::Any(model::color::createXComplexColor(*pTheme)));
+                    }
+                }
                 // Fake cells for w:gridBefore/w:gridAfter: mark them, so DOCX export can write
                 // the skipped grid columns back instead of real (empty) cells.
                 if (nCell < nFirstCell || nCell > nLastCell)

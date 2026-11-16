@@ -27,6 +27,7 @@
 #include "DomainMapper_Impl.hxx"
 #include "ConversionHelper.hxx"
 #include <editeng/boxitem.hxx>
+#include <docmodel/uno/UnoComplexColor.hxx>
 #include <i18nutil/paper.hxx>
 #include <osl/diagnose.h>
 #include <rtl/ustring.hxx>
@@ -700,7 +701,18 @@ void SectionPropertyMap::ApplyBorderToPageStyles( DomainMapper_Impl& rDM_Impl,
         {
             const OUString & sBorderName = getPropertyName( aBorderIds[nBorder] );
             if ( xFirst.is() )
+            {
                 xFirst->setPropertyValue( sBorderName, uno::Any( *m_oBorderLines[nBorder] ) );
+                // Keep the theme colour reference so DOCX export writes w:themeColor back.
+                if (m_aBorderComplexColors[nBorder].isValidThemeType())
+                {
+                    const PropertyIds aComplexColorIds[4] = {
+                        PROP_BORDER_LEFT_COMPLEX_COLOR, PROP_BORDER_RIGHT_COMPLEX_COLOR,
+                        PROP_BORDER_TOP_COMPLEX_COLOR, PROP_BORDER_BOTTOM_COMPLEX_COLOR };
+                    xFirst->setPropertyValue(getPropertyName(aComplexColorIds[nBorder]),
+                        uno::Any(model::color::createXComplexColor(m_aBorderComplexColors[nBorder])));
+                }
+            }
         }
         if ( m_nBorderDistances[nBorder] >= 0 )
         {

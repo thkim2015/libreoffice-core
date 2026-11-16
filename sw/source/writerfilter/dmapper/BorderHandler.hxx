@@ -58,6 +58,8 @@ private:
 
     o3tl::enumarray<BorderPosition, bool> m_aFilledLines;
     o3tl::enumarray<BorderPosition, css::table::BorderLine2> m_aBorderLines;
+    /// Line colour and theme colour of the table border lines that refer to a theme colour.
+    std::vector<std::pair<sal_Int32, model::ComplexColor>> m_aThemeColors;
     OUString m_aInteropGrabBagName;
     std::vector<css::beans::PropertyValue> m_aInteropGrabBag;
     void appendGrabBag(const OUString& aKey, const OUString& aValue);
@@ -79,6 +81,7 @@ public:
     css::beans::PropertyValue getInteropGrabBag(const OUString& aName = OUString());
 
     model::ComplexColor getComplexColor() const;
+    const std::vector<std::pair<sal_Int32, model::ComplexColor>>& getThemeColors() const { return m_aThemeColors; }
 
 };
 }

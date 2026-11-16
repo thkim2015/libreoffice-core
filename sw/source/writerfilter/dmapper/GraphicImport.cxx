@@ -703,6 +703,9 @@ void GraphicImport::lcl_attribute(Id nName, const Value& rValue)
             }
         break;
         case NS_ooxml::LN_CT_Anchor_locked:
+            // Writer has no anchor lock; remember it so DOCX export can write locked="1" back.
+            if (nIntValue)
+                m_aInteropGrabBag[u"AnchorLocked"_ustr] <<= true;
         break;
         case NS_ooxml::LN_CT_Anchor_layoutInCell:
             // Starting in MSO 2013, anchors are ALWAYS considered to be laid out in table cell.
@@ -1872,6 +1875,15 @@ rtl::Reference<SwXTextGraphicObject> GraphicImport::createGraphicObject(uno::Ref
 
                 xGraphicObject->setPropertyValue(getPropertyName(PROP_ALLOW_OVERLAP),
                                                            uno::Any(m_bAllowOverlap));
+
+                if (m_aInteropGrabBag.find(u"AnchorLocked"_ustr) != m_aInteropGrabBag.end())
+                {
+                    comphelper::SequenceAsHashMap aFrameGrabBag(
+                        xGraphicObject->getPropertyValue(u"FrameInteropGrabBag"_ustr));
+                    aFrameGrabBag[u"AnchorLocked"_ustr] <<= true;
+                    xGraphicObject->setPropertyValue(u"FrameInteropGrabBag"_ustr,
+                        uno::Any(aFrameGrabBag.getAsConstPropertyValueList()));
+                }
 
                 xGraphicObject->setPropertyValue(getPropertyName( PROP_SURROUND_CONTOUR ),
                     uno::Any(m_bContour));
