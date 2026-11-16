@@ -4894,6 +4894,7 @@ void SwWW8ImplReader::Read_Justify( sal_uInt16 nId, const sal_uInt8* pData, shor
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_ADJUST );
+        m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_GRABBAG ); // Thai distributed
         return;
     }
 
@@ -4920,6 +4921,9 @@ void SwWW8ImplReader::Read_Justify( sal_uInt16 nId, const sal_uInt8* pData, shor
             eAdjust = SvxAdjust::Block;
             bDistributed = true;
             break;
+        case 9:
+            eAdjust = SvxAdjust::Block;
+            break;
     }
     SvxAdjustItem aAdjust(eAdjust, RES_PARATR_ADJUST);
     if (bDistributed)
@@ -4927,6 +4931,20 @@ void SwWW8ImplReader::Read_Justify( sal_uInt16 nId, const sal_uInt8* pData, shor
 
     NewAttr(aAdjust);
     SetRelativeJustify( nId != NS_sprm::PJc80::val );
+    if (*pData == 9)
+        SetThaiDistribute();
+}
+
+// Thai distributed justification (jc 9, written in sprmPJc only; sprmPJc80 has 4) has no Writer
+// equivalent: justify, and keep it in the paragraph grab bag for the export, like the DOCX import
+// (w:jc="thaiDistribute").
+void SwWW8ImplReader::SetThaiDistribute()
+{
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[u"ParaThaiDistribute"_ustr] <<= true;
+    NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
 }
 
 bool SwWW8ImplReader::IsRightToLeft()
@@ -4951,6 +4969,7 @@ void SwWW8ImplReader::Read_RTLJustify( sal_uInt16 nId, const sal_uInt8* pData, s
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_ADJUST );
+        m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_GRABBAG ); // Thai distributed
         return;
     }
 
@@ -4983,6 +5002,9 @@ void SwWW8ImplReader::Read_RTLJustify( sal_uInt16 nId, const sal_uInt8* pData, s
                 eAdjust = SvxAdjust::Block;
                 bDistributed = true;
                 break;
+            case 9:
+                eAdjust = SvxAdjust::Block;
+                break;
         }
         SvxAdjustItem aAdjust(eAdjust, RES_PARATR_ADJUST);
         if (bDistributed)
@@ -4990,6 +5012,8 @@ void SwWW8ImplReader::Read_RTLJustify( sal_uInt16 nId, const sal_uInt8* pData, s
 
         NewAttr(aAdjust);
         SetRelativeJustify( true );
+        if (*pData == 9)
+            SetThaiDistribute();
     }
 }
 
@@ -5526,12 +5550,29 @@ void SwWW8ImplReader::Read_Hyphenation( sal_uInt16, const sal_uInt8* pData, shor
 {
     // set Hyphenation flag
     if (nLen < 1)
+    {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_HYPHENZONE );
+        m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_GRABBAG );
+    }
     else
     {
+        // With automatic hyphenation off in the document, Writer paragraphs never hyphenate, so
+        // "do not hyphenate" (fNoAutoHyph) can't be told apart from Word's default "allowed":
+        // keep the explicit one in the grab bag for the export (see ParaHyphenZone).
+        if (*pData && m_xWDop && !m_xWDop->fAutoHyphen)
+        {
+            std::map<OUString, css::uno::Any> aGrabBagMap;
+            if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+                aGrabBagMap = pGrabBag->GetGrabBag();
+            aGrabBagMap[u"ParaSuppressAutoHyphens"_ustr] <<= true;
+            NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+        }
+
         SvxHyphenZoneItem aAttr( *GetFormatAttr( RES_PARATR_HYPHENZONE ) );
 
-        aAttr.SetHyphen( 0 == *pData ); // sic !
+        // sic ! -- but nothing hyphenates in Word while the document's automatic hyphenation is
+        // off, even with fNoAutoHyph 0 (which the DOC export writes for the Normal style)
+        aAttr.SetHyphen( 0 == *pData && !(m_xWDop && !m_xWDop->fAutoHyphen) );
 
         if( !*pData )
         {
@@ -6432,6 +6473,8 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::PBrcBottom::val,        &SwWW8ImplReader::Read_Border},
         {NS_sprm::PBrcRight::val,         &SwWW8ImplReader::Read_Border},
         {NS_sprm::PBrcBetween::val,       &SwWW8ImplReader::Read_Border},
+        {NS_sprm::PPropRMark::val,        &SwWW8ImplReader::Read_PPropRMark},             // pap.fPropRMark (paragraph formatting
+                                                                                         // changed with revision tracking)
         {NS_sprm::CIstdPermute::val,      nullptr},                                       // chp.istd;permutation vector;
                                                                                          // variable length;
         {NS_sprm::CMajority::val,         &SwWW8ImplReader::Read_Majority},               // chp.fBold, chp.fItalic, chp.fStrike,
@@ -6461,6 +6504,8 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::CBrc::val,              &SwWW8ImplReader::Read_CharBorder},             // chp.brc;BRC;long;
         {NS_sprm::CFitText::val,          &SwWW8ImplReader::Read_FitText},                // chp.dxaFitText, fitTextID
         {NS_sprm::CFELayout::val,         &SwWW8ImplReader::Read_DoubleLine_Rotate},
+        {NS_sprm::CPropRMark::val,        &SwWW8ImplReader::Read_CPropRMark},             // written by Word 2002+ instead of
+                                                                                         // sprmCPropRMark90
         {NS_sprm::LN_PicScale,            nullptr},                                       // pic.mx, pic.my, pic.dxaCropleft,
                                                                                          // pic.dyaCropTop pic.dxaCropRight,
                                                                                          // pic.dyaCropBottom;Complex;

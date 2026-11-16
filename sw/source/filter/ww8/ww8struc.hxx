@@ -547,6 +547,7 @@ struct WW8_TCell    // this is the base for further work (corresponds mostly to 
 //  BRC brcLeft;            // specification of left border of table row
 //  BRC brcBottom;          // specification of bottom border of table row
 //  BRC brcRight;           // specification of right border of table row.
+    WW8_BRCVer9 rgbrcDiag[2]; // diagonal borders (sprmTSetBrc): top left to bottom right, top right to bottom left
 
     WW8_TCell():
         bFirstMerged(0), bMerged(0), bVertical(0), bBackward(0), bRotateFont(0), bVertMerge(0),

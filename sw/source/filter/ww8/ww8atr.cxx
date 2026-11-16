@@ -3728,7 +3728,21 @@ void WW8AttributeOutput::ParaHyphenZone( const SvxHyphenZoneItem& rHyphenZone )
     // sprmPFNoAutoHyph
     m_rWW8Export.InsUInt16( NS_sprm::PFNoAutoHyph::val );
 
-    m_rWW8Export.m_pO->push_back( rHyphenZone.IsHyphen() ? 0 : 1 );
+    bool bNoHyphen = !rHyphenZone.IsHyphen();
+    // automatic hyphenation off in the document (DOP from the Standard style): nothing hyphenates
+    // in Word anyway, keep Word's default "allowed" unless the import kept an explicit "do not
+    // hyphenate" (ParaSuppressAutoHyphens)
+    if (bNoHyphen && m_rWW8Export.m_pDop && !m_rWW8Export.m_pDop->fAutoHyphen)
+    {
+        bNoHyphen = false;
+        if (auto pBag = static_cast<const SfxGrabBagItem*>(m_rWW8Export.HasItem(RES_PARATR_GRABBAG)))
+        {
+            auto it = pBag->GetGrabBag().find(u"ParaSuppressAutoHyphens"_ustr);
+            if (it != pBag->GetGrabBag().end())
+                it->second >>= bNoHyphen;
+        }
+    }
+    m_rWW8Export.m_pO->push_back( bNoHyphen ? 1 : 0 );
 }
 
 void WW8AttributeOutput::ParaScriptSpace( const SfxBoolItem& rScriptSpace )
@@ -5463,8 +5477,25 @@ void WW8AttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
             return;    // not a supported Attribute
     }
 
+    // Thai distributed justification kept by the DOC/DOCX import in the paragraph grab bag:
+    // Word writes jc 9 in sprmPJc only (sprmPJc80 has 4)
+    bool bThai = false;
+    if (nAdj == 3)
+    {
+        if (auto pTN = dynamic_cast<const SwTextNode*>(m_rWW8Export.m_pOutFormatNode);
+            pTN && pTN->GetpSwAttrSet())
+        {
+            if (const SfxGrabBagItem* pBag = pTN->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_GRABBAG, false))
+            {
+                auto it = pBag->GetGrabBag().find(u"ParaThaiDistribute"_ustr);
+                if (it != pBag->GetGrabBag().end())
+                    it->second >>= bThai;
+            }
+        }
+    }
+
     m_rWW8Export.InsUInt16(NS_sprm::PJc80::val);
-    m_rWW8Export.m_pO->push_back(nAdj);
+    m_rWW8Export.m_pO->push_back(bThai ? 4 : nAdj);
 
     /*
     Sadly for left to right paragraphs both these values are the same,
@@ -5493,7 +5524,9 @@ void WW8AttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
         }
     }
 
-    if (bBiDiSwap)
+    if (bThai)
+        m_rWW8Export.m_pO->push_back(9);
+    else if (bBiDiSwap)
         m_rWW8Export.m_pO->push_back(nAdjBiDi);
     else
         m_rWW8Export.m_pO->push_back(nAdj);

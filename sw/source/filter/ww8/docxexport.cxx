@@ -716,6 +716,26 @@ ErrCode DocxExport::ExportDocument_Impl()
     m_aSettings.revisionView = m_bOrigShowChanges;
     m_aSettings.trackRevisions = bool( RedlineFlags::On & m_nOrigRedlineFlags );
 
+    // automatic hyphenation off in the imported Word document (DOC import)
+    if (m_xTextDoc.is())
+    {
+        uno::Reference<beans::XPropertySetInfo> xInfo = m_xTextDoc->getPropertySetInfo();
+        if (xInfo.is() && xInfo->hasPropertyByName(UNO_NAME_MISC_OBJ_INTEROPGRABBAG))
+        {
+            uno::Sequence<beans::PropertyValue> aProps;
+            m_xTextDoc->getPropertyValue(UNO_NAME_MISC_OBJ_INTEROPGRABBAG) >>= aProps;
+            bool bAuto = true;
+            if (comphelper::SequenceAsHashMap(aProps).getValue(u"WordAutoHyphenation"_ustr) >>= bAuto)
+                m_bWordAutoHyphenationOff = !bAuto;
+        }
+        // unless hyphenation was switched on later (Standard style, see the DOC export DOP)
+        const SwTextFormatColl* pStd = m_rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool(
+            SwPoolFormatId::COLL_STANDARD, /*bRegardLanguage=*/false);
+        if (const SvxHyphenZoneItem* pZone = pStd ? pStd->GetItemIfSet(RES_PARATR_HYPHENZONE, false) : nullptr;
+            pZone && pZone->IsHyphen())
+            m_bWordAutoHyphenationOff = false;
+    }
+
     InitStyles();
 
     // init sections
@@ -1781,7 +1801,8 @@ void DocxExport::WriteSettings()
 
     // Automatic hyphenation: it's a global setting in Word, it's a paragraph setting in Writer.
     // Set it's value to "auto" and disable on paragraph level, if no hyphenation is used there.
-    pFS->singleElementNS(XML_w, XML_autoHyphenation, FSNS(XML_w, XML_val), "true");
+    pFS->singleElementNS(XML_w, XML_autoHyphenation, FSNS(XML_w, XML_val),
+                         m_bWordAutoHyphenationOff ? "false" : "true");
 
     // Hyphenation details set depending on default style, otherwise on body style
     SwTextFormatColl* pColl = m_rDoc.getIDocumentStylePoolAccess().GetTextCollFromPool(SwPoolFormatId::COLL_STANDARD, /*bRegardLanguage=*/false);

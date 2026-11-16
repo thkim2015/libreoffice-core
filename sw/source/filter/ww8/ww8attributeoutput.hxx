@@ -45,7 +45,8 @@ public:
     virtual void StartParagraphProperties() override {}
 
     /// Called after we end outputting the attributes.
-    virtual void EndParagraphProperties(const SfxItemSet& /*rParagraphMarkerProperties*/, const SwRedlineData* /*pRedlineData*/, const SwRedlineData* /*pRedlineParagraphMarkerDeleted*/, const SwRedlineData* /*pRedlineParagraphMarkerInserted*/) override {}
+    /// Paragraph formatting redline: sprmPPropRMark
+    virtual void EndParagraphProperties(const SfxItemSet& /*rParagraphMarkerProperties*/, const SwRedlineData* pRedlineData, const SwRedlineData* /*pRedlineParagraphMarkerDeleted*/, const SwRedlineData* /*pRedlineParagraphMarkerInserted*/) override;
 
     /// Empty paragraph.
     virtual void EmptyParagraph() override;

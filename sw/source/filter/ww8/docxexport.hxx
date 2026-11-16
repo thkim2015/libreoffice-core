@@ -144,7 +144,13 @@ class DocxExport : public MSWordExportBase
 
     std::vector<css::uno::Reference<frame::XModel>> m_aExportedCharts;
 
+    /// Word automatic hyphenation was off in the imported document (InteropGrabBag)
+    bool m_bWordAutoHyphenationOff = false;
+
 public:
+
+    /// Only the explicit "do not hyphenate" paragraphs get w:suppressAutoHyphens
+    bool IsWordAutoHyphenationOff() const { return m_bWordAutoHyphenationOff; }
 
     DocxExportFilter& GetFilter() { return m_rFilter; };
     const DocxExportFilter& GetFilter() const { return m_rFilter; };
