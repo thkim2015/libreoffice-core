@@ -29,6 +29,8 @@
 #include <sdr/attribute/sdrtextattribute.hxx>
 #include <svx/sdr/primitive2d/svx_primitivetypes2d.hxx>
 #include <editeng/borderline.hxx>
+#include <editeng/lineitem.hxx>
+#include <svx/svddef.hxx>
 #include <drawinglayer/attribute/sdrlineattribute.hxx>
 #include <drawinglayer/attribute/sdrshadowattribute.hxx>
 #include <drawinglayer/primitive2d/sdrdecompositiontools2d.hxx>
@@ -284,6 +286,18 @@ namespace sdr::contact
                                         // if merged, set so at CellBorderArray for primitive creation
                                         aArray.SetMergedRange(aCellPos.mnCol, aCellPos.mnRow, aCellPos.mnCol + nXSpan - 1, aCellPos.mnRow + nYSpan - 1);
                                     }
+
+                                    // ZETA: diagonal cell borders (a:lnTlToBr / a:lnBlToTr), drawn
+                                    // across the whole merged range like Calc does
+                                    const SfxItemSet& rDiagSet = xCurrentCell->GetItemSet();
+                                    constexpr double fDiagTwipsToMM(
+                                        o3tl::convert(1.0, o3tl::Length::twip, o3tl::Length::mm100));
+                                    const SvxBorderLine* pTLBR = rDiagSet.Get(SDRATTR_TABLE_BORDER_TLBR).GetLine();
+                                    const SvxBorderLine* pBLTR = rDiagSet.Get(SDRATTR_TABLE_BORDER_BLTR).GetLine();
+                                    if (pTLBR || pBLTR)
+                                        aArray.SetCellStyleDiag(aCellPos.mnCol, aCellPos.mnRow,
+                                            pTLBR ? svx::frame::Style(pTLBR, fDiagTwipsToMM) : svx::frame::Style(),
+                                            pBLTR ? svx::frame::Style(pBLTR, fDiagTwipsToMM) : svx::frame::Style());
                                 }
                             }
 

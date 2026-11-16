@@ -98,6 +98,9 @@ static const SvxItemPropertySet* ImplGetSvxCellPropertySet()
         { u"BottomBorder"_ustr,                 SDRATTR_TABLE_BORDER,           cppu::UnoType<BorderLine>::get(), 0, BOTTOM_BORDER },
         { u"LeftBorder"_ustr,                   SDRATTR_TABLE_BORDER,           cppu::UnoType<BorderLine>::get(), 0, LEFT_BORDER },
         { u"RightBorder"_ustr,                  SDRATTR_TABLE_BORDER,           cppu::UnoType<BorderLine>::get(), 0, RIGHT_BORDER },
+        // ZETA: diagonal borders (PowerPoint a:lnTlToBr / a:lnBlToTr), BorderLine2 like the edges
+        { u"DiagonalTLBR"_ustr,                 SDRATTR_TABLE_BORDER_TLBR,      cppu::UnoType<BorderLine>::get(), 0, 0 },
+        { u"DiagonalBLTR"_ustr,                 SDRATTR_TABLE_BORDER_BLTR,      cppu::UnoType<BorderLine>::get(), 0, 0 },
         { u"RotateAngle"_ustr,                  SDRATTR_TABLE_TEXT_ROTATION,    cppu::UnoType<sal_Int32>::get(), 0, 0 },
         { u"CellInteropGrabBag"_ustr,           SDRATTR_TABLE_CELL_GRABBAG,     cppu::UnoType<css::uno::Sequence<css::beans::PropertyValue>>::get(), 0, 0 },
 

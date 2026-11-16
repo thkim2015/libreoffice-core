@@ -2792,6 +2792,17 @@ void ShapeExport::WriteTableCellBorders(const Reference< XPropertySet>& xCellPro
 // lnB - Bottom Border Line Properties of table cell
     xCellPropSet->getPropertyValue(u"BottomBorder"_ustr) >>= aBorderLine;
     WriteBorderLine( XML_lnB, aBorderLine );
+
+// ZETA: lnTlToBr / lnBlToTr - diagonal borders, only when present (PowerPoint writes no empty ones)
+    Reference<XPropertySetInfo> xInfo = xCellPropSet->getPropertySetInfo();
+    for (auto const& [aName, nToken] : { std::pair(u"DiagonalTLBR"_ustr, XML_lnTlToBr),
+                                         std::pair(u"DiagonalBLTR"_ustr, XML_lnBlToTr) })
+    {
+        BorderLine2 aDiag;
+        if (xInfo.is() && xInfo->hasPropertyByName(aName)
+            && (xCellPropSet->getPropertyValue(aName) >>= aDiag) && aDiag.LineWidth > 0)
+            WriteBorderLine(nToken, aDiag);
+    }
 }
 
 ShapeExport& ShapeExport::WriteTableShape( const Reference< XShape >& xShape )
