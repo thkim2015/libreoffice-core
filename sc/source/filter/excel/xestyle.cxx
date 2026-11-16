@@ -3520,11 +3520,10 @@ XclExpXmlTableStyles::XclExpXmlTableStyles( const XclExpRoot& rRoot):
         }
     }
 
-    // custom PivotTable styles are written even when no table uses them (Excel keeps them
-    // in the gallery; pivotTableStyleInfo refers to them by name)
+    // custom styles are written even when nothing uses them (Excel keeps them in the
+    // workbook; pivotTableStyleInfo refers to them by name)
     for (const ScTableStyle* pCustom : pTableStyles->GetCustomTableStyles())
-        if (!pCustom->IsTable())
-            aTableStyleNames.insert(pCustom->GetName());
+        aTableStyleNames.insert(pCustom->GetName());
     if (ScDPCollection* pDPs = GetDoc().GetDPCollection())
         for (size_t i = 0; i < pDPs->GetCount(); ++i)
             if (const auto& rInfo = (*pDPs)[i].getStyleInfo(); rInfo.isSet() && !rInfo.maName.isEmpty()
