@@ -384,9 +384,23 @@ void TDefTableHandler::localResolve(Id rName, const writerfilter::Reference<Prop
         aSavedGrabBag = m_aInteropGrabBag;
         m_aInteropGrabBag.clear();
     }
+    // The theme colour belongs to this border line only.
+    m_eThemeColorType = model::ThemeColorType::Unknown;
+    m_nThemeTint = 0;
+    m_nThemeShade = 0;
     pProperties->resolve( *this );
     table::BorderLine2 aBorderLine;
     ConversionHelper::MakeBorderLine(m_nLineWidth, m_nLineType, m_nLineColor, aBorderLine, /*bIsOOXML=*/true);
+    if (m_eThemeColorType != model::ThemeColorType::Unknown)
+    {
+        model::ComplexColor aComplexColor;
+        aComplexColor.setThemeColor(m_eThemeColorType);
+        if (m_nThemeTint > 0)
+            aComplexColor.addTransformation({model::TransformationType::Tint, sal_Int16((255.0 - m_nThemeTint) * 10000.0 / 255.0)});
+        if (m_nThemeShade > 0)
+            aComplexColor.addTransformation({model::TransformationType::Shade, sal_Int16((255.0 - m_nThemeShade) * 10000.0 / 255.0)});
+        m_aThemeColors.emplace_back(aBorderLine.Color, aComplexColor);
+    }
     const bool rtl = false; // TODO
     switch( rName )
     {

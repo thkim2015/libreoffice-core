@@ -2105,6 +2105,10 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         break;
     case NS_ooxml::LN_CT_PPrBase_pageBreakBefore:
         rContext->Insert(PROP_BREAK_TYPE, uno::Any(nIntValue ? style::BreakType_PAGE_BEFORE : style::BreakType_NONE), /*bOverwrite=*/bool(nIntValue));
+        // A <w:br w:type="page"/> run is imported as the same paragraph break: remember that
+        // this one was the paragraph property, so that the DOCX export writes it back as such.
+        if (nIntValue && !IsStyleSheetImport())
+            rContext->Insert(PROP_PARA_PAGE_BREAK_BEFORE, uno::Any(true), true, PARA_GRAB_BAG);
     break;
     case NS_ooxml::LN_CT_NumPr_ilvl:
             if (nIntValue < 0 || 10 <= nIntValue)
@@ -5498,8 +5502,15 @@ void DomainMapper::handleParaJustification(const sal_Int32 nIntValue,
         }
         aStringValue = "right";
         break;
+    case NS_ooxml::LN_Value_ST_Jc_thaiDistribute:
+        // Thai justification has no Writer equivalent: justify, and remember the value in
+        // the paragraph grab bag so that the DOCX export writes it back.
+        if (!IsStyleSheetImport())
+            rContext->Insert(PROP_PARA_THAI_DISTRIBUTE, uno::Any(true), true, PARA_GRAB_BAG);
+        [[fallthrough]];
     case NS_ooxml::LN_Value_ST_Jc_distribute:
-        nLastLineAdjust = style::ParagraphAdjust_BLOCK;
+        if (sal::static_int_cast<Id>(nIntValue) == NS_ooxml::LN_Value_ST_Jc_distribute)
+            nLastLineAdjust = style::ParagraphAdjust_BLOCK;
         [[fallthrough]];
     case NS_ooxml::LN_Value_ST_Jc_both:
         nAdjust = style::ParagraphAdjust_BLOCK;
@@ -5737,9 +5748,9 @@ OUString DomainMapper::GetListStyleName(sal_Int32 nListId) const
     return m_pImpl->GetListStyleName( nListId );
 }
 
-void DomainMapper::ValidateListLevel(const OUString& sStyleIdentifierD)
+bool DomainMapper::ValidateListLevel(const OUString& sStyleIdentifierD)
 {
-    m_pImpl->ValidateListLevel(sStyleIdentifierD);
+    return m_pImpl->ValidateListLevel(sStyleIdentifierD);
 }
 
 void DomainMapper::SetDocDefaultsImport(bool bSet)

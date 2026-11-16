@@ -198,6 +198,9 @@ namespace writerfilter::dmapper {
                     pProperties->resolve(*pBorderHandler);
                     if (m_pCurrentInteropGrabBag)
                         m_pCurrentInteropGrabBag->push_back(pBorderHandler->getInteropGrabBag());
+                    // Remember theme colour borders, so cells get their theme colour reference.
+                    if (auto pManager = dynamic_cast<DomainMapperTableManager*>(m_pTableManager))
+                        pManager->addBorderThemeColors(pBorderHandler->getThemeColors());
                     TablePropertyMapPtr pTablePropMap( new TablePropertyMap );
                     pTablePropMap->InsertProps(pBorderHandler->getProperties());
 
@@ -256,6 +259,8 @@ namespace writerfilter::dmapper {
                     pProperties->resolve( *pTDefTableHandler );
                     if (m_pCurrentInteropGrabBag)
                         m_pCurrentInteropGrabBag->push_back(pTDefTableHandler->getInteropGrabBag());
+                    if (auto pManager = dynamic_cast<DomainMapperTableManager*>(m_pTableManager))
+                        pManager->addBorderThemeColors(pTDefTableHandler->getThemeColors());
                     TablePropertyMapPtr pCellPropMap( new TablePropertyMap );
                     pTDefTableHandler->fillCellProperties( pCellPropMap );
                     cellProps( pCellPropMap );

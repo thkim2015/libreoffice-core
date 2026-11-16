@@ -101,6 +101,9 @@ protected:
     bool m_bShearAllowed : 1;
     bool m_bEdgeRadiusAllowed : 1;
     bool m_bTransparenceAllowed : 1;
+    // Bring forward / send backward move exactly one step in the z-order
+    // (PowerPoint) instead of jumping past objects that do not overlap.
+    bool m_bZOrderOneStep = false;
     bool m_bCropAllowed : 1;
     bool m_bGradientAllowed : 1;
     bool m_bCanConvToPath : 1;
@@ -283,6 +286,11 @@ public:
     // SID_POLY_MERGE, SID_POLY_SUBSTRACT, SID_POLY_INTERSECT
     void MergeMarkedObjects(SdrMergeMode eMode);
 
+    // Split the marked objects into all the pieces their outlines cut each
+    // other into (PowerPoint "Merge Shapes > Fragment"). Every piece gets the
+    // attributes and text of the first selected object. Returns the piece count.
+    size_t FragmentMarkedObjects();
+
     // for distribution dialog function
     void DistributeMarkedObjects(sal_uInt16 SlotID);
 
@@ -376,6 +384,8 @@ public:
     // Align all marked objects vertically. Normally the SnapRect of an object is used.
     void AlignMarkedObjects(SdrHorAlign eHor, SdrVertAlign eVert);
     bool IsAlignPossible() const;
+
+    void SetZOrderOneStep(bool bOn) { m_bZOrderOneStep = bOn; }
 
     // move marked objects "up"
     void MovMarkedToTop();

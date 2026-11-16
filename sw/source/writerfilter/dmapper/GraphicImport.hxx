@@ -149,6 +149,7 @@ class GraphicImport : public LoggedProperties, public LoggedTable
 
     bool            m_bSizeProtected;
     bool            m_bPositionProtected;
+    bool            m_bNoChangeAspect = false;
     bool            m_bHidden;
     bool            m_bDecorative = false;
 

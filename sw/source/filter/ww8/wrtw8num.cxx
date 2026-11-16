@@ -27,6 +27,8 @@
 #include <numrule.hxx>
 #include <charfmt.hxx>
 #include <com/sun/star/i18n/ScriptType.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <com/sun/star/uno/Sequence.hxx>
 
 #include "sprmids.hxx"
 
@@ -511,6 +513,30 @@ void MSWordExportBase::NumberingLevel(
     {
         // Use bullet
         std::tie(sNumStr, pPseudoFont) = GetNumberingLevelBulletStringAndFont(rFormat);
+
+        // The DOCX import keeps the bullet levels that had no w:rFonts (Word then uses the
+        // paragraph font). Writer gave them the default bullet font: leave the font out again.
+        if (GetExportFormat() == ExportFormat::DOCX && SVX_NUM_CHAR_SPECIAL == rFormat.GetNumberingType())
+        {
+            uno::Any aAny;
+            rRule.GetGrabBagItem(aAny);
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            aAny >>= aGrabBag;
+            for (const auto& rProp : aGrabBag)
+            {
+                uno::Sequence<sal_Bool> aNoFonts;
+                if (rProp.Name != "OoxmlNoBulletFonts" || !(rProp.Value >>= aNoFonts)
+                    || nLvl >= aNoFonts.getLength() || !aNoFonts[nLvl])
+                    continue;
+                const std::optional<vcl::Font>& oFont = rFormat.GetBulletFont();
+                if (!oFont || IsOpenSymbol(oFont->GetFamilyName()))
+                {
+                    sal_UCS4 cBullet = rFormat.GetBulletChar();
+                    sNumStr = OUString(&cBullet, 1);
+                    pPseudoFont.reset();
+                }
+            }
+        }
 
         pOutSet = &aSet;
         if (rFormat.GetCharFormat())

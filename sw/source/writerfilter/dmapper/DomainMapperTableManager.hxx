@@ -24,7 +24,9 @@
 #include "TableManager.hxx"
 #include "PropertyMap.hxx"
 #include <vector>
+#include <map>
 #include <memory>
+#include <docmodel/color/ComplexColor.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 
 namespace writerfilter::dmapper {
@@ -75,6 +77,8 @@ class DomainMapperTableManager : public TableManager
 
     std::unique_ptr<TablePropertiesHandler> m_pTablePropsHandler;
     PropertyMapPtr            m_pStyleProps;
+    /// Theme colours of imported table/cell border lines, by line colour (w:color -> w:themeColor).
+    std::map<sal_Int32, model::ComplexColor> m_aBorderThemeColors;
 
     bool shouldInsertRow(const IntVectorPtr& pCellWidths, const IntVectorPtr& pTableGrid,
                          size_t nGrids, bool& rIsIncompleteGrid);
@@ -89,6 +93,17 @@ public:
     // use this method to avoid adding the properties for the table
     // but in the provided properties map.
     void SetStyleProperties(const PropertyMapPtr& pProperties) { m_pStyleProps = pProperties; };
+
+    void addBorderThemeColors(const std::vector<std::pair<sal_Int32, model::ComplexColor>>& rColors)
+    {
+        for (const auto& [nColor, rComplexColor] : rColors)
+            m_aBorderThemeColors[nColor] = rComplexColor;
+    }
+    const model::ComplexColor* findBorderThemeColor(sal_Int32 nColor) const
+    {
+        auto it = m_aBorderThemeColors.find(nColor);
+        return it == m_aBorderThemeColors.end() ? nullptr : &it->second;
+    }
 
     virtual bool sprm(Sprm & rSprm) override;
     bool attribute(Id nName, Value const & val);

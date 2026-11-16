@@ -4284,6 +4284,9 @@ void DocxAttributeOutput::StartRuby( const SwTextNode& rNode, sal_Int32 nPos, co
         TypedWhichId<SvxFontHeightItem> nWhichFontSize = (nScript == i18n::ScriptType::LATIN) ?  RES_CHRATR_FONTSIZE : RES_CHRATR_CJK_FONTSIZE;
 
         CharFont(pFormat->GetFormatAttr(nWhichFont));
+        // East Asian ruby text (kana etc.) is drawn by Word with the w:eastAsia font.
+        if (nScript == i18n::ScriptType::ASIAN)
+            CharFontCJK(pFormat->GetFormatAttr(RES_CHRATR_CJK_FONT));
         CharFontSize(pFormat->GetFormatAttr(nWhichFontSize));
         CharFontSize(pFormat->GetFormatAttr(RES_CHRATR_CTL_FONTSIZE));
     }
@@ -5229,12 +5232,97 @@ void DocxAttributeOutput::EndTable()
     m_aTableStyleConfs.pop_back();
 }
 
+namespace {
+/// Imported w:gridBefore/w:gridAfter placeholder cell that is still empty.
+bool lcl_IsGridSkipBox(const SwTableBox* pBox)
+{
+    const SwStartNode* pSttNd = pBox ? pBox->GetSttNd() : nullptr;
+    if (!pSttNd)
+        return false;
+    const SfxGrabBagItem* pItem = pBox->GetFrameFormat()->GetAttrSet().GetItem<SfxGrabBagItem>(RES_FRMATR_GRABBAG);
+    if (!pItem)
+        return false;
+    auto it = pItem->GetGrabBag().find(u"CellGridSkip"_ustr);
+    bool bSkip = false;
+    if (it == pItem->GetGrabBag().end() || !(it->second >>= bSkip) || !bSkip)
+        return false;
+    if (pSttNd->EndOfSectionIndex() - pSttNd->GetIndex() != SwNodeOffset(2))
+        return false;
+    const SwTextNode* pTextNd = pSttNd->GetNodes()[pSttNd->GetIndex() + 1]->GetTextNode();
+    return pTextNd && pTextNd->GetText().isEmpty();
+}
+
+/// Number of leading (bBefore) or trailing placeholder cells of a row; never all of them.
+size_t lcl_GridSkipCount(const SwTableLine* pLine, bool bBefore)
+{
+    const SwTableBoxes& rBoxes = pLine->GetTabBoxes();
+    const size_t nBoxes = rBoxes.size();
+    size_t nBefore = 0;
+    while (nBefore < nBoxes && lcl_IsGridSkipBox(rBoxes[nBefore]))
+        ++nBefore;
+    if (nBefore == nBoxes)
+        return 0;
+    if (bBefore)
+        return nBefore;
+    size_t nAfter = 0;
+    while (nAfter < nBoxes - nBefore && lcl_IsGridSkipBox(rBoxes[nBoxes - 1 - nAfter]))
+        ++nAfter;
+    return nAfter;
+}
+}
+
 void DocxAttributeOutput::StartTableRow( ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner )
 {
     m_pSerializer->startElementNS(XML_w, XML_tr);
 
     // Output the row properties
     m_pSerializer->startElementNS(XML_w, XML_trPr);
+
+    // Skipped grid columns before/after the row (imported w:gridBefore/w:gridAfter cells)
+    if (const SwTableBox* pFirstBox = pTableTextNodeInfoInner->getTableBox())
+    {
+        const SwTableLine* pLine = pFirstBox->GetUpper();
+        const size_t nBefore = lcl_GridSkipCount(pLine, true);
+        const size_t nAfter = lcl_GridSkipCount(pLine, false);
+        if (nBefore || nAfter)
+        {
+            InitTableHelper(pTableTextNodeInfoInner);
+            const size_t nBoxes = pLine->GetTabBoxes().size();
+            const sal_uInt32 nRow = pTableTextNodeInfoInner->getRow();
+            const SwWriteTableRows& rRows = m_xTableWrt->GetRows();
+            ww8::GridColsPtr pGridCols = GetGridCols(pTableTextNodeInfoInner);
+            auto lcl_span = [&](size_t nFrom, size_t nTo) {
+                sal_Int32 nSpan = 0;
+                for (size_t i = nFrom; i < nTo; ++i)
+                {
+                    sal_uInt16 nColSpan = 1;
+                    if (nRow < rRows.size() && i < rRows[nRow]->GetCells().size())
+                        nColSpan = rRows[nRow]->GetCells()[i]->GetColSpan();
+                    nSpan += nColSpan;
+                }
+                return nSpan;
+            };
+            auto lcl_edge = [&](size_t nCell) -> SwTwips {
+                if (nCell == 0)
+                    return 0;
+                return nCell - 1 < pGridCols->size() ? pGridCols->at(nCell - 1) : 0;
+            };
+            if (nBefore)
+                m_pSerializer->singleElementNS(XML_w, XML_gridBefore, FSNS(XML_w, XML_val),
+                                               OString::number(lcl_span(0, nBefore)));
+            if (nAfter)
+                m_pSerializer->singleElementNS(XML_w, XML_gridAfter, FSNS(XML_w, XML_val),
+                                               OString::number(lcl_span(nBoxes - nAfter, nBoxes)));
+            if (nBefore)
+                m_pSerializer->singleElementNS(XML_w, XML_wBefore, FSNS(XML_w, XML_w),
+                                               OString::number(lcl_edge(nBefore)),
+                                               FSNS(XML_w, XML_type), "dxa");
+            if (nAfter)
+                m_pSerializer->singleElementNS(XML_w, XML_wAfter, FSNS(XML_w, XML_w),
+                                               OString::number(lcl_edge(nBoxes) - lcl_edge(nBoxes - nAfter)),
+                                               FSNS(XML_w, XML_type), "dxa");
+        }
+    }
 
     // Header row: tblHeader
     const SwTable *pTable = pTableTextNodeInfoInner->getTable( );
@@ -5309,6 +5397,23 @@ void DocxAttributeOutput::StartTableCell( ww8::WW8TableNodeInfoInner::Pointer_t 
     if (nChange != SwRedlineTable::npos)
         m_tableReference.m_bTableCellChanged = true;
 
+    // A w:gridBefore/w:gridAfter placeholder: written as trPr in StartTableRow(), so drop
+    // the whole cell. A ForSort mark keeps only the listed elements (w:tblGrid never
+    // occurs in an empty cell), so everything written until EndTableCell() is discarded.
+    m_bGridSkipCellOpen = false;
+    if (pTabBox && lcl_IsGridSkipBox(pTabBox))
+    {
+        const SwTableLine* pLine = pTabBox->GetUpper();
+        const size_t nPos = pLine->GetBoxPos(pTabBox);
+        const size_t nBoxes = pLine->GetTabBoxes().size();
+        if (nPos < lcl_GridSkipCount(pLine, true) || nPos >= nBoxes - lcl_GridSkipCount(pLine, false))
+        {
+            const uno::Sequence<sal_Int32> aKeepOnly{ FSNS(XML_w, XML_tblGrid) };
+            m_pSerializer->mark(Tag_GridSkipCell, aKeepOnly);
+            m_bGridSkipCellOpen = true;
+        }
+    }
+
     m_pSerializer->startElementNS(XML_w, XML_tc);
 
     // Write the cell properties here
@@ -5326,6 +5431,12 @@ void DocxAttributeOutput::EndTableCell(sal_uInt32 nCell)
         EndParaSdtBlock();
 
     m_pSerializer->endElementNS( XML_w, XML_tc );
+
+    if (m_bGridSkipCellOpen)
+    {
+        m_pSerializer->mergeTopMarks(Tag_GridSkipCell);
+        m_bGridSkipCellOpen = false;
+    }
 
     m_tableReference.m_bTableCellOpen = false;
     m_tableReference.m_bTableCellParaSdtOpen = false;
@@ -5889,11 +6000,18 @@ void DocxAttributeOutput::FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size
 
     m_pSerializer->endElementNS( XML_wp, XML_docPr );
 
+    // A picture imported from DOCX without noChangeAspect has an unlocked aspect ratio.
+    bool bAspectUnlocked = false;
+    if (const SfxGrabBagItem* pItem = pFrameFormat->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false))
+    {
+        auto it = pItem->GetGrabBag().find(u"AspectUnlocked"_ustr);
+        if (it != pItem->GetGrabBag().end())
+            it->second >>= bAspectUnlocked;
+    }
     m_pSerializer->startElementNS(XML_wp, XML_cNvGraphicFramePr);
-    // TODO change aspect?
     m_pSerializer->singleElementNS( XML_a, XML_graphicFrameLocks,
             FSNS( XML_xmlns, XML_a ), GetExport().GetFilter().getNamespaceURL(OOX_NS(dml)),
-            XML_noChangeAspect, "1" );
+            XML_noChangeAspect, bAspectUnlocked ? nullptr : "1" );
     m_pSerializer->endElementNS( XML_wp, XML_cNvGraphicFramePr );
 
     m_pSerializer->startElementNS( XML_a, XML_graphic,
@@ -5914,9 +6032,8 @@ void DocxAttributeOutput::FlyFrameGraphic( const SwGrfNode* pGrfNode, const Size
     m_pSerializer->endElementNS( XML_pic, XML_cNvPr );
 
     m_pSerializer->startElementNS(XML_pic, XML_cNvPicPr);
-    // TODO change aspect?
     m_pSerializer->singleElementNS( XML_a, XML_picLocks,
-            XML_noChangeAspect, "1", XML_noChangeArrowheads, "1" );
+            XML_noChangeAspect, bAspectUnlocked ? nullptr : "1", XML_noChangeArrowheads, "1" );
     m_pSerializer->endElementNS( XML_pic, XML_cNvPicPr );
     m_pSerializer->endElementNS( XML_pic, XML_nvPicPr );
 
@@ -7314,7 +7431,7 @@ void DocxAttributeOutput::StartStyle( const OUString& rName, StyleType eType,
     // import-time qFormat state must be preserved on export.
     std::optional<bool> oQFormat;
 
-    OUString aRsid, aUiPriority;
+    OUString aRsid, aUiPriority, aAliases;
     rtl::Reference<FastAttributeList> pStyleAttributeList = FastSerializerHelper::createAttrList();
     uno::Any aAny;
     if (eType == STYLE_TYPE_PARA || eType == STYLE_TYPE_CHAR)
@@ -7345,6 +7462,8 @@ void DocxAttributeOutput::StartStyle( const OUString& rName, StyleType eType,
         }
         else if (rProp.Name == "rsid")
             aRsid = rProp.Value.get<OUString>();
+        else if (rProp.Name == "aliases")
+            aAliases = rProp.Value.get<OUString>();
         else if (rProp.Name == "unhideWhenUsed")
             bUnhideWhenUsed = true;
         else if (rProp.Name == "semiHidden")
@@ -7378,6 +7497,8 @@ void DocxAttributeOutput::StartStyle( const OUString& rName, StyleType eType,
         pStyleAttributeList->add(FSNS(XML_w, XML_customStyle), "1");
     m_pSerializer->startElementNS( XML_w, XML_style, pStyleAttributeList);
     m_pSerializer->singleElementNS(XML_w, XML_name, FSNS(XML_w, XML_val), rName);
+    if (!aAliases.isEmpty())
+        m_pSerializer->singleElementNS(XML_w, XML_aliases, FSNS(XML_w, XML_val), aAliases);
 
     if ( nBase != 0x0FFF && eType != STYLE_TYPE_LIST)
     {
@@ -8352,6 +8473,15 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
                 nCollLevel = pLevelItem->GetValue();
             if (nCollLevel != nLevel)
                 continue;
+            // Imported style whose numPr did not number: the level is linked to another style.
+            uno::Any aStyleGrabBag;
+            pColl->GetGrabBagItem(aStyleGrabBag);
+            uno::Sequence<beans::PropertyValue> aStyleProps;
+            if ((aStyleGrabBag >>= aStyleProps)
+                && std::any_of(aStyleProps.begin(), aStyleProps.end(), [](const beans::PropertyValue& rProp) {
+                       return rProp.Name == "OoxmlListLevelNotLinked" && rProp.Value == uno::Any(true);
+                   }))
+                continue;
             pLinked = pColl;
             ++nFound;
         }
@@ -8455,7 +8585,29 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
 
     // indentation
     m_pSerializer->startElementNS(XML_w, XML_pPr);
-    if( nListTabPos >= 0 )
+    // The DOCX import keeps the levels that had no <w:tab w:val="num">; Writer
+    // stores 0 for them, so do not write a tab stop at 0 back.
+    bool bNoNumTab = false;
+    if (nListTabPos == 0)
+    {
+        const SwNumRule* pRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
+                                                     : m_pExportingNumRule;
+        if (pRule)
+        {
+            uno::Any aAny;
+            pRule->GetGrabBagItem(aAny);
+            uno::Sequence<beans::PropertyValue> aGrabBag;
+            aAny >>= aGrabBag;
+            for (const auto& rProp : aGrabBag)
+            {
+                uno::Sequence<sal_Bool> aNoNumTabs;
+                if (rProp.Name == "OoxmlNoNumTabs" && (rProp.Value >>= aNoNumTabs)
+                    && nLevel < aNoNumTabs.getLength())
+                    bNoNumTab = aNoNumTabs[nLevel];
+            }
+        }
+    }
+    if( nListTabPos >= 0 && !bNoNumTab )
     {
         m_pSerializer->startElementNS(XML_w, XML_tabs);
         m_pSerializer->singleElementNS( XML_w, XML_tab,
@@ -9775,6 +9927,21 @@ void DocxAttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
                 pAdjustString = "distribute";
             else
                 pAdjustString = "both";
+            // Imported w:jc="thaiDistribute", kept in the paragraph grab bag
+            if (const SwTextNode* pTextNode = dynamic_cast<const SwTextNode*>(GetExport().m_pOutFormatNode);
+                pTextNode && pTextNode->GetpSwAttrSet() && rAdjust.GetLastBlock() != SvxAdjust::Block)
+            {
+                if (const SfxGrabBagItem* pBag = pTextNode->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_GRABBAG, false))
+                {
+                    auto it = pBag->GetGrabBag().find(u"ParaThaiDistribute"_ustr);
+                    bool bThai = false;
+                    if (it != pBag->GetGrabBag().end() && (it->second >>= bThai) && bThai)
+                    {
+                        m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), "thaiDistribute");
+                        return;
+                    }
+                }
+            }
             switch ( rAdjust.GetPropWordSpacingMinimum() )
             {
                 case 133:
@@ -11246,6 +11413,14 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         }
         else if (rGrabBagElement.first == "ParaInlineHeading")
             m_rExport.m_bParaInlineHeading = true;
+        else if (rGrabBagElement.first == "ParaPageBreakBefore")
+        {
+            // Handled in AttributeOutputBase::FormatBreak().
+        }
+        else if (rGrabBagElement.first == "ParaThaiDistribute")
+        {
+            // Handled in DocxAttributeOutput::ParaAdjust().
+        }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::ParaGrabBag: unhandled grab bag property " << rGrabBagElement.first );
     }

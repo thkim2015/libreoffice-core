@@ -58,6 +58,7 @@
 
 #include <autostyle_helper.hxx>
 #include <pagedesc.hxx>
+#include <algorithm>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentDeviceAccess.hxx>
@@ -3189,12 +3190,34 @@ void SwXPageStyle::SetPropertyValues_Impl(const uno::Sequence<OUString>& rProper
 
     if(aBaseImpl.HasItemSet())
     {
-        ::sw::UndoGuard const undoGuard(GetDoc()->GetIDocumentUndoRedo());
+        // weboffice: keep Undo for page style changes that do not touch header/footer properties
+        // (margins, size, orientation...) on pages without header/footer: SwUndoPageDesc handles
+        // those like the Page Style dialog does.
+        // Fix i64460 still applies to Header*/Footer*/First* properties: Undo is off and the list is
+        // cleared as before (creating and then deleting an SwUndoPageDesc there corrupts the
+        // header/footer content).
+        IDocumentUndoRedo& rUndo = GetDoc()->GetIDocumentUndoRedo();
+        const bool bTouchesHeaderFooter = std::any_of(rPropertyNames.begin(), rPropertyNames.end(),
+            [](const OUString& rName) { return rName.startsWith("Header") || rName.startsWith("Footer")
+                                               || rName.startsWith("First"); });
+        // SwUndoPageDesc swaps the header/footer content nodes between the old and new page desc;
+        // through UNO that left a footer page number field empty, so pages with a header or footer
+        // keep the i64460 path too.
+        const SwPageDesc* pOldDesc = aBaseImpl.getNewBase()->GetPageDesc();
+        const bool bHasHeaderFooter = !pOldDesc || pOldDesc->GetMaster().GetHeader().IsActive()
+                                      || pOldDesc->GetMaster().GetFooter().IsActive();
+        if (!bTouchesHeaderFooter && !bHasHeaderFooter && rUndo.DoesUndo())
+        {
+            aBaseImpl.getNewBase()->SetItemSet(aBaseImpl.GetItemSet());
+            return;
+        }
+
+        ::sw::UndoGuard const undoGuard(rUndo);
 
         if (undoGuard.UndoWasEnabled())
         {
             // Fix i64460: as long as Undo of page styles with header/footer causes trouble...
-            GetDoc()->GetIDocumentUndoRedo().DelAllUndoObj();
+            rUndo.DelAllUndoObj();
         }
 
         aBaseImpl.getNewBase()->SetItemSet(aBaseImpl.GetItemSet());

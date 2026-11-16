@@ -35,6 +35,8 @@
 #include <svx/msdffdef.hxx>
 #include <svx/svdotext.hxx>
 #include <svx/svdograf.hxx>
+#include <svx/svdlayer.hxx>
+#include <svx/svdmodel.hxx>
 #include <svx/sdmetitm.hxx>
 #include <utility>
 #include <vcl/cvtgrf.hxx>
@@ -1249,6 +1251,25 @@ static OUString lcl_getAnchorIdFromGrabBag(const SdrObject* pSdrObject)
     return aResult;
 }
 
+/// The z-index of a shape imported from VML (VML-Z-ORDER in the grab bag), 0 if none.
+static sal_Int32 lcl_getVmlZOrderFromGrabBag(const SdrObject* pSdrObject)
+{
+    sal_Int32 nResult = 0;
+    uno::Reference<beans::XPropertySet> xShape(const_cast<SdrObject*>(pSdrObject)->getUnoShape(), uno::UNO_QUERY);
+    if (!xShape.is())
+        return nResult;
+    for (const OUString& rName : { u"InteropGrabBag"_ustr, u"FrameInteropGrabBag"_ustr })
+    {
+        if (!xShape->getPropertySetInfo()->hasPropertyByName(rName))
+            continue;
+        comphelper::SequenceAsHashMap aGrabBag(xShape->getPropertyValue(rName));
+        auto it = aGrabBag.find(u"VML-Z-ORDER"_ustr);
+        if (it != aGrabBag.end() && (it->second >>= nResult) && nResult)
+            break;
+    }
+    return nResult;
+}
+
 sal_uInt32 VMLExport::GenerateShapeId()
 {
     if(!m_bOverrideShapeIdGeneration)
@@ -1464,6 +1485,22 @@ sal_Int32 VMLExport::StartShape()
             XML_href, m_pSdrObject->getHyperlink());
 
     m_pShapeAttrList->addNS(XML_o, XML_allowincell, m_IsFollowingTextFlow ? "t" : "f");
+
+    // z-index: Word puts a VML shape with a negative z-index behind the text (e.g. watermarks),
+    // without z-index in front of it. Write the imported z-index back while the shape is still
+    // in the same layer (Writer puts all header/footer shapes behind the text on import).
+    if (!m_bInline)
+    {
+        const SdrLayer* pLayer = m_pSdrObject->getSdrModelFromSdrObject().GetLayerAdmin().GetLayerPerID(m_pSdrObject->GetLayer());
+        const OUString aLayerName = pLayer ? pLayer->GetName() : OUString();
+        const bool bBodyHell = aLayerName == "Hell" || aLayerName == "InvisibleHell";
+        const bool bHell = bBodyHell || aLayerName == "HeaderFooterHell";
+        const sal_Int32 nZOrder = lcl_getVmlZOrderFromGrabBag(m_pSdrObject);
+        if ((nZOrder < 0 && bHell) || (nZOrder > 0 && !bBodyHell))
+            m_ShapeStyle.append(";z-index:" + OString::number(nZOrder));
+        else if (bBodyHell)
+            m_ShapeStyle.append(";z-index:" + OString::number(-sal_Int64(m_pSdrObject->GetOrdNum()) - 251658240));
+    }
 
     // add style
     m_pShapeAttrList->add( XML_style, m_ShapeStyle.makeStringAndClear() );

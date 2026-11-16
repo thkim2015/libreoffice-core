@@ -701,7 +701,48 @@ void ListDef::CreateNumberingRules( DomainMapper& rDMapper,
             if (nRestart >= 0)
                 bHasRestarts = true;
         }
+        // Writer has no "unset" list tab position: the import fills in 0 for a
+        // level without <w:tab w:val="num">. Remember such levels, so that the
+        // DOCX export does not invent a tab stop at 0 (Word: TabPosition undefined).
+        uno::Sequence<sal_Bool> aNoNumTabs(9);
+        bool bHasNoNumTabs = false;
+        for (sal_Int32 nLvl = 0; nLvl < nAbstLevels && nLvl < aNoNumTabs.getLength(); ++nLvl)
+        {
+            ListLevel::Pointer pLvl = GetLevel(nLvl);
+            ListLevel::Pointer pAbsLvl = m_pAbstractDef->GetLevel(nLvl);
+            if (!pAbsLvl)
+                continue;
+            if (!pAbsLvl->HasTabstop() && !(pLvl && pLvl->HasTabstop()))
+            {
+                aNoNumTabs.getArray()[nLvl] = true;
+                bHasNoNumTabs = true;
+            }
+        }
+        // A bullet level without w:rFonts uses the paragraph font in Word; Writer gives it
+        // the default bullet font (OpenSymbol), which the export would then write out.
+        uno::Sequence<sal_Bool> aNoBulletFonts(9);
+        bool bHasNoBulletFonts = false;
+        for (sal_Int32 nLvl = 0; nLvl < nAbstLevels && nLvl < aNoBulletFonts.getLength(); ++nLvl)
+        {
+            ListLevel::Pointer pLvl = GetLevel(nLvl);
+            ListLevel::Pointer pAbsLvl = m_pAbstractDef->GetLevel(nLvl);
+            if (!pAbsLvl)
+                continue;
+            ListLevel::Pointer pNumLvl = pLvl && pLvl->GetNFC() >= 0 ? pLvl : pAbsLvl;
+            if (pNumLvl->GetNumberingType(style::NumberingType::ARABIC) != style::NumberingType::CHAR_SPECIAL)
+                continue;
+            if (!pAbsLvl->getProperty(PROP_CHAR_FONT_NAME)
+                && !(pLvl && pLvl->getProperty(PROP_CHAR_FONT_NAME)))
+            {
+                aNoBulletFonts.getArray()[nLvl] = true;
+                bHasNoBulletFonts = true;
+            }
+        }
         std::vector<beans::PropertyValue> aGrabBag;
+        if (bHasNoNumTabs)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNoNumTabs"_ustr, aNoNumTabs));
+        if (bHasNoBulletFonts)
+            aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNoBulletFonts"_ustr, aNoBulletFonts));
         if (bHasNumFmts)
             aGrabBag.push_back(comphelper::makePropertyValue(u"OoxmlNumFmts"_ustr, aNumFmts));
         if (bHasRestarts)

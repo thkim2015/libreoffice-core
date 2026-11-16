@@ -539,6 +539,16 @@ void StyleSheetTable::lcl_sprm(Sprm & rSprm)
             m_pCurrentEntry->m_sNextStyleIdentifier = sStringValue;
             break;
         case NS_ooxml::LN_CT_Style_aliases:
+            // Writer has no style aliases: keep them for the DOCX export.
+            if (m_pCurrentEntry->m_nStyleTypeCode != StyleType::Unknown
+                && m_pCurrentEntry->m_nStyleTypeCode != StyleType::Table && !sStringValue.isEmpty())
+            {
+                beans::PropertyValue aValue;
+                aValue.Name = "aliases";
+                aValue.Value <<= sStringValue;
+                m_pCurrentEntry->AppendInteropGrabBag(aValue);
+            }
+        break;
         case NS_ooxml::LN_CT_Style_hidden:
         case NS_ooxml::LN_CT_Style_personal:
         case NS_ooxml::LN_CT_Style_personalCompose:
@@ -892,7 +902,17 @@ void StyleSheetTable::ApplyNumberingStyleNameToParaStyles()
                     // does something rather strange. It does not allow two paragraph styles
                     // to share the same listLevel on a numbering rule.
                     // Consider this style to just be body level if already used previously.
-                    m_rDMapper.ValidateListLevel(pEntry->m_sStyleIdentifierD);
+                    if (m_rDMapper.ValidateListLevel(pEntry->m_sStyleIdentifierD))
+                    {
+                        // The level is linked (w:lvl/w:pStyle) to another style: remember that
+                        // this style's numPr does not number, so DOCX export keeps the link.
+                        uno::Sequence<beans::PropertyValue> aGrabBag;
+                        xStyle->getPropertyValue(u"StyleInteropGrabBag"_ustr) >>= aGrabBag;
+                        const sal_Int32 nLen = aGrabBag.getLength();
+                        aGrabBag.realloc(nLen + 1);
+                        aGrabBag.getArray()[nLen] = comphelper::makePropertyValue(u"OoxmlListLevelNotLinked"_ustr, true);
+                        xStyle->setPropertyValue(u"StyleInteropGrabBag"_ustr, uno::Any(aGrabBag));
+                    }
                 }
             }
         }

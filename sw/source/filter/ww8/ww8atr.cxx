@@ -472,6 +472,20 @@ bool MSWordExportBase::SetCurrentPageDescFromNode(const SwNode &rNd)
     return bNewPageDesc;
 }
 
+/// The DOCX import marks paragraphs whose page break came from <w:pageBreakBefore>
+/// (and not from a <w:br w:type="page"/> run): write those back as the paragraph property.
+static bool lcl_hasPageBreakBeforeBag(const SwTextNode* pTextNode)
+{
+    if (!pTextNode || !pTextNode->GetpSwAttrSet())
+        return false;
+    const SfxGrabBagItem* pBag = pTextNode->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_GRABBAG, false);
+    if (!pBag)
+        return false;
+    auto it = pBag->GetGrabBag().find(u"ParaPageBreakBefore"_ustr);
+    bool bValue = false;
+    return it != pBag->GetGrabBag().end() && (it->second >>= bValue) && bValue;
+}
+
 /**
  * WW only knows Break-After (page break and section breaks),
  * whereas in SW page breaks exist both "before" and "after" and PageDesc exists
@@ -625,7 +639,11 @@ void MSWordExportBase::OutputSectionBreaks( const SfxItemSet *pSet, const SwNode
                     }
                 }
 
-                if ( !bNewPageDesc )
+                // A break kept as <w:pageBreakBefore> is written with the paragraph's
+                // own properties, not as a page break run at the end of the previous one.
+                const bool bParaProp = pBreak->GetBreak() == SvxBreak::PageBefore
+                                       && lcl_hasPageBreakBeforeBag(rNd.GetTextNode());
+                if ( !bNewPageDesc && !bParaProp )
                     AttrOutput().OutputItem( *pBreak );
             }
         }
@@ -4343,7 +4361,9 @@ void AttributeOutputBase::FormatBreak( const SvxFormatBreakItem& rBreak )
                 // as paragraph attribute (if the exporter is OK with that),
                 // this has to be done after the export of the paragraph ( =>
                 // !GetExport().bBreakBefore )
-                if (GetExport().PreferPageBreakBefore())
+                if (GetExport().PreferPageBreakBefore()
+                    || lcl_hasPageBreakBeforeBag(
+                        dynamic_cast<const SwTextNode*>(GetExport().m_pOutFormatNode)))
                 {
                     if (!GetExport().m_bBreakBefore)
                         PageBreakBefore(true);

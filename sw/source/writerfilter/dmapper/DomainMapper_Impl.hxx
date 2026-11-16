@@ -1186,7 +1186,8 @@ public:
     SectionPropertyMap * GetSectionContext();
 
     sal_Int16 GetListLevel(const StyleSheetEntryPtr& pEntry, const ParagraphPropertyMapPtr& pParaContext = nullptr);
-    void ValidateListLevel(const OUString& sStyleIdentifierD);
+    /// @return true if the list level already belongs to another paragraph style.
+    bool ValidateListLevel(const OUString& sStyleIdentifierD);
 
     /**
      Used for attributes/sprms which cannot be evaluated immediately (e.g. they depend

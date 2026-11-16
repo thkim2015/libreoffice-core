@@ -2216,16 +2216,16 @@ sal_Int16 DomainMapper_Impl::GetListLevel(const StyleSheetEntryPtr& pEntry,
     return GetListLevel(pParent);
 }
 
-void DomainMapper_Impl::ValidateListLevel(const OUString& sStyleIdentifierD)
+bool DomainMapper_Impl::ValidateListLevel(const OUString& sStyleIdentifierD)
 {
     StyleSheetEntryPtr pMyStyle = GetStyleSheetTable()->FindStyleSheetByISTD(sStyleIdentifierD);
     if (!pMyStyle)
-        return;
+        return false;
 
     bool bFromBaseStyle = false;
     sal_Int16 nListId = lcl_getListId(pMyStyle, GetStyleSheetTable(), bFromBaseStyle);
     if (nListId < 1)
-        return;
+        return false;
 
     sal_Int8 nListLevel = GetListLevel(pMyStyle);
     // A style's own numPr without w:ilvl means the first level (as in finishParagraph), and
@@ -2233,17 +2233,17 @@ void DomainMapper_Impl::ValidateListLevel(const OUString& sStyleIdentifierD)
     if (nListLevel == -1 && !bFromBaseStyle && IsOOXMLImport())
         nListLevel = 0;
     if (nListLevel < 0 || nListLevel >= WW_OUTLINE_MAX)
-        return;
+        return false;
 
     auto const pList(GetListTable()->GetList(nListId));
     if (!pList)
-        return;
+        return false;
 
     auto pLevel = pList->GetLevel(nListLevel);
     if (!pLevel && pList->GetAbstractDefinition())
         pLevel = pList->GetAbstractDefinition()->GetLevel(nListLevel);
     if (!pLevel)
-        return;
+        return false;
 
     if (!pLevel->GetParaStyle())
     {
@@ -2256,7 +2256,9 @@ void DomainMapper_Impl::ValidateListLevel(const OUString& sStyleIdentifierD)
         // by setting to body level (9).
         pMyStyle->m_pProperties->SetListLevel(WW_OUTLINE_MAX);
         // WARNING: PROP_NUMBERING_LEVEL is now out of sync with GetListLevel()
+        return true;
     }
+    return false;
 }
 
 void DomainMapper_Impl::finishParagraph( const ParagraphPropertyMapPtr& pParaContext, const bool bRemove, const bool bNoNumbering )

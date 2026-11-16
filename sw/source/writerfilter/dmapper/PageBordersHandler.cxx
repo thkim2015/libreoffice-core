@@ -116,6 +116,7 @@ void PageBordersHandler::lcl_sprm( Sprm& rSprm )
 
                 PgBorder aPgBorder;
                 aPgBorder.m_rLine = pBorderHandler->getBorderLine( );
+                aPgBorder.m_aComplexColor = pBorderHandler->getComplexColor();
                 aPgBorder.m_nDistance = pBorderHandler->getLineDistance( );
                 aPgBorder.m_ePos = ePos;
                 aPgBorder.m_bShadow = pBorderHandler->getShadow();
@@ -135,6 +136,7 @@ void PageBordersHandler::SetBorders( SectionPropertyMap* pSectContext )
     for (const PgBorder& rBorder : m_aBorders)
     {
         pSectContext->SetBorder( rBorder.m_ePos, rBorder.m_nDistance, rBorder.m_rLine, rBorder.m_bShadow );
+        pSectContext->SetBorderComplexColor(rBorder.m_ePos, rBorder.m_aComplexColor);
     }
     pSectContext->SetBorderApply(m_eBorderApply);
     pSectContext->SetBorderOffsetFrom(m_eOffsetFrom);
