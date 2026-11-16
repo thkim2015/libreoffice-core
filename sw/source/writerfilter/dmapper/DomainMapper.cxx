@@ -2105,6 +2105,10 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         break;
     case NS_ooxml::LN_CT_PPrBase_pageBreakBefore:
         rContext->Insert(PROP_BREAK_TYPE, uno::Any(nIntValue ? style::BreakType_PAGE_BEFORE : style::BreakType_NONE), /*bOverwrite=*/bool(nIntValue));
+        // A <w:br w:type="page"/> run is imported as the same paragraph break: remember that
+        // this one was the paragraph property, so that the DOCX export writes it back as such.
+        if (nIntValue && !IsStyleSheetImport())
+            rContext->Insert(PROP_PARA_PAGE_BREAK_BEFORE, uno::Any(true), true, PARA_GRAB_BAG);
     break;
     case NS_ooxml::LN_CT_NumPr_ilvl:
             if (nIntValue < 0 || 10 <= nIntValue)

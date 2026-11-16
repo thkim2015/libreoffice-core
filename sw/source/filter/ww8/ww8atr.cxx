@@ -4292,6 +4292,21 @@ void WW8AttributeOutput::PageBreakBefore( bool bBreak )
     m_rWW8Export.m_pO->push_back( bBreak ? 1 : 0 );
 }
 
+/// The DOCX import marks paragraphs whose page break came from <w:pageBreakBefore>
+/// (and not from a <w:br w:type="page"/> run): write those back as the paragraph property.
+static bool lcl_hasPageBreakBeforeBag(const MSWordExportBase& rExport)
+{
+    const SwTextNode* pTextNode = dynamic_cast<const SwTextNode*>(rExport.m_pOutFormatNode);
+    if (!pTextNode || !pTextNode->GetpSwAttrSet())
+        return false;
+    const SfxGrabBagItem* pBag = pTextNode->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_GRABBAG, false);
+    if (!pBag)
+        return false;
+    auto it = pBag->GetGrabBag().find(u"ParaPageBreakBefore"_ustr);
+    bool bValue = false;
+    return it != pBag->GetGrabBag().end() && (it->second >>= bValue) && bValue;
+}
+
 /**
  * breaks write nothing in the output field rWrt.pO,
  * but only in the text stream (requirement so they can
@@ -4343,7 +4358,7 @@ void AttributeOutputBase::FormatBreak( const SvxFormatBreakItem& rBreak )
                 // as paragraph attribute (if the exporter is OK with that),
                 // this has to be done after the export of the paragraph ( =>
                 // !GetExport().bBreakBefore )
-                if (GetExport().PreferPageBreakBefore())
+                if (GetExport().PreferPageBreakBefore() || lcl_hasPageBreakBeforeBag(GetExport()))
                 {
                     if (!GetExport().m_bBreakBefore)
                         PageBreakBefore(true);

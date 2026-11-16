@@ -11272,6 +11272,10 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         }
         else if (rGrabBagElement.first == "ParaInlineHeading")
             m_rExport.m_bParaInlineHeading = true;
+        else if (rGrabBagElement.first == "ParaPageBreakBefore")
+        {
+            // Handled in AttributeOutputBase::FormatBreak().
+        }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::ParaGrabBag: unhandled grab bag property " << rGrabBagElement.first );
     }
