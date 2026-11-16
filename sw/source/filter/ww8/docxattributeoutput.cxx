@@ -2011,6 +2011,7 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
         m_bEndCharSdt = false;
     }
 
+    bool bUrlEndedBeforeRun = false;
     if (m_closeHyperlinkInPreviousRun && m_nHyperLinkCount.back() == 0)
     {
         // the HYPERLINK field of a URL + mark link that started in an earlier run ends before this run
@@ -2020,6 +2021,7 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
             {
                 EndField_Impl(pNode, nPos, *it);
                 it = m_Fields.erase(it);
+                bUrlEndedBeforeRun = true;
             }
             else
                 ++it;
@@ -2298,7 +2300,8 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
     }
 
     // EndURL() was called for this run: the HYPERLINK field of a URL + mark link ends here
-    const bool bUrlEndsInThisRun = m_closeHyperlinkInThisRun;
+    // (unless that link already ended before this run - then a link starting here may go on)
+    const bool bUrlEndsInThisRun = m_closeHyperlinkInThisRun && !bUrlEndedBeforeRun;
     if ( m_closeHyperlinkInThisRun )
     {
         if (m_nHyperLinkCount.back() > 0)
