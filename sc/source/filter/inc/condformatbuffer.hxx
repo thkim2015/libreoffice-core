@@ -257,6 +257,8 @@ struct ExCfRuleModel
     OUString msScaleTypeValue; // Cfvo
     bool mbGradient; // DataBar
     bool mbIsLower; // Cfvo
+    bool mbBorder = false; // DataBar border="1"
+    ::Color mnBorderColor; // x14:borderColor / x14:negativeBorderColor
 };
 
 class ExtCfDataBarRule final : public WorksheetHelper
@@ -268,6 +270,8 @@ class ExtCfDataBarRule final : public WorksheetHelper
         NEGATIVEFILLCOLOR,
         AXISCOLOR,
         CFVO,
+        BORDERCOLOR,
+        NEGATIVEBORDERCOLOR,
         UNKNOWN,
     };
     ExCfRuleModel maModel;
@@ -281,6 +285,7 @@ public:
     void importPositiveFillColor(  const AttributeList& rAttribs );
     void importNegativeFillColor(  const AttributeList& rAttribs );
     void importAxisColor(  const AttributeList& rAttribs );
+    void importBorderColor( const AttributeList& rAttribs, bool bNegative );
     void importCfvo(  const AttributeList& rAttribs );
     ExCfRuleModel& getModel() { return maModel; }
     const ScDataBarFormatData* GetDataBarData() { return mpTarget; }

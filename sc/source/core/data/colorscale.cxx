@@ -865,6 +865,8 @@ bool ScDataBarFormat::IsEqual(const ScFormatEntry& rOther, bool /*bIgnoreSrcPos*
     bool bEq = (mpFormatData->maAxisColor.IsRGBEqual(r.mpFormatData->maAxisColor)
                 && mpFormatData->maPositiveColor.IsRGBEqual(r.mpFormatData->maPositiveColor)
                 && mpFormatData->mxNegativeColor == r.mpFormatData->mxNegativeColor
+                && mpFormatData->mxBorderColor == r.mpFormatData->mxBorderColor
+                && mpFormatData->mxNegativeBorderColor == r.mpFormatData->mxNegativeBorderColor
                 && mpFormatData->meAxisPosition == r.mpFormatData->meAxisPosition
                 && mpFormatData->mbGradient == r.mpFormatData->mbGradient
                 && mpFormatData->mbOnlyBar == r.mpFormatData->mbOnlyBar);
@@ -1089,6 +1091,13 @@ std::unique_ptr<ScDataBarInfo> ScDataBarFormat::GetDataBarInfo(const ScAddress& 
     pInfo->mbGradient = mpFormatData->mbGradient;
     pInfo->mbShowValue = !mpFormatData->mbOnlyBar;
     pInfo->maAxisColor = mpFormatData->maAxisColor;
+    if (mpFormatData->mxBorderColor)
+    {
+        if (nValue < 0 && mpFormatData->mxNegativeBorderColor)
+            pInfo->mxBorderColor = *mpFormatData->mxNegativeBorderColor;
+        else
+            pInfo->mxBorderColor = *mpFormatData->mxBorderColor;
+    }
 
     return pInfo;
 }

@@ -88,6 +88,18 @@ void ExtCfRuleContext::onStartElement( const AttributeList& rAttribs )
     }
 }
 
+css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL ExtCfRuleContext::createUnknownChildContext(
+    const OUString& /*Namespace*/, const OUString& Name,
+    const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs )
+{
+    if (getCurrentElement() == XLS14_TOKEN( dataBar ) && (Name == "borderColor" || Name == "negativeBorderColor"))
+    {
+        ExtCfDataBarRuleRef xRule = getCondFormats().createExtCfDataBarRule(mpTarget);
+        xRule->importBorderColor( AttributeList( Attribs ), Name == "negativeBorderColor" );
+    }
+    return nullptr;
+}
+
 void ExtCfRuleContext::onCharacters( const OUString& rChars )
 {
     switch( getCurrentElement() )

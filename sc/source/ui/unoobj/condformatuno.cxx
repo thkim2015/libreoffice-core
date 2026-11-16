@@ -153,7 +153,9 @@ enum DataBarProperties
     NegativeColor,
     DataBarEntries,
     MinimumLength,
-    MaximumLength
+    MaximumLength,
+    ZetaBorderColor,
+    ZetaNegativeBorderColor
 };
 
 std::span<const SfxItemPropertyMapEntry> getDataBarPropSet()
@@ -170,6 +172,8 @@ std::span<const SfxItemPropertyMapEntry> getDataBarPropSet()
         {u"DataBarEntries"_ustr, DataBarEntries, cppu::UnoType<uno::Sequence< sheet::XDataBarEntry >>::get(), 0, 0 },
         {u"MinimumLength"_ustr, MinimumLength, cppu::UnoType<double>::get(), 0, 0 },
         {u"MaximumLength"_ustr, MaximumLength, cppu::UnoType<double>::get(), 0, 0 },
+        {u"ZetaBorderColor"_ustr, ZetaBorderColor, cppu::UnoType<sal_Int32>::get(), 0, 0 },
+        {u"ZetaNegativeBorderColor"_ustr, ZetaNegativeBorderColor, cppu::UnoType<sal_Int32>::get(), 0, 0 },
     };
     return aDataBarPropertyMap_Impl;
 }
@@ -1276,6 +1280,21 @@ void SAL_CALL ScDataBarFormatObj::setPropertyValue(
 
         }
         break;
+        case ZetaBorderColor:
+        case ZetaNegativeBorderColor:
+        {
+            sal_Int32 nColor = -1;
+            if (!(aValue >>= nColor))
+                throw lang::IllegalArgumentException();
+            std::optional<Color>& rColor = pEntry->nWID == ZetaBorderColor
+                ? getCoreObject()->GetDataBarData()->mxBorderColor
+                : getCoreObject()->GetDataBarData()->mxNegativeBorderColor;
+            if (nColor < 0)
+                rColor.reset();
+            else
+                rColor = Color(ColorTransparency, nColor & 0xFFFFFF);
+        }
+        break;
         case DataBarEntries:
         {
             uno::Sequence<uno::Reference<sheet::XDataBarEntry> > aEntries;
@@ -1371,6 +1390,15 @@ uno::Any SAL_CALL ScDataBarFormatObj::getPropertyValue( const OUString& aPropert
             {
                 aAny <<= *getCoreObject()->GetDataBarData()->mxNegativeColor;
             }
+        }
+        break;
+        case ZetaBorderColor:
+        case ZetaNegativeBorderColor:
+        {
+            const std::optional<Color>& rColor = pEntry->nWID == ZetaBorderColor
+                ? getCoreObject()->GetDataBarData()->mxBorderColor
+                : getCoreObject()->GetDataBarData()->mxNegativeBorderColor;
+            aAny <<= rColor ? sal_Int32(rColor->GetRGBColor()) : sal_Int32(-1);
         }
         break;
         case DataBarEntries:

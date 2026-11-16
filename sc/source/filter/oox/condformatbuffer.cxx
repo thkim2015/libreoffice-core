@@ -1641,6 +1641,26 @@ void ExtCfDataBarRule::finalizeImport()
             else
                 pDataBar->meAxisPosition = databar::AUTOMATIC;
             pDataBar->mbGradient = maModel.mbGradient;
+            if (!maModel.mbBorder)
+            {
+                pDataBar->mxBorderColor.reset();
+                pDataBar->mxNegativeBorderColor.reset();
+            }
+            else if (!pDataBar->mxBorderColor)
+                pDataBar->mxBorderColor = pDataBar->maPositiveColor;
+            break;
+        }
+        // the dataBar element (border attribute) is finalized before its color children
+        case BORDERCOLOR:
+        {
+            if (mpTarget->mxBorderColor)
+                mpTarget->mxBorderColor = maModel.mnBorderColor;
+            break;
+        }
+        case NEGATIVEBORDERCOLOR:
+        {
+            if (mpTarget->mxBorderColor)
+                mpTarget->mxNegativeBorderColor = maModel.mnBorderColor;
             break;
         }
         case AXISCOLOR:
@@ -1712,6 +1732,15 @@ void ExtCfDataBarRule::importDataBar( const AttributeList& rAttribs )
     mnRuleType = DATABAR;
     maModel.mbGradient = rAttribs.getBool( XML_gradient, true );
     maModel.maAxisPosition = rAttribs.getString( XML_axisPosition, u"automatic"_ustr );
+    maModel.mbBorder = rAttribs.getBool( XML_border, false );
+}
+
+void ExtCfDataBarRule::importBorderColor( const AttributeList& rAttribs, bool bNegative )
+{
+    mnRuleType = bNegative ? NEGATIVEBORDERCOLOR : BORDERCOLOR;
+    ThemeBuffer& rThemeBuffer = getTheme();
+    GraphicHelper& rGraphicHelper = getBaseFilter().getGraphicHelper();
+    maModel.mnBorderColor = importOOXColor(rAttribs, rThemeBuffer, rGraphicHelper);
 }
 
 void ExtCfDataBarRule::importPositiveFillColor( const AttributeList& rAttribs )

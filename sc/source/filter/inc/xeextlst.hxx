@@ -114,6 +114,8 @@ private:
     std::unique_ptr<XclExpExtCfvo> mpUpperLimit;
     std::unique_ptr<XclExpExtNegativeColor> mpNegativeColor;
     std::unique_ptr<XclExpExtAxisColor> mpAxisColor;
+    std::optional<Color> mxBorderColor;
+    std::optional<Color> mxNegativeBorderColor;
 
 };
 
