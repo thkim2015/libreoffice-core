@@ -1760,7 +1760,12 @@ void DrawingML::WriteImageBrightnessContrastTransparence(uno::Reference<beans::X
     if (GetProperty(rXPropSet, u"AdjustContrast"_ustr))
         nContrast = mAny.get<sal_Int32>();
     // Used for shapes with picture fill
-    if (GetProperty(rXPropSet, u"FillTransparence"_ustr))
+    // ZETA: only a bitmap fill - a picture imported with a:clrChange carries a 100% transparent solid
+    // fill (best solid color of the blip fill), which must not become a:alphaModFix amt=0
+    FillStyle eTransFillStyle = FillStyle_BITMAP;
+    if (GetProperty(rXPropSet, u"FillStyle"_ustr))
+        mAny >>= eTransFillStyle;
+    if (eTransFillStyle == FillStyle_BITMAP && GetProperty(rXPropSet, u"FillTransparence"_ustr))
         nTransparence = mAny.get<sal_Int32>();
     // Used for pictures
     if (nTransparence == 0 && GetProperty(rXPropSet, u"Transparency"_ustr))
