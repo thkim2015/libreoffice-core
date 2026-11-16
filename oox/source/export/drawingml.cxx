@@ -6706,6 +6706,38 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
             }
         }
 
+        // The Shadow property wins over the grab bag: a shape whose shadow was turned off does
+        // not write the imported outerShdw, and a shadow turned on later (not in the grab bag,
+        // e.g. a shape that only kept an imported reflection) is written from the properties
+        // at its place in CT_EffectList.
+        const bool bHasShadowProp = rXPropSet->getPropertySetInfo()->hasPropertyByName(u"Shadow"_ustr);
+        bool bShadowProp = false;
+        if (bHasShadowProp)
+            rXPropSet->getPropertyValue(u"Shadow"_ustr) >>= bShadowProp;
+        const bool bPropShadow = bShadowProp && !aOuterShdwProps.hasElements();
+        bool bPropShadowWritten = false;
+        auto WritePropShadow = [&]()
+        {
+            double dX = +0.0, dY = +0.0;
+            sal_Int32 nBlur = 0;
+            rXPropSet->getPropertyValue(u"ShadowXDistance"_ustr) >>= dX;
+            rXPropSet->getPropertyValue(u"ShadowYDistance"_ustr) >>= dY;
+            rXPropSet->getPropertyValue(u"ShadowBlur"_ustr) >>= nBlur;
+            Sequence< PropertyValue > aShadowAttribsGrabBag{
+                comphelper::makePropertyValue(u"dist"_ustr, lcl_CalculateDist(dX, dY)),
+                comphelper::makePropertyValue(u"dir"_ustr, lcl_CalculateDir(dX, dY)),
+                comphelper::makePropertyValue(u"blurRad"_ustr, oox::drawingml::convertHmmToEmu(nBlur)),
+                comphelper::makePropertyValue(u"rotWithShape"_ustr, false)
+            };
+            Sequence< PropertyValue > aShadowGrabBag{
+                comphelper::makePropertyValue(u"Attribs"_ustr, aShadowAttribsGrabBag),
+                comphelper::makePropertyValue(u"RgbClr"_ustr, rXPropSet->getPropertyValue(u"ShadowColor"_ustr)),
+                comphelper::makePropertyValue(u"RgbClrTransparency"_ustr, rXPropSet->getPropertyValue(u"ShadowTransparence"_ustr))
+            };
+            WriteShapeEffect(u"outerShdw", aShadowGrabBag);
+            bPropShadowWritten = true;
+        };
+
         mpFS->startElementNS(XML_a, XML_effectLst);
         bool bGlowWritten = false;
         for (const auto& rEffect : aEffects)
@@ -6718,10 +6750,15 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
                 WriteGlowEffect(rXPropSet);
                 bGlowWritten = true;
             }
+            if (bPropShadow && !bPropShadowWritten
+                && (rEffect.Name == "prstShdw" || rEffect.Name == "reflection"
+                    || rEffect.Name == "softEdge"))
+                WritePropShadow();
 
             if( rEffect.Name == "outerShdw" )
             {
-                WriteShapeEffect( rEffect.Name, aOuterShdwProps );
+                if (!bHasShadowProp || bShadowProp)
+                    WriteShapeEffect( rEffect.Name, aOuterShdwProps );
             }
             else
             {
@@ -6732,6 +6769,8 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
         }
         if (!bGlowWritten)
             WriteGlowEffect(rXPropSet);
+        if (bPropShadow && !bPropShadowWritten)
+            WritePropShadow();
         WriteSoftEdgeEffect(rXPropSet); // the last
 
         mpFS->endElementNS(XML_a, XML_effectLst);
