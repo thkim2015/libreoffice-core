@@ -2761,7 +2761,12 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
 
                     bool const isDropdownOrCheckbox(pFieldmark->GetFieldname() == ODF_FORMDROPDOWN ||
                                                     pFieldmark->GetFieldname() == ODF_FORMCHECKBOX);
-                    if ( isDropdownOrCheckbox )
+                    // DOCX AppendBookmark writes a collapsed bookmark (start and end), so calling it
+                    // before and after the field gave two bookmarks of the same name, one unclosed
+                    bool const bDocx(GetExportFormat() == MSWordExportBase::ExportFormat::DOCX);
+                    if ( isDropdownOrCheckbox && bDocx )
+                        AppendBookmarkStart( pFieldmark->GetName().toString() );
+                    else if ( isDropdownOrCheckbox )
                         AppendBookmark( pFieldmark->GetName().toString() );
                     OutputField( nullptr, lcl_getFieldId( pFieldmark ),
                             lcl_getFieldCode( pFieldmark ),
@@ -2771,7 +2776,9 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
                     // tdf#129514 need CmdEnd for docx
                     OutputField(nullptr, lcl_getFieldId(pFieldmark), OUString(),
                             FieldFlags::CmdEnd | FieldFlags::Close);
-                    if ( isDropdownOrCheckbox )
+                    if ( isDropdownOrCheckbox && bDocx )
+                        AppendBookmarkEnd( pFieldmark->GetName().toString(), false );
+                    else if ( isDropdownOrCheckbox )
                         AppendBookmark( pFieldmark->GetName().toString() );
                 }
                 nLen -= ofs;
