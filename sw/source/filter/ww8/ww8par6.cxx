@@ -4939,6 +4939,38 @@ void SwWW8ImplReader::Read_BoolItem( sal_uInt16 nId, const sal_uInt8* pData, sho
     }
 }
 
+// Writer has no "allow Latin text to wrap in the middle of a word" (East Asian word wrap)
+// setting: keep it in the paragraph grab bag for the export, like the DOCX import (w:wordWrap).
+// The Normal style of Korean Word has fWordWrap=0.
+void SwWW8ImplReader::Read_WordWrap(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (nLen < 1)
+    {
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+        return;
+    }
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[u"ParaWordWrap"_ustr] <<= (0 != *pData);
+    NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+}
+
+// Asian/number spacing: Writer's single flag (RES_PARATR_SCRIPTSPACE, from fAutoSpaceDE) covers
+// both, so only switching it off can be represented, like the DOCX import (w:autoSpaceDN).
+void SwWW8ImplReader::Read_AutoSpaceDN(sal_uInt16, const sal_uInt8* pData, short nLen)
+{
+    if (nLen < 1)
+        m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_SCRIPTSPACE);
+    else if (!*pData)
+    {
+        std::unique_ptr<SfxBoolItem> pItem(
+            static_cast<SfxBoolItem*>(GetDfltAttr(RES_PARATR_SCRIPTSPACE)->Clone()));
+        pItem->SetValue(false);
+        NewAttr(*pItem);
+    }
+}
+
 void SwWW8ImplReader::Read_Emphasis( sal_uInt16, const sal_uInt8* pData, short nLen )
 {
     if (nLen < 1)
@@ -6043,11 +6075,11 @@ static const wwSprmDispatcher *GetWW8SprmDispatcher()
         {NS_sprm::PFLocked::val,          nullptr},                                       // pap.fLocked;0 or 1;byte;
         {NS_sprm::PFWidowControl::val,    &SwWW8ImplReader::Read_WidowControl},           // pap.fWidowControl;0 or 1;byte
         {NS_sprm::PFKinsoku::val,         &SwWW8ImplReader::Read_BoolItem},               // pap.fKinsoku;0 or 1;byte;
-        {NS_sprm::PFWordWrap::val,        nullptr},                                       // pap.fWordWrap;0 or 1;byte;
+        {NS_sprm::PFWordWrap::val,        &SwWW8ImplReader::Read_WordWrap},                                     // pap.fWordWrap;0 or 1;byte;
         {NS_sprm::PFOverflowPunct::val,   &SwWW8ImplReader::Read_BoolItem},               // pap.fOverflowPunct; 0 or 1;byte;
         {NS_sprm::PFTopLinePunct::val,    nullptr},                                       // pap.fTopLinePunct;0 or 1;byte
         {NS_sprm::PFAutoSpaceDE::val,     &SwWW8ImplReader::Read_BoolItem},               // pap.fAutoSpaceDE;0 or 1;byte;
-        {NS_sprm::PFAutoSpaceDN::val,     nullptr},                                       // pap.fAutoSpaceDN;0 or 1;byte;
+        {NS_sprm::PFAutoSpaceDN::val,     &SwWW8ImplReader::Read_AutoSpaceDN},                                     // pap.fAutoSpaceDN;0 or 1;byte;
         {NS_sprm::LN_PISnapBaseLine,      nullptr},                                       // obsolete, not applicable in
                                                                                          // Word97 and later versions;;byte;
         {NS_sprm::PFBiDi::val,            &SwWW8ImplReader::Read_ParaBiDi},               // ;;byte;
