@@ -518,14 +518,20 @@ SvxNumType WW8ListManager::GetSvxNumTypeFromMSONFC(sal_uInt16 nNFC)
         case 7: // ordinalText
             nType = SVX_NUM_TEXT_ORDINAL;
             break;
-        //case 8: // hex
+        case 8: // hex
+            nType = static_cast<SvxNumType>(SW_NUMBERING_HEX);
+            break;
 
         case 9:
             // 0x09, msonfcChiManSty
             nType = SVX_NUM_SYMBOL_CHICAGO;
             break;
-        //case 15: // decimalHalfWidth
-        //case 17: // japaneseDigitalTenThousand
+        case 15: // decimalHalfWidth
+            nType = static_cast<SvxNumType>(SW_NUMBERING_DECIMAL_HALF_WIDTH);
+            break;
+        case 17: // japaneseDigitalTenThousand
+            nType = static_cast<SvxNumType>(SW_NUMBERING_JAPANESE_DIGITAL);
+            break;
 
         case 18: // decimalEnclosedCircle
         case 28: // decimalEnclosedCircleChinese
@@ -551,12 +557,16 @@ SvxNumType WW8ListManager::GetSvxNumTypeFromMSONFC(sal_uInt16 nNFC)
             nType = SVX_NUM_TIAN_GAN_ZH;
             break;
         case 31: // ideographZodiac
-        case 32: // ideographZodiacTraditional
             nType = SVX_NUM_DI_ZI_ZH;
+            break;
+        case 32: // ideographZodiacTraditional
+            nType = static_cast<SvxNumType>(SW_NUMBERING_ZODIAC_TRADITIONAL);
+            break;
+        case 36: // taiwaneseDigital
+            nType = static_cast<SvxNumType>(SW_NUMBERING_TAIWANESE_DIGITAL);
             break;
         case 33: // taiwaneseCounting
         case 35:
-        case 36:
         case 37:
         case 11:
         case 39:
@@ -590,8 +600,12 @@ SvxNumType WW8ListManager::GetSvxNumTypeFromMSONFC(sal_uInt16 nNFC)
         case 25:
             nType = SVX_NUM_HANGUL_JAMO_KO;
             break;
-        //case 26: // decimalEnclosedFullstop
-        //case 27: // decimalEnclosedParen
+        case 26: // decimalEnclosedFullstop
+            nType = static_cast<SvxNumType>(SW_NUMBERING_ENCLOSED_FULLSTOP);
+            break;
+        case 27: // decimalEnclosedParen
+            nType = static_cast<SvxNumType>(SW_NUMBERING_ENCLOSED_PAREN);
+            break;
         //case 40: // decimal (Chinese)
 
         case 41: // koreanDigital
@@ -618,13 +632,17 @@ SvxNumType WW8ListManager::GetSvxNumTypeFromMSONFC(sal_uInt16 nNFC)
             nType = SVX_NUM_CHARS_NEPALI;
             break;
         //case 50: // hindiConsonants
-        //case 51: // hindiNumbers
+        case 51: // hindiNumbers
+            nType = SVX_NUM_NUMBER_INDIC_DEVANAGARI;
+            break;
         //case 52: // hindiCounting
 
         case 53: // thaiLetters
             nType = SVX_NUM_CHARS_THAI;
             break;
-        //case 54: // thaiNumbers
+        case 54: // thaiNumbers
+            nType = static_cast<SvxNumType>(SW_NUMBERING_THAI_NUMBERS);
+            break;
         //case 55: // thaiCounting
         //case 56: // vietnameseCounting
         case 57: // numberInDash

@@ -7955,6 +7955,15 @@ static OString lcl_ConvertNumberingType(sal_Int16 nNumberingType, const SfxItemS
         case style::NumberingType::NUMBER_LEGAL_KO: aType = "koreanLegal"_ostr; break;
         case style::NumberingType::NUMBER_DIGITAL_KO: aType = "koreanDigital"_ostr; break;
         case SW_NUMBERING_NUMBER_IN_DASH: aType = "numberInDash"_ostr; break;
+        case SW_NUMBERING_ENCLOSED_FULLSTOP: aType = "decimalEnclosedFullstop"_ostr; break;
+        case SW_NUMBERING_ENCLOSED_PAREN: aType = "decimalEnclosedParen"_ostr; break;
+        case SW_NUMBERING_HEX: aType = "hex"_ostr; break;
+        case SW_NUMBERING_DECIMAL_HALF_WIDTH: aType = "decimalHalfWidth"_ostr; break;
+        case SW_NUMBERING_THAI_NUMBERS: aType = "thaiNumbers"_ostr; break;
+        case style::NumberingType::NUMBER_INDIC_DEVANAGARI: aType = "hindiNumbers"_ostr; break;
+        case SW_NUMBERING_TAIWANESE_DIGITAL: aType = "taiwaneseDigital"_ostr; break;
+        case SW_NUMBERING_JAPANESE_DIGITAL: aType = "japaneseDigitalTenThousand"_ostr; break;
+        case SW_NUMBERING_ZODIAC_TRADITIONAL: aType = "ideographZodiacTraditional"_ostr; break;
         case style::NumberingType::NUMBER_DIGITAL2_KO: aType = "koreanDigital2"_ostr; break;
         case style::NumberingType::CIRCLE_NUMBER: aType="decimalEnclosedCircle"_ostr; break;
         case style::NumberingType::CHARS_ARABIC: aType="arabicAlpha"_ostr; break;

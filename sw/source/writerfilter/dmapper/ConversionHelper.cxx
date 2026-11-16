@@ -637,6 +637,33 @@ sal_Int16 ConvertNumberingType(const sal_Int32 nFmt, const sal_Int16 nDefault)
         case NS_ooxml::LN_Value_ST_NumberFormat_numberInDash:
             nRet = SW_NUMBERING_NUMBER_IN_DASH;
             break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_decimalEnclosedFullstop:
+            nRet = SW_NUMBERING_ENCLOSED_FULLSTOP;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_decimalEnclosedParen:
+            nRet = SW_NUMBERING_ENCLOSED_PAREN;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_hex:
+            nRet = SW_NUMBERING_HEX;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_decimalHalfWidth:
+            nRet = SW_NUMBERING_DECIMAL_HALF_WIDTH;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_thaiNumbers:
+            nRet = SW_NUMBERING_THAI_NUMBERS;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_hindiNumbers:
+            nRet = style::NumberingType::NUMBER_INDIC_DEVANAGARI;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_taiwaneseDigital:
+            nRet = SW_NUMBERING_TAIWANESE_DIGITAL;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_japaneseDigitalTenThousand:
+            nRet = SW_NUMBERING_JAPANESE_DIGITAL;
+            break;
+        case NS_ooxml::LN_Value_ST_NumberFormat_ideographZodiacTraditional:
+            nRet = SW_NUMBERING_ZODIAC_TRADITIONAL;
+            break;
         default: nRet = nDefault;
     }
 /*  TODO: Lots of additional values are available - some are supported in the I18 framework
