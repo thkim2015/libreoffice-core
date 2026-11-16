@@ -1921,7 +1921,13 @@ void SwWW8ImplReader::Read_Tab(sal_uInt16 , const sal_uInt8* pData, short nLen)
             m_bBarTabs = true;
     }
 
-    if (nIns || nDel)
+    // a sprm that only adds bar tabs (as written by our export next to the real tab stops)
+    // must not reset the Writer tab stops of an earlier sprm of the same paragraph
+    const bool bOnlyBarTabs = !nDel && nIns && aBarTabs.size() == size_t(nIns);
+    if (bOnlyBarTabs)
+    {
+    }
+    else if (nIns || nDel)
         NewAttr(*aAttr);
     else
     {
