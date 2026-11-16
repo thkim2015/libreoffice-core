@@ -5671,10 +5671,25 @@ void SwWW8ImplReader::Read_KeepParas( sal_uInt16, const sal_uInt8* pData, short 
 void SwWW8ImplReader::Read_BreakBefore( sal_uInt16, const sal_uInt8* pData, short nLen )
 {
     if (nLen < 1)
+    {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_BREAK );
-    else
-        NewAttr( SvxFormatBreakItem(
-                ( *pData & 1 ) ? SvxBreak::PageBefore : SvxBreak::NONE, RES_BREAK ) );
+        if (!m_pCurrentColl)
+            m_xCtrlStck->SetAttr(*m_pPaM->GetPoint(), RES_PARATR_GRABBAG);
+        return;
+    }
+    NewAttr( SvxFormatBreakItem(
+            ( *pData & 1 ) ? SvxBreak::PageBefore : SvxBreak::NONE, RES_BREAK ) );
+    // A page break character (0x0C) is imported as the same paragraph break: remember that
+    // this one was the paragraph property, so that the DOCX export writes <w:pageBreakBefore>
+    // and not a page break run, like the DOCX import does.
+    if (!m_pCurrentColl && (*pData & 1))
+    {
+        std::map<OUString, css::uno::Any> aGrabBagMap;
+        if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+            aGrabBagMap = pGrabBag->GetGrabBag();
+        aGrabBagMap[u"ParaPageBreakBefore"_ustr] <<= true;
+        NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
+    }
 }
 
 void SwWW8ImplReader::Read_ApoPPC( sal_uInt16, const sal_uInt8* pData, short )
