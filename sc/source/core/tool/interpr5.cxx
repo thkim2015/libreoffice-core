@@ -2442,37 +2442,28 @@ void ScInterpreter::CalculateSumX2MY2SumX2DY2(bool _bSumX2DY2)
     }
     double fVal;
     KahanSum fSum = 0.0;
-    if (nC1 != nC2 || nR1 != nR2)
-    {
-        // weboffice: same number of values in another shape -> pair them in order like Excel
-        const SCSIZE nCount = nC1 * nR1;
-        for (SCSIZE k = 0; k < nCount; ++k)
-            if (pMat1->IsValue(k) && pMat2->IsValue(k))
-            {
-                fVal = pMat1->GetDouble(k);
+    // weboffice: like Excel only pairs of two numbers count (TRUE/FALSE, text and empty are
+    // skipped), and no pair at all is #DIV/0!. A different shape with the same number of
+    // values pairs them in order.
+    (void)i; (void)j;
+    const SCSIZE nCount = nC1 * nR1;
+    SCSIZE nPairs = 0;
+    for (SCSIZE k = 0; k < nCount; ++k)
+        if (pMat1->IsValue(k) && !pMat1->IsBoolean(k) && pMat2->IsValue(k) && !pMat2->IsBoolean(k))
+        {
+            ++nPairs;
+            fVal = pMat1->GetDouble(k);
+            fSum += fVal * fVal;
+            fVal = pMat2->GetDouble(k);
+            if ( _bSumX2DY2 )
                 fSum += fVal * fVal;
-                fVal = pMat2->GetDouble(k);
-                if ( _bSumX2DY2 )
-                    fSum += fVal * fVal;
-                else
-                    fSum -= fVal * fVal;
-            }
+            else
+                fSum -= fVal * fVal;
+        }
+    if (!nPairs)
+        PushError(FormulaError::DivisionByZero);
+    else
         PushDouble(fSum.get());
-        return;
-    }
-    for (i = 0; i < nC1; i++)
-        for (j = 0; j < nR1; j++)
-            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
-            {
-                fVal = pMat1->GetDouble(i,j);
-                fSum += fVal * fVal;
-                fVal = pMat2->GetDouble(i,j);
-                if ( _bSumX2DY2 )
-                    fSum += fVal * fVal;
-                else
-                    fSum -= fVal * fVal;
-            }
-    PushDouble(fSum.get());
 }
 
 void ScInterpreter::ScSumX2DY2()
@@ -2501,15 +2492,22 @@ void ScInterpreter::ScSumXMY2()
         PushNA(); // weboffice: #N/A like Excel
         return;
     } // if (nC1 != nC2 || nR1 != nR2)
-    ScMatrixRef pResMat = lcl_MatrixCalculation( *pMat1, *pMat2, this, MatrixSub);
-    if (!pResMat)
-    {
-        PushNoValue();
-    }
+    // weboffice: like Excel only pairs of two numbers count (TRUE/FALSE, text and empty are
+    // skipped), and no pair at all is #DIV/0!.
+    KahanSum fSum = 0.0;
+    SCSIZE nPairs = 0;
+    const SCSIZE nCount = nC1 * nR1;
+    for (SCSIZE k = 0; k < nCount; ++k)
+        if (pMat1->IsValue(k) && !pMat1->IsBoolean(k) && pMat2->IsValue(k) && !pMat2->IsBoolean(k))
+        {
+            ++nPairs;
+            const double fDiff = pMat1->GetDouble(k) - pMat2->GetDouble(k);
+            fSum += fDiff * fDiff;
+        }
+    if (!nPairs)
+        PushError(FormulaError::DivisionByZero);
     else
-    {
-        PushDouble(pResMat->SumSquare(false).maAccumulator.get());
-    }
+        PushDouble(fSum.get());
 }
 
 void ScInterpreter::ScFrequency()

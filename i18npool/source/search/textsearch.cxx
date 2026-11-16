@@ -400,6 +400,14 @@ SearchResult TextSearch::searchForward( const OUString& searchStr, sal_Int32 sta
                 if (nStart >= 0)
                     sres_startOffsetRange[k] = (nStart < nOffsets ? offset[nStart]
                             : nextCodePoint(searchStr, offset[nOffsets - 1]));
+                // weboffice: a wildcard match may start on the low half of a surrogate pair
+                // (Excel's '?' is one UTF-16 unit); the transliteration maps both halves to
+                // the pair start, so step to the low half again.
+                if (fnForward == &TextSearch::WildcardSrchFrwrd && nStart > 0 && nStart < nOffsets
+                        && offset[nStart] == offset[nStart - 1] && rtl::isLowSurrogate(in_str[nStart])
+                        && offset[nStart] + 1 < searchStr.getLength()
+                        && rtl::isHighSurrogate(searchStr[offset[nStart]]))
+                    sres_startOffsetRange[k] = offset[nStart] + 1;
                 // JP 20.6.2001: end is ever exclusive and then don't return
                 //               the position of the next character - return the
                 //               next position behind the last found character!
@@ -1156,6 +1164,14 @@ void setWildcardMatch( css::util::SearchResult& rRes, sal_Int32 nStartOffset, sa
 }
 }
 
+// Excel matches the wildcard '?' with one UTF-16 code unit (half of a surrogate pair such as an
+// emoji), and SEARCH/MATCH/COUNTIF positions are code units too, so the forward wildcard search
+// walks code units instead of code points.
+static sal_uInt32 lcl_nextUnit( const OUString& rStr, sal_Int32& rPos )
+{
+    return rStr[rPos++];
+}
+
 SearchResult TextSearch::WildcardSrchFrwrd( std::unique_lock<std::mutex>& /*rGuard*/, const OUString& searchStr, sal_Int32 nStartPos, sal_Int32 nEndPos )
 {
     SearchResult aRes;
@@ -1201,9 +1217,9 @@ SearchResult TextSearch::WildcardSrchFrwrd( std::unique_lock<std::mutex>& /*rGua
         bRewind = true;
         // Assume a non-'*' pattern character follows. If it is a '*' instead
         // that will be handled in the loop by setting nPat.
-        sal_uInt32 cu = rPattern.iterateCodePoints( &nAfterFakePattern);
+        sal_uInt32 cu = lcl_nextUnit( rPattern, nAfterFakePattern);
         if (cu == mcWildcardEscapeChar && mcWildcardEscapeChar && nAfterFakePattern < nPatternLen)
-            rPattern.iterateCodePoints( &nAfterFakePattern);
+            lcl_nextUnit( rPattern, nAfterFakePattern);
     }
 
     sal_Int32 nString = nStartPos, nPat = -1, nStr = -1, nLastAsterisk = -1;
@@ -1224,11 +1240,11 @@ SearchResult TextSearch::WildcardSrchFrwrd( std::unique_lock<std::mutex>& /*rGua
         else if (nPattern < nPatternLen)
         {
             // nPattern will be incremented by iterateCodePoints().
-            cPattern = rPattern.iterateCodePoints( &nPattern);
+            cPattern = lcl_nextUnit( rPattern, nPattern);
             if (cPattern == mcWildcardEscapeChar && mcWildcardEscapeChar && nPattern < nPatternLen)
             {
                 bEscaped = true;
-                cPattern = rPattern.iterateCodePoints( &nPattern);
+                cPattern = lcl_nextUnit( rPattern, nPattern);
             }
         }
         else
@@ -1267,11 +1283,11 @@ SearchResult TextSearch::WildcardSrchFrwrd( std::unique_lock<std::mutex>& /*rGua
 
             // cPattern will be the next non-'*' character, nPattern
             // incremented.
-            cPattern = rPattern.iterateCodePoints( &nPattern);
+            cPattern = lcl_nextUnit( rPattern, nPattern);
             if (cPattern == mcWildcardEscapeChar && mcWildcardEscapeChar && nPattern < nPatternLen)
             {
                 bEscaped = true;
-                cPattern = rPattern.iterateCodePoints( &nPattern);
+                cPattern = lcl_nextUnit( rPattern, nPattern);
             }
 
             cPatternAfterAsterisk = cPattern;
@@ -1285,7 +1301,7 @@ SearchResult TextSearch::WildcardSrchFrwrd( std::unique_lock<std::mutex>& /*rGua
             return aRes;
 
         // nString will be incremented by iterateCodePoints().
-        sal_uInt32 cString = searchStr.iterateCodePoints( &nString);
+        sal_uInt32 cString = lcl_nextUnit( searchStr, nString);
 
         if ((cPattern != '?' || bEscaped) && cPattern != cString)
         {
@@ -1297,7 +1313,7 @@ SearchResult TextSearch::WildcardSrchFrwrd( std::unique_lock<std::mutex>& /*rGua
             nPattern = nPat;                    // Rewind pattern to character behind '*', already incremented.
             cPattern = cPatternAfterAsterisk;
             bEscaped = bEscapedAfterAsterisk;
-            searchStr.iterateCodePoints( &nStr);
+            lcl_nextUnit( searchStr, nStr);
             nString = nStr;                     // Restore incremented remembered string position.
             if (nPat == nAfterFakePattern)
             {
