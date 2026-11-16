@@ -5463,8 +5463,25 @@ void WW8AttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
             return;    // not a supported Attribute
     }
 
+    // Thai distributed justification kept by the DOC/DOCX import in the paragraph grab bag:
+    // Word writes jc 9 in sprmPJc only (sprmPJc80 has 4)
+    bool bThai = false;
+    if (nAdj == 3)
+    {
+        if (auto pTN = dynamic_cast<const SwTextNode*>(m_rWW8Export.m_pOutFormatNode);
+            pTN && pTN->GetpSwAttrSet())
+        {
+            if (const SfxGrabBagItem* pBag = pTN->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_GRABBAG, false))
+            {
+                auto it = pBag->GetGrabBag().find(u"ParaThaiDistribute"_ustr);
+                if (it != pBag->GetGrabBag().end())
+                    it->second >>= bThai;
+            }
+        }
+    }
+
     m_rWW8Export.InsUInt16(NS_sprm::PJc80::val);
-    m_rWW8Export.m_pO->push_back(nAdj);
+    m_rWW8Export.m_pO->push_back(bThai ? 4 : nAdj);
 
     /*
     Sadly for left to right paragraphs both these values are the same,
@@ -5493,7 +5510,9 @@ void WW8AttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
         }
     }
 
-    if (bBiDiSwap)
+    if (bThai)
+        m_rWW8Export.m_pO->push_back(9);
+    else if (bBiDiSwap)
         m_rWW8Export.m_pO->push_back(nAdjBiDi);
     else
         m_rWW8Export.m_pO->push_back(nAdj);

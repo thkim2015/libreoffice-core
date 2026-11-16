@@ -4894,6 +4894,7 @@ void SwWW8ImplReader::Read_Justify( sal_uInt16 nId, const sal_uInt8* pData, shor
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_ADJUST );
+        m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_GRABBAG ); // Thai distributed
         return;
     }
 
@@ -4920,6 +4921,9 @@ void SwWW8ImplReader::Read_Justify( sal_uInt16 nId, const sal_uInt8* pData, shor
             eAdjust = SvxAdjust::Block;
             bDistributed = true;
             break;
+        case 9:
+            eAdjust = SvxAdjust::Block;
+            break;
     }
     SvxAdjustItem aAdjust(eAdjust, RES_PARATR_ADJUST);
     if (bDistributed)
@@ -4927,6 +4931,20 @@ void SwWW8ImplReader::Read_Justify( sal_uInt16 nId, const sal_uInt8* pData, shor
 
     NewAttr(aAdjust);
     SetRelativeJustify( nId != NS_sprm::PJc80::val );
+    if (*pData == 9)
+        SetThaiDistribute();
+}
+
+// Thai distributed justification (jc 9, written in sprmPJc only; sprmPJc80 has 4) has no Writer
+// equivalent: justify, and keep it in the paragraph grab bag for the export, like the DOCX import
+// (w:jc="thaiDistribute").
+void SwWW8ImplReader::SetThaiDistribute()
+{
+    std::map<OUString, css::uno::Any> aGrabBagMap;
+    if (const SfxGrabBagItem* pGrabBag = GetFormatAttr(RES_PARATR_GRABBAG))
+        aGrabBagMap = pGrabBag->GetGrabBag();
+    aGrabBagMap[u"ParaThaiDistribute"_ustr] <<= true;
+    NewAttr(SfxGrabBagItem(RES_PARATR_GRABBAG, std::move(aGrabBagMap)));
 }
 
 bool SwWW8ImplReader::IsRightToLeft()
@@ -4951,6 +4969,7 @@ void SwWW8ImplReader::Read_RTLJustify( sal_uInt16 nId, const sal_uInt8* pData, s
     if (nLen < 1)
     {
         m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_ADJUST );
+        m_xCtrlStck->SetAttr( *m_pPaM->GetPoint(), RES_PARATR_GRABBAG ); // Thai distributed
         return;
     }
 
@@ -4983,6 +5002,9 @@ void SwWW8ImplReader::Read_RTLJustify( sal_uInt16 nId, const sal_uInt8* pData, s
                 eAdjust = SvxAdjust::Block;
                 bDistributed = true;
                 break;
+            case 9:
+                eAdjust = SvxAdjust::Block;
+                break;
         }
         SvxAdjustItem aAdjust(eAdjust, RES_PARATR_ADJUST);
         if (bDistributed)
@@ -4990,6 +5012,8 @@ void SwWW8ImplReader::Read_RTLJustify( sal_uInt16 nId, const sal_uInt8* pData, s
 
         NewAttr(aAdjust);
         SetRelativeJustify( true );
+        if (*pData == 9)
+            SetThaiDistribute();
     }
 }
 
