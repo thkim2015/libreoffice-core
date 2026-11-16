@@ -1005,6 +1005,19 @@ tools::Long SwWW8ImplReader::Read_Field(WW8PLCFManResult* pRes)
         return aF.nLen;
 
     bool bHasHandler = aWW8FieldTab[aF.nId] != nullptr;
+    if (aF.nId == 49 && !bCodeNest) // EQ
+    {
+        // Read_F_Equation converts only combined characters and ruby; keep any other equation
+        // (\f fraction, \r root, \b brackets ...) with its code and result like an unhandled
+        // field, as the DOCX import does, instead of dropping it.
+        sal_uInt64 nOldPos = m_pStrm->Tell();
+        OUString aStr;
+        m_xSBase->WW8ReadString(*m_pStrm, aStr, m_xPlcxMan->GetCpOfs() + aF.nSCode, aF.nLCode, m_eTextCharSet);
+        m_pStrm->Seek(nOldPos);
+        WW8ReadFieldParams aReadParam(aStr);
+        const sal_Int32 cChar = aReadParam.SkipToNextToken();
+        bHasHandler = cChar == '*' || !ParseCombinedChars(aStr).sType.isEmpty();
+    }
     if (aF.nId == 10) // STYLEREF
     {
         bool bHandledByChapter = false;
@@ -2732,8 +2745,9 @@ eF_ResT SwWW8ImplReader::Read_F_Equation( WW8FieldDesc*, OUString& rStr )
         }
         else if (aResult.sType == "CombinedCharacters")
         {
+            // the combined characters, not the type name ("CombinedCharacters")
             SwCombinedCharField aField(static_cast<SwCombinedCharFieldType*>(
-                m_rDoc.getIDocumentFieldsAccess().GetSysFieldType(SwFieldIds::CombinedChars)), aResult.sType);
+                m_rDoc.getIDocumentFieldsAccess().GetSysFieldType(SwFieldIds::CombinedChars)), aResult.sResult);
             m_rDoc.getIDocumentContentOperations().InsertPoolItem(*m_pPaM, SwFormatField(aField));
         }
     }
