@@ -496,6 +496,13 @@ void XclExpPaletteImpl::SaveXml( XclExpXmlStream& rStrm )
     sax_fastparser::FSHelperPtr& rStyleSheet = rStrm.GetCurrentStream();
     rStyleSheet->startElement(XML_colors);
     rStyleSheet->startElement(XML_indexedColors);
+    // ZetaOffice: indexedColors replaces the whole table from index 0, but maPalette holds the
+    // user colors from index EXC_COLOR_USEROFFSET (8) - write the 8 fixed colors first, otherwise
+    // every indexed color (e.g. note text, grid colorId) is read shifted by 8 (10 red -> navy).
+    static const char* const spcFixed[] = { "FF000000", "FFFFFFFF", "FFFF0000", "FF00FF00",
+                                            "FF0000FF", "FFFFFF00", "FFFF00FF", "FF00FFFF" };
+    for( const char* pcFixed : spcFixed )
+        rStyleSheet->singleElement(XML_rgbColor, XML_rgb, pcFixed);
     for( const auto& rColor : maPalette )
         rStyleSheet->singleElement(XML_rgbColor, XML_rgb, XclXmlUtils::ToOString(rColor.maColor));
     rStyleSheet->endElement( XML_indexedColors );
