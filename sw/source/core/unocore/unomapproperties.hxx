@@ -133,6 +133,8 @@
         { UNO_NAME_CHAR_AUTO_KERNING,                   RES_CHRATR_AUTOKERN,           cppu::UnoType<bool>::get(),       PropertyAttribute::MAYBEVOID, 0                                      }, \
         { UNO_NAME_CHAR_BACK_COLOR,                     RES_CHRATR_BACKGROUND,         cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, MID_BACK_COLOR                         }, \
         { UNO_NAME_CHAR_BACKGROUND_COMPLEX_COLOR,       RES_CHRATR_BACKGROUND,         cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE, MID_BACKGROUND_COMPLEX_COLOR },\
+        { UNO_NAME_CHAR_BACK_COLOR_THEME, RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BACKGROUND_COLOR_THEME_INDEX },\
+        { UNO_NAME_CHAR_BACK_COLOR_TINT_OR_SHADE, RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BACKGROUND_COLOR_TINT_OR_SHADE },\
         { UNO_NAME_CHAR_HIGHLIGHT,                      RES_CHRATR_HIGHLIGHT,          cppu::UnoType<sal_Int32>::get(), PropertyAttribute::MAYBEVOID, MID_BACK_COLOR                         }, \
         { UNO_NAME_PARA_BACK_COLOR,                     RES_BACKGROUND,                cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, MID_BACK_COLOR                         }, \
         { UNO_NAME_PARA_BACKGROUND_COMPLEX_COLOR,       RES_BACKGROUND,                cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE , MID_BACKGROUND_COMPLEX_COLOR },\
@@ -222,6 +224,14 @@
         { UNO_NAME_CHAR_BORDER_RIGHT_COMPLEX_COLOR,     RES_CHRATR_BOX,                cppu::UnoType<css::util::XComplexColor>::get(),  PropertyAttribute::MAYBEVOID, MID_BORDER_RIGHT_COLOR }, \
         { UNO_NAME_CHAR_BORDER_TOP_COMPLEX_COLOR,       RES_CHRATR_BOX,                cppu::UnoType<css::util::XComplexColor>::get(),  PropertyAttribute::MAYBEVOID, MID_BORDER_TOP_COLOR }, \
         { UNO_NAME_CHAR_BORDER_BOTTOM_COMPLEX_COLOR,    RES_CHRATR_BOX,                cppu::UnoType<css::util::XComplexColor>::get(),  PropertyAttribute::MAYBEVOID, MID_BORDER_BOTTOM_COLOR }, \
+        { UNO_NAME_CHAR_LEFT_BORDER_COLOR_THEME, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_LEFT_COLOR_THEME }, \
+        { UNO_NAME_CHAR_LEFT_BORDER_COLOR_TINT, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_LEFT_COLOR_TINT }, \
+        { UNO_NAME_CHAR_RIGHT_BORDER_COLOR_THEME, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_RIGHT_COLOR_THEME }, \
+        { UNO_NAME_CHAR_RIGHT_BORDER_COLOR_TINT, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_RIGHT_COLOR_TINT }, \
+        { UNO_NAME_CHAR_TOP_BORDER_COLOR_THEME, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_TOP_COLOR_THEME }, \
+        { UNO_NAME_CHAR_TOP_BORDER_COLOR_TINT, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_TOP_COLOR_TINT }, \
+        { UNO_NAME_CHAR_BOTTOM_BORDER_COLOR_THEME, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_BOTTOM_COLOR_THEME }, \
+        { UNO_NAME_CHAR_BOTTOM_BORDER_COLOR_TINT, RES_CHRATR_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_BOTTOM_COLOR_TINT }, \
         { UNO_NAME_CHAR_SHADOW_FORMAT,                  RES_CHRATR_SHADOW,             cppu::UnoType<css::table::ShadowFormat>::get(),     PropertyAttribute::MAYBEVOID, CONVERT_TWIPS                          }, \
         { UNO_NAME_LEFT_BORDER,                         RES_BOX,                       cppu::UnoType<css::table::BorderLine>::get(),    PropertyAttribute::MAYBEVOID, LEFT_BORDER            | CONVERT_TWIPS }, \
         { UNO_NAME_RIGHT_BORDER,                        RES_BOX,                       cppu::UnoType<css::table::BorderLine>::get(),    PropertyAttribute::MAYBEVOID, RIGHT_BORDER           | CONVERT_TWIPS }, \
@@ -232,6 +242,14 @@
         { UNO_NAME_RIGHT_BORDER_DISTANCE,               RES_BOX,                       cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, RIGHT_BORDER_DISTANCE  | CONVERT_TWIPS }, \
         { UNO_NAME_TOP_BORDER_DISTANCE,                 RES_BOX,                       cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, TOP_BORDER_DISTANCE    | CONVERT_TWIPS }, \
         { UNO_NAME_BOTTOM_BORDER_DISTANCE,              RES_BOX,                       cppu::UnoType<sal_Int32>::get(),         PropertyAttribute::MAYBEVOID, BOTTOM_BORDER_DISTANCE | CONVERT_TWIPS }, \
+        { UNO_NAME_LEFT_BORDER_COLOR_THEME, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_LEFT_COLOR_THEME }, \
+        { UNO_NAME_LEFT_BORDER_COLOR_TINT, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_LEFT_COLOR_TINT }, \
+        { UNO_NAME_RIGHT_BORDER_COLOR_THEME, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_RIGHT_COLOR_THEME }, \
+        { UNO_NAME_RIGHT_BORDER_COLOR_TINT, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_RIGHT_COLOR_TINT }, \
+        { UNO_NAME_TOP_BORDER_COLOR_THEME, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_TOP_COLOR_THEME }, \
+        { UNO_NAME_TOP_BORDER_COLOR_TINT, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_TOP_COLOR_TINT }, \
+        { UNO_NAME_BOTTOM_BORDER_COLOR_THEME, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_BOTTOM_COLOR_THEME }, \
+        { UNO_NAME_BOTTOM_BORDER_COLOR_TINT, RES_BOX, cppu::UnoType<sal_Int16>::get(), PropertyAttribute::MAYBEVOID, MID_BORDER_BOTTOM_COLOR_TINT }, \
         { UNO_NAME_BORDER_LEFT_COMPLEX_COLOR,           RES_BOX,                       cppu::UnoType<css::util::XComplexColor>::get(),  PropertyAttribute::MAYBEVOID, MID_BORDER_LEFT_COLOR }, \
         { UNO_NAME_BORDER_RIGHT_COMPLEX_COLOR,          RES_BOX,                       cppu::UnoType<css::util::XComplexColor>::get(),  PropertyAttribute::MAYBEVOID, MID_BORDER_RIGHT_COLOR }, \
         { UNO_NAME_BORDER_TOP_COMPLEX_COLOR,            RES_BOX,                       cppu::UnoType<css::util::XComplexColor>::get(),  PropertyAttribute::MAYBEVOID, MID_BORDER_TOP_COLOR }, \
@@ -409,6 +427,8 @@
                     { UNO_NAME_CHAR_BACK_TRANSPARENT, RES_CHRATR_BACKGROUND, cppu::UnoType<bool>::get(),          PROPERTY_NONE ,MID_GRAPHIC_TRANSPARENT       },\
                     { UNO_NAME_CHAR_BACK_COLOR, RES_CHRATR_BACKGROUND,    cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE ,MID_BACK_COLOR        },\
                     { UNO_NAME_CHAR_BACKGROUND_COMPLEX_COLOR, RES_CHRATR_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE, MID_BACKGROUND_COMPLEX_COLOR },\
+                    { UNO_NAME_CHAR_BACK_COLOR_THEME, RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_BACKGROUND_COLOR_THEME_INDEX },\
+                    { UNO_NAME_CHAR_BACK_COLOR_TINT_OR_SHADE, RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_BACKGROUND_COLOR_TINT_OR_SHADE },\
                     { UNO_NAME_CHAR_HIGHLIGHT, RES_CHRATR_HIGHLIGHT, cppu::UnoType<sal_Int32>::get(), PROPERTY_NONE ,MID_BACK_COLOR },\
                     { UNO_NAME_PARA_BACK_COLOR, RES_BACKGROUND,       cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE ,MID_BACK_COLOR        },\
                     { UNO_NAME_PARA_BACKGROUND_COMPLEX_COLOR, RES_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE , MID_BACKGROUND_COMPLEX_COLOR },\
@@ -568,6 +588,8 @@
 #define COMMON_ACCESSIBILITY_TEXT_ATTRIBUTE \
                     { UNO_NAME_CHAR_BACK_COLOR, RES_CHRATR_BACKGROUND,    cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE ,MID_BACK_COLOR }, \
                     { UNO_NAME_CHAR_BACKGROUND_COMPLEX_COLOR, RES_CHRATR_BACKGROUND, cppu::UnoType<css::util::XComplexColor>::get(), PROPERTY_NONE, MID_BACKGROUND_COMPLEX_COLOR },\
+                    { UNO_NAME_CHAR_BACK_COLOR_THEME, RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_BACKGROUND_COLOR_THEME_INDEX },\
+                    { UNO_NAME_CHAR_BACK_COLOR_TINT_OR_SHADE, RES_CHRATR_BACKGROUND, cppu::UnoType<sal_Int16>::get(), PROPERTY_NONE, MID_BACKGROUND_COLOR_TINT_OR_SHADE },\
                     { UNO_NAME_CHAR_COLOR, RES_CHRATR_COLOR,      cppu::UnoType<sal_Int32>::get(),           PROPERTY_NONE, 0},  \
                     { UNO_NAME_CHAR_COLOR_THEME,  RES_CHRATR_COLOR,      cppu::UnoType<sal_Int16>::get(),           PROPERTY_NONE, MID_COLOR_THEME_INDEX }, \
                     { UNO_NAME_CHAR_COLOR_TINT_OR_SHADE, RES_CHRATR_COLOR, cppu::UnoType<sal_Int16>::get(),         PROPERTY_NONE, MID_COLOR_TINT_OR_SHADE }, \
@@ -636,6 +658,10 @@
     { UNO_NAME_FILLTRANSPARENCEGRADIENTNAME,   XATTR_FILLFLOATTRANSPARENCE,    cppu::UnoType<OUString>::get(),  0,  MID_NAME }, \
     { UNO_NAME_FILLCOLOR_2,                    XATTR_SECONDARYFILLCOLOR,       cppu::UnoType<sal_Int32>::get(), 0,  0}, \
     { UNO_NAME_FILL_COMPLEX_COLOR,             XATTR_FILLCOLOR,                cppu::UnoType<css::util::XComplexColor>::get(),   0,  MID_COMPLEX_COLOR}, \
+    { UNO_NAME_FILLCOLOR_THEME,                XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_THEME_INDEX}, \
+    { UNO_NAME_FILLCOLOR_LUM_MOD,              XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_LUM_MOD}, \
+    { UNO_NAME_FILLCOLOR_LUM_OFF,              XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_LUM_OFF}, \
+    { UNO_NAME_FILLCOLOR_TINT_OR_SHADE,        XATTR_FILLCOLOR,                cppu::UnoType<sal_Int16>::get(),   0,  MID_COLOR_TINT_OR_SHADE}, \
 
 #endif
 
