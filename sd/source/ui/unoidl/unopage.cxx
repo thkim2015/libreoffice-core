@@ -1025,8 +1025,32 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
             break;
 
         case WID_PAGE_THEME_UNO_REPRESENTATION:
-            GetPage()->getSdrPageProperties().setTheme(model::Theme::FromAny(aValue));
+        {
+            auto pNewTheme = model::Theme::FromAny(aValue);
+            SdPage* pPage = GetPage();
+            // A theme set on one master page also goes to the other master pages that shared
+            // its old theme object (masters imported from one slide master share one theme).
+            // Otherwise every layout gets its own theme copy and the PPTX export, which
+            // compares themes by pointer, writes one slide master per layout.
+            // Themes are not compared by value: masters of a different design keep theirs.
+            if (pPage->IsMasterPage())
+            {
+                const std::shared_ptr<model::Theme> pOldTheme
+                    = pPage->getSdrPageProperties().getTheme();
+                SdDrawDocument& rDoc(static_cast<SdDrawDocument&>(pPage->getSdrModelFromSdrPage()));
+                const PageKind eKind = pPage->GetPageKind();
+                const sal_uInt16 nCount = rDoc.GetMasterSdPageCount(eKind);
+                for (sal_uInt16 i = 0; i < nCount; ++i)
+                {
+                    SdPage* pMaster = rDoc.GetMasterSdPage(i, eKind);
+                    if (pMaster && pMaster != pPage
+                        && pMaster->getSdrPageProperties().getTheme() == pOldTheme)
+                        pMaster->getSdrPageProperties().setTheme(pNewTheme);
+                }
+            }
+            pPage->getSdrPageProperties().setTheme(pNewTheme);
             break;
+        }
 
         default:
             throw beans::UnknownPropertyException( aPropertyName, static_cast<cppu::OWeakObject*>(this));
