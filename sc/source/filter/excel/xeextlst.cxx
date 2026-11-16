@@ -98,6 +98,7 @@ XclExpExtCfvo::XclExpExtCfvo( const XclExpRoot& rRoot, const ScColorScaleEntry& 
     }
     else
         maValue = OString::number(rEntry.GetValue());
+    mbGreater = rEntry.GetMode() == ScConditionMode::Greater;
 }
 
 namespace {
@@ -132,7 +133,8 @@ const char* getColorScaleType( ScColorScaleEntryType eType, bool bFirst )
 void XclExpExtCfvo::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
-    rWorksheet->startElementNS(XML_x14, XML_cfvo, XML_type, getColorScaleType(meType, mbFirst));
+    rWorksheet->startElementNS(XML_x14, XML_cfvo, XML_type, getColorScaleType(meType, mbFirst),
+                               XML_gte, sax_fastparser::UseIf("0", mbGreater));
 
     if (meType == COLORSCALE_FORMULA ||
             meType == COLORSCALE_PERCENT ||
