@@ -1045,6 +1045,22 @@ bool XLineColorItem::QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId) const
     nMemberId &= ~CONVERT_TWIPS;
     switch (nMemberId)
     {
+        case MID_COLOR_THEME_INDEX:
+            rVal <<= sal_Int16(getComplexColor().getThemeColorType());
+            break;
+        case MID_COLOR_LUM_MOD:
+        case MID_COLOR_LUM_OFF:
+        {
+            bool bMod = nMemberId == MID_COLOR_LUM_MOD;
+            sal_Int16 nValue = bMod ? 10000 : 0;
+            for (auto const& rTransform : getComplexColor().getTransformations())
+            {
+                if (rTransform.meType == (bMod ? model::TransformationType::LumMod : model::TransformationType::LumOff))
+                    nValue = rTransform.mnValue;
+            }
+            rVal <<= nValue;
+            break;
+        }
         case MID_COMPLEX_COLOR:
         {
             auto xComplexColor = model::color::createXComplexColor(getComplexColor());
@@ -1065,6 +1081,26 @@ bool XLineColorItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId)
     nMemberId &= ~CONVERT_TWIPS;
     switch(nMemberId)
     {
+        case MID_COLOR_THEME_INDEX:
+        {
+            sal_Int16 nIndex = -1;
+            if (!(rVal >>= nIndex))
+                return false;
+            getComplexColor().setThemeColor(model::convertToThemeColorType(nIndex));
+        }
+        break;
+        case MID_COLOR_LUM_MOD:
+        case MID_COLOR_LUM_OFF:
+        {
+            bool bMod = nMemberId == MID_COLOR_LUM_MOD;
+            sal_Int16 nValue = bMod ? 10000 : 0;
+            if (!(rVal >>= nValue))
+                return false;
+            auto eType = bMod ? model::TransformationType::LumMod : model::TransformationType::LumOff;
+            getComplexColor().removeTransformations(eType);
+            getComplexColor().addTransformation({eType, nValue});
+        }
+        break;
         case MID_COMPLEX_COLOR:
         {
             css::uno::Reference<css::util::XComplexColor> xComplexColor;
@@ -1834,6 +1870,19 @@ bool XFillColorItem::QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId ) cons
             rVal <<= sal_Int16(getComplexColor().getThemeColorType());
             break;
         }
+        case MID_COLOR_TINT_OR_SHADE:
+        {
+            sal_Int16 nValue = 0;
+            for (auto const& rTransform : getComplexColor().getTransformations())
+            {
+                if (rTransform.meType == model::TransformationType::Tint)
+                    nValue = rTransform.mnValue;
+                else if (rTransform.meType == model::TransformationType::Shade)
+                    nValue = -rTransform.mnValue;
+            }
+            rVal <<= nValue;
+            break;
+        }
         case MID_COLOR_LUM_MOD:
         {
             sal_Int16 nValue = 10000;
@@ -1883,6 +1932,19 @@ bool XFillColorItem::PutValue( const css::uno::Any& rVal, sal_uInt8 nMemberId )
             if (!(rVal >>= nIndex))
                 return false;
             getComplexColor().setThemeColor(model::convertToThemeColorType(nIndex));
+        }
+        break;
+        case MID_COLOR_TINT_OR_SHADE:
+        {
+            sal_Int16 nTintShade = 0;
+            if (!(rVal >>= nTintShade))
+                return false;
+            getComplexColor().removeTransformations(model::TransformationType::Tint);
+            getComplexColor().removeTransformations(model::TransformationType::Shade);
+            if (nTintShade > 0)
+                getComplexColor().addTransformation({model::TransformationType::Tint, nTintShade});
+            else if (nTintShade < 0)
+                getComplexColor().addTransformation({model::TransformationType::Shade, sal_Int16(-nTintShade)});
         }
         break;
         case MID_COLOR_LUM_MOD:
