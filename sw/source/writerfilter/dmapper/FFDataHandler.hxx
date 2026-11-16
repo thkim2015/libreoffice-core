@@ -55,6 +55,13 @@ public:
     // member: checkboxChecked or checkboxDefault (if the previous is not set)
     bool getCheckboxChecked() const;
 
+    // member: checkboxDefault (-1 when not set)
+    int getCheckboxDefault() const { return m_nCheckboxDefault; }
+
+    // members: enabled, calcOnExit
+    bool getEnabled() const { return m_bEnabled; }
+    bool getCalcOnExit() const { return m_bCalcOnExit; }
+
     // member: dropDownResult
     const OUString& getDropDownResult() const { return m_sDropDownResult; }
 
@@ -87,6 +94,8 @@ private:
     OUString m_sTextType;
     OUString m_sTextFormat;
     sal_uInt16 m_nTextMaxLength;
+    bool m_bEnabled;
+    bool m_bCalcOnExit;
 
     // sprm
     void lcl_sprm(Sprm& r_sprm) override;

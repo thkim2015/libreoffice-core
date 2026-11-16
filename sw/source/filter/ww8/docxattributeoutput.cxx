@@ -209,8 +209,14 @@ class FFDataWriterHelper
     {
         m_pSerializer->startElementNS(XML_w, XML_ffData);
         m_pSerializer->singleElementNS(XML_w, XML_name, FSNS(XML_w, XML_val), rName);
-        m_pSerializer->singleElementNS(XML_w, XML_enabled);
-        m_pSerializer->singleElementNS(XML_w, XML_calcOnExit, FSNS(XML_w, XML_val), "0");
+        if (m_bEnabled)
+            m_pSerializer->singleElementNS(XML_w, XML_enabled);
+        else
+            m_pSerializer->singleElementNS(XML_w, XML_enabled, FSNS(XML_w, XML_val), "0");
+        if (m_bCalcOnExit)
+            m_pSerializer->singleElementNS(XML_w, XML_calcOnExit);
+        else
+            m_pSerializer->singleElementNS(XML_w, XML_calcOnExit, FSNS(XML_w, XML_val), "0");
 
         if ( !rEntryMacro.isEmpty() )
             m_pSerializer->singleElementNS( XML_w, XML_entryMacro,
@@ -234,22 +240,39 @@ class FFDataWriterHelper
     {
         m_pSerializer->endElementNS( XML_w, XML_ffData );
     }
+    bool m_bEnabled = true;
+    bool m_bCalcOnExit = false;
 public:
     explicit FFDataWriterHelper( ::sax_fastparser::FSHelperPtr  rSerializer ) : m_pSerializer(std::move( rSerializer )){}
+    void setFlags(bool bEnabled, bool bCalcOnExit)
+    {
+        m_bEnabled = bEnabled;
+        m_bCalcOnExit = bCalcOnExit;
+    }
     void WriteFormCheckbox( const OUString& rName,
                             const OUString& rEntryMacro,
                             const OUString& rExitMacro,
                             const OUString& rHelp,
                             const OUString& rHint,
-                            bool bChecked )
+                            bool bChecked,
+                            sal_Int32 nSize = 0,
+                            int nDefault = -1 )
     {
         writeCommonStart( rName, rEntryMacro, rExitMacro, rHelp, rHint );
         // Checkbox specific bits
         m_pSerializer->startElementNS(XML_w, XML_checkBox);
-        // currently hardcoding autosize
-        // #TODO check if this defaulted
-        m_pSerializer->startElementNS(XML_w, XML_sizeAuto);
-        m_pSerializer->endElementNS( XML_w, XML_sizeAuto );
+        // exact size (half-points) from the import, otherwise autosize
+        if (nSize > 0)
+            m_pSerializer->singleElementNS(XML_w, XML_size, FSNS(XML_w, XML_val),
+                                           OString::number(nSize));
+        else
+        {
+            m_pSerializer->startElementNS(XML_w, XML_sizeAuto);
+            m_pSerializer->endElementNS( XML_w, XML_sizeAuto );
+        }
+        if (nDefault != -1)
+            m_pSerializer->singleElementNS(XML_w, XML_default, FSNS(XML_w, XML_val),
+                                           nDefault ? "1" : "0");
         if ( bChecked )
             m_pSerializer->singleElementNS(XML_w, XML_checked);
         m_pSerializer->endElementNS( XML_w, XML_checkBox );
@@ -2595,6 +2618,10 @@ void DocxAttributeOutput::WriteFFData(  const FieldInfos& rInfos )
     params.extractParam(u"Hint"_ustr, sHint); // .docx StatusText
     if ( sHint.isEmpty() )
         params.extractParam(u"Description"_ustr, sHint); // .doc StatusText
+    bool bEnabled = true;
+    params.extractParam(u"Enabled"_ustr, bEnabled);
+    bool bCalcOnExit = false;
+    params.extractParam(u"CalcOnExit"_ustr, bCalcOnExit);
 
     if ( rInfos.eType == ww::eFORMDROPDOWN )
     {
@@ -2626,8 +2653,17 @@ void DocxAttributeOutput::WriteFFData(  const FieldInfos& rInfos )
         if ( pCheckboxFm && pCheckboxFm->IsChecked() )
             bChecked = true;
 
+        sal_Int32 nSize = 0;
+        params.extractParam(u"CheckboxSize"_ustr, nSize);
+        int nDefault = -1;
+        bool bDefault = false;
+        if (params.extractParam(u"CheckboxDefault"_ustr, bDefault))
+            nDefault = bDefault ? 1 : 0;
+
         FFDataWriterHelper ffdataOut( m_pSerializer );
-        ffdataOut.WriteFormCheckbox( sName.toString(), sEntryMacro, sExitMacro, sHelp, sHint, bChecked );
+        ffdataOut.setFlags(bEnabled, bCalcOnExit);
+        ffdataOut.WriteFormCheckbox( sName.toString(), sEntryMacro, sExitMacro, sHelp, sHint, bChecked,
+                                     nSize, nDefault );
     }
     else if ( rInfos.eType == ww::eFORMTEXT )
     {
@@ -2640,6 +2676,7 @@ void DocxAttributeOutput::WriteFFData(  const FieldInfos& rInfos )
         OUString sFormat;
         params.extractParam(u"Format"_ustr, sFormat);
         FFDataWriterHelper ffdataOut( m_pSerializer );
+        ffdataOut.setFlags(bEnabled, bCalcOnExit);
         ffdataOut.WriteFormText( params.getName().toString(), sEntryMacro, sExitMacro, sHelp, sHint,
                                  sType, sDefaultText, nMaxLength, sFormat );
     }

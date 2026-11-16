@@ -33,7 +33,9 @@ m_nCheckboxHeight(0),
 m_bCheckboxAutoHeight(false),
 m_nCheckboxChecked(-1),
 m_nCheckboxDefault(-1),
-m_nTextMaxLength(0)
+m_nTextMaxLength(0),
+m_bEnabled(true),
+m_bCalcOnExit(false)
 {
 }
 
@@ -74,6 +76,16 @@ void FFDataHandler::lcl_sprm(Sprm & r_Sprm)
     case NS_ooxml::LN_CT_FFData_statusText:
         {
             resolveSprm(r_Sprm);
+        }
+        break;
+    case NS_ooxml::LN_CT_FFData_enabled:
+        {
+            m_bEnabled = nIntValue != 0;
+        }
+        break;
+    case NS_ooxml::LN_CT_FFData_calcOnExit:
+        {
+            m_bCalcOnExit = nIntValue != 0;
         }
         break;
     case NS_ooxml::LN_CT_FFData_entryMacro:
