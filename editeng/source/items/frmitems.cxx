@@ -2933,6 +2933,30 @@ table::BorderLine2 SvxBoxItem::SvxLineToLine(const SvxBorderLine* pLine, bool bC
     return aLine;
 }
 
+namespace
+{
+// Border line theme color helpers (MID_BORDER_*_COLOR_THEME / _TINT)
+editeng::SvxBorderLine* lcl_ThemeLine(SvxBoxItem const& rItem, sal_uInt8 nMemberId)
+{
+    switch (nMemberId)
+    {
+        case MID_BORDER_LEFT_COLOR_THEME: case MID_BORDER_LEFT_COLOR_TINT:
+            return const_cast<editeng::SvxBorderLine*>(rItem.GetLeft());
+        case MID_BORDER_RIGHT_COLOR_THEME: case MID_BORDER_RIGHT_COLOR_TINT:
+            return const_cast<editeng::SvxBorderLine*>(rItem.GetRight());
+        case MID_BORDER_TOP_COLOR_THEME: case MID_BORDER_TOP_COLOR_TINT:
+            return const_cast<editeng::SvxBorderLine*>(rItem.GetTop());
+        default:
+            return const_cast<editeng::SvxBorderLine*>(rItem.GetBottom());
+    }
+}
+
+bool lcl_IsThemeMember(sal_uInt8 nMemberId)
+{
+    return nMemberId >= MID_BORDER_LEFT_COLOR_THEME && nMemberId <= MID_BORDER_BOTTOM_COLOR_TINT;
+}
+}
+
 bool SvxBoxItem::QueryValue( uno::Any& rVal, sal_uInt8 nMemberId ) const
 {
     bool bConvert = 0!=(nMemberId&CONVERT_TWIPS);
@@ -2940,6 +2964,26 @@ bool SvxBoxItem::QueryValue( uno::Any& rVal, sal_uInt8 nMemberId ) const
     sal_Int16 nDist = 0;
     bool bDistMember = false;
     nMemberId &= ~CONVERT_TWIPS;
+    if (lcl_IsThemeMember(nMemberId))
+    {
+        editeng::SvxBorderLine const* pLine = lcl_ThemeLine(*this, nMemberId);
+        model::ComplexColor aColor = pLine ? pLine->getComplexColor() : model::ComplexColor();
+        if (nMemberId <= MID_BORDER_BOTTOM_COLOR_THEME)
+        {
+            rVal <<= sal_Int16(aColor.isValidThemeType() ? sal_Int16(aColor.getThemeColorType()) : -1);
+            return true;
+        }
+        sal_Int16 nValue = 0;
+        for (auto const& rTransform : aColor.getTransformations())
+        {
+            if (rTransform.meType == model::TransformationType::Tint)
+                nValue = rTransform.mnValue;
+            else if (rTransform.meType == model::TransformationType::Shade)
+                nValue = -rTransform.mnValue;
+        }
+        rVal <<= nValue;
+        return true;
+    }
     switch(nMemberId)
     {
         case 0:
@@ -3157,6 +3201,35 @@ bool SvxBoxItem::PutValue( const uno::Any& rVal, sal_uInt8 nMemberId )
     SvxBoxItemLine nLine = SvxBoxItemLine::TOP;
     bool bDistMember = false;
     nMemberId &= ~CONVERT_TWIPS;
+    if (lcl_IsThemeMember(nMemberId))
+    {
+        // the line must already exist (set the BorderLine first): a new line resets its complex color
+        editeng::SvxBorderLine* pLine = lcl_ThemeLine(*this, nMemberId);
+        sal_Int16 nValue = 0;
+        if (!(rVal >>= nValue))
+            return false;
+        if (!pLine)
+            return true;
+        model::ComplexColor aColor = pLine->getComplexColor();
+        if (nMemberId <= MID_BORDER_BOTTOM_COLOR_THEME)
+        {
+            if (nValue < 0)
+                aColor = model::ComplexColor();
+            else
+                aColor.setThemeColor(model::convertToThemeColorType(nValue));
+        }
+        else
+        {
+            aColor.removeTransformations(model::TransformationType::Tint);
+            aColor.removeTransformations(model::TransformationType::Shade);
+            if (nValue > 0)
+                aColor.addTransformation({model::TransformationType::Tint, nValue});
+            else if (nValue < 0)
+                aColor.addTransformation({model::TransformationType::Shade, sal_Int16(-nValue)});
+        }
+        pLine->setComplexColor(aColor);
+        return true;
+    }
     switch(nMemberId)
     {
         case 0:

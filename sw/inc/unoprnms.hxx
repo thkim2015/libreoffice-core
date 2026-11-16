@@ -172,6 +172,14 @@ inline constexpr OUString UNO_NAME_CHAR_BACK_TRANSPARENT = u"CharBackTransparent
 inline constexpr OUString UNO_NAME_CHAR_BACK_COLOR_THEME = u"CharBackColorTheme"_ustr;
 inline constexpr OUString UNO_NAME_BACK_COLOR_THEME = u"BackColorTheme"_ustr;
 inline constexpr OUString UNO_NAME_BACK_COLOR_TINT_OR_SHADE = u"BackColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_LEFT_BORDER_COLOR_THEME = u"LeftBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_RIGHT_BORDER_COLOR_THEME = u"RightBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_TOP_BORDER_COLOR_THEME = u"TopBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_BOTTOM_BORDER_COLOR_THEME = u"BottomBorderColorTheme"_ustr;
+inline constexpr OUString UNO_NAME_LEFT_BORDER_COLOR_TINT = u"LeftBorderColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_RIGHT_BORDER_COLOR_TINT = u"RightBorderColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_TOP_BORDER_COLOR_TINT = u"TopBorderColorTintOrShade"_ustr;
+inline constexpr OUString UNO_NAME_BOTTOM_BORDER_COLOR_TINT = u"BottomBorderColorTintOrShade"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_BACK_COLOR_TINT_OR_SHADE
     = u"CharBackColorTintOrShade"_ustr;
 inline constexpr OUString UNO_NAME_CHAR_COMBINE_IS_ON = u"CharCombineIsOn"_ustr;

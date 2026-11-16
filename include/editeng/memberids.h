@@ -185,6 +185,15 @@
 #define MID_BORDER_LEFT_COLOR    17
 #define MID_BORDER_RIGHT_COLOR   18
 #define MID_BORDER_TOP_COLOR     19
+// theme color index / tint-or-shade of a border line (sal_Int16, -1 = no theme; 1/100 %, + tint, - shade)
+#define MID_BORDER_LEFT_COLOR_THEME     20
+#define MID_BORDER_RIGHT_COLOR_THEME    21
+#define MID_BORDER_TOP_COLOR_THEME      22
+#define MID_BORDER_BOTTOM_COLOR_THEME   23
+#define MID_BORDER_LEFT_COLOR_TINT      24
+#define MID_BORDER_RIGHT_COLOR_TINT     25
+#define MID_BORDER_TOP_COLOR_TINT       26
+#define MID_BORDER_BOTTOM_COLOR_TINT    27
 
 //BrushItem
 #define MID_BACK_COLOR          0
