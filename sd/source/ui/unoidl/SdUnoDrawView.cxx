@@ -19,6 +19,8 @@
 
 #include <SdUnoDrawView.hxx>
 
+#include <algorithm>
+
 #include <DrawController.hxx>
 #include <DrawDocShell.hxx>
 #include <DrawViewShell.hxx>
@@ -219,6 +221,14 @@ sal_Bool SAL_CALL SdUnoDrawView::select( const Any& aSelection )
 
         if(pPV)
         {
+            // Selecting other objects ends the running text edit, as a click on them would.
+            // Otherwise the edit stays on the old object while the new one is marked, and
+            // reading or setting text attributes goes to the object being edited.
+            if (mrView.IsTextEdit()
+                && std::find(aObjects.begin(), aObjects.end(), mrView.GetTextEditObject())
+                       == aObjects.end())
+                mrView.SdrEndTextEdit();
+
             // first deselect all
             mrView.UnmarkAllObj( pPV );
 
