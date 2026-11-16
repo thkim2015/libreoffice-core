@@ -58,7 +58,7 @@
 
 #include <autostyle_helper.hxx>
 #include <pagedesc.hxx>
-#include <array>
+#include <algorithm>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
 #include <IDocumentDeviceAccess.hxx>
@@ -3190,28 +3190,18 @@ void SwXPageStyle::SetPropertyValues_Impl(const uno::Sequence<OUString>& rProper
 
     if(aBaseImpl.HasItemSet())
     {
-        // weboffice: keep Undo for page style changes that leave the header/footer layout alone
+        // weboffice: keep Undo for page style changes that do not touch header/footer properties
         // (margins, size, orientation...): SwUndoPageDesc handles those like the Page Style dialog does.
-        // Fix i64460 still applies when header/footer are switched on/off or (un)shared - those
-        // changes clear the Undo list as before.
+        // Fix i64460 still applies to Header*/Footer*/First* properties: Undo is off and the list is
+        // cleared as before (creating and then deleting an SwUndoPageDesc there corrupts the
+        // header/footer content).
         IDocumentUndoRedo& rUndo = GetDoc()->GetIDocumentUndoRedo();
-        const SwPageDesc* pOldDesc = aBaseImpl.getNewBase()->GetPageDesc();
-        auto hfLayout = [](const SwPageDesc& rDesc)
+        const bool bTouchesHeaderFooter = std::any_of(rPropertyNames.begin(), rPropertyNames.end(),
+            [](const OUString& rName) { return rName.startsWith("Header") || rName.startsWith("Footer")
+                                               || rName.startsWith("First"); });
+        if (!bTouchesHeaderFooter && rUndo.DoesUndo())
         {
-            return std::array<bool, 7>{ rDesc.GetMaster().GetHeader().IsActive(),
-                                        rDesc.GetMaster().GetFooter().IsActive(),
-                                        rDesc.IsHeaderShared(), rDesc.IsFooterShared(),
-                                        rDesc.IsFirstShared(), rDesc.IsWithoutFirstHeader(),
-                                        rDesc.IsWithoutFirstFooter() };
-        };
-        if (pOldDesc && rUndo.DoesUndo())
-        {
-            const UIName aDescName = pOldDesc->GetName();
-            const auto aOldLayout = hfLayout(*pOldDesc);
             aBaseImpl.getNewBase()->SetItemSet(aBaseImpl.GetItemSet());
-            const SwPageDesc* pNewDesc = GetDoc()->FindPageDesc(aDescName);
-            if (!pNewDesc || hfLayout(*pNewDesc) != aOldLayout)
-                rUndo.DelAllUndoObj();
             return;
         }
 
