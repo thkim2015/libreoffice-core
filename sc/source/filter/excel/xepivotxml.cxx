@@ -48,6 +48,9 @@
 #include <com/sun/star/sheet/DataPilotFieldAutoShowInfo.hpp>
 #include <com/sun/star/sheet/DataPilotFieldShowItemsMode.hpp>
 #include <com/sun/star/sheet/DataPilotFieldLayoutMode.hpp>
+#include <com/sun/star/sheet/DataPilotFieldReference.hpp>
+#include <com/sun/star/sheet/DataPilotFieldReferenceType.hpp>
+#include <com/sun/star/sheet/DataPilotFieldReferenceItemType.hpp>
 #include <com/sun/star/sheet/DataPilotOutputRangeType.hpp>
 #include <com/sun/star/sheet/XDimensionsSupplier.hpp>
 #include <com/sun/star/sheet/XHierarchiesSupplier.hpp>
@@ -1433,6 +1436,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         const ScDPSaveDimension* pDim = rSaveData.GetExistingDimensionByName(aName);
         aCachedDims.push_back(pDim);
     }
+    // ZetaOffice: cache item names per field - dataField baseItem (show data as) is an index into them
+    std::vector<std::vector<OUString>> aZetaFieldItems(nFieldCount);
 
     std::vector<tools::Long> aRowFields;
     std::vector<tools::Long> aColFields;
@@ -1540,6 +1545,8 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         XML_applyWidthHeightFormats, ToPsz10(false),
         XML_dataCaption, "Values",
         XML_showDrill, ToPsz10(rSaveData.GetExpandCollapse()),
+        // ZetaOffice: 'Enable show details' (read from enableDrill, was not written)
+        XML_enableDrill, sax_fastparser::UseIf(ToPsz10(false), !rSaveData.GetDrillDown()),
         XML_useAutoFormatting, ToPsz10(false),
         XML_itemPrintTitles, ToPsz10(true),
         XML_indent, ToPsz10(false),
@@ -1777,6 +1784,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             aColumnMemberResultData.initLookupFor(pDim->GetName());
 
         // The pair contains the member index in cache and if it is hidden
+        aZetaFieldItems[i] = aCacheFieldItems;
         std::vector< std::pair<size_t, bool> > aMemberSequence;
         std::set<size_t> aUsedCachePositions;
         // ZetaOffice: item caption (Excel item n="..."), by cache position
@@ -1865,7 +1873,13 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
         if (bZetaMultiPage)
             pAttList->add(XML_multipleItemSelectionAllowed, ToPsz10(true));
 
-        pAttList->add(XML_showAll, ToPsz10(false));
+        // ZetaOffice: 'Show items with no data' (showAll, default on) - read into ShowEmpty, keep it
+        if (!(pDim->HasShowEmpty() && pDim->GetShowEmpty()))
+            pAttList->add(XML_showAll, ToPsz10(false));
+
+        // ZetaOffice: 'Insert blank line after each item label' (read into AddEmptyLines)
+        if (pDim->GetLayoutInfo() && pDim->GetLayoutInfo()->AddEmptyLines)
+            pAttList->add(XML_insertBlankRow, ToPsz10(true));
 
         // ZetaOffice: item sort (Excel sortType ascending/descending). By label (NAME) or by a
         // data field (DATA) - the latter also needs autoSortScope pointing at that data field.
@@ -2107,6 +2121,45 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             const char* pSubtotal = toOOXMLSubtotalType(rDim.GetFunction());
             if (pSubtotal)
                 pItemAttList->add(XML_subtotal, pSubtotal);
+            // ZetaOffice: 'Show values as' (read into Reference, was not written)
+            if (const sheet::DataPilotFieldReference* pRef = rDim.GetReferenceValue();
+                pRef && pRef->ReferenceType != sheet::DataPilotFieldReferenceType::NONE)
+            {
+                const char* pShowAs = nullptr;
+                switch (pRef->ReferenceType)
+                {
+                    case sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE: pShowAs = "difference"; break;
+                    case sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE: pShowAs = "percent"; break;
+                    case sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE: pShowAs = "percentDiff"; break;
+                    case sheet::DataPilotFieldReferenceType::RUNNING_TOTAL: pShowAs = "runTotal"; break;
+                    case sheet::DataPilotFieldReferenceType::ROW_PERCENTAGE: pShowAs = "percentOfRow"; break;
+                    case sheet::DataPilotFieldReferenceType::COLUMN_PERCENTAGE: pShowAs = "percentOfCol"; break;
+                    case sheet::DataPilotFieldReferenceType::TOTAL_PERCENTAGE: pShowAs = "percentOfTotal"; break;
+                    case sheet::DataPilotFieldReferenceType::INDEX: pShowAs = "index"; break;
+                    default: break;
+                }
+                if (pShowAs)
+                {
+                    pItemAttList->add(XML_showDataAs, pShowAs);
+                    size_t nBaseField = 0;
+                    if (auto it = aNameToIdMap.find(pRef->ReferenceField); it != aNameToIdMap.end())
+                        nBaseField = it->second;
+                    sal_Int32 nBaseItem = 0;
+                    if (pRef->ReferenceItemType == sheet::DataPilotFieldReferenceItemType::PREVIOUS)
+                        nBaseItem = 0x001000FC;
+                    else if (pRef->ReferenceItemType == sheet::DataPilotFieldReferenceItemType::NEXT)
+                        nBaseItem = 0x001000FD;
+                    else if (nBaseField < aZetaFieldItems.size())
+                    {
+                        const auto& rItems = aZetaFieldItems[nBaseField];
+                        auto itItem = std::find(rItems.begin(), rItems.end(), pRef->ReferenceItemName);
+                        if (itItem != rItems.end())
+                            nBaseItem = static_cast<sal_Int32>(std::distance(rItems.begin(), itItem));
+                    }
+                    pItemAttList->add(XML_baseField, OString::number(nBaseField));
+                    pItemAttList->add(XML_baseItem, OString::number(nBaseItem));
+                }
+            }
             if (xDimsByName)
             {
                 try
