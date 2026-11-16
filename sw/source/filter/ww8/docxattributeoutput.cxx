@@ -4284,6 +4284,9 @@ void DocxAttributeOutput::StartRuby( const SwTextNode& rNode, sal_Int32 nPos, co
         TypedWhichId<SvxFontHeightItem> nWhichFontSize = (nScript == i18n::ScriptType::LATIN) ?  RES_CHRATR_FONTSIZE : RES_CHRATR_CJK_FONTSIZE;
 
         CharFont(pFormat->GetFormatAttr(nWhichFont));
+        // East Asian ruby text (kana etc.) is drawn by Word with the w:eastAsia font.
+        if (nScript == i18n::ScriptType::ASIAN)
+            CharFontCJK(pFormat->GetFormatAttr(RES_CHRATR_CJK_FONT));
         CharFontSize(pFormat->GetFormatAttr(nWhichFontSize));
         CharFontSize(pFormat->GetFormatAttr(RES_CHRATR_CTL_FONTSIZE));
     }
@@ -9918,6 +9921,21 @@ void DocxAttributeOutput::ParaAdjust( const SvxAdjustItem& rAdjust )
                 pAdjustString = "distribute";
             else
                 pAdjustString = "both";
+            // Imported w:jc="thaiDistribute", kept in the paragraph grab bag
+            if (const SwTextNode* pTextNode = dynamic_cast<const SwTextNode*>(GetExport().m_pOutFormatNode);
+                pTextNode && pTextNode->GetpSwAttrSet() && rAdjust.GetLastBlock() != SvxAdjust::Block)
+            {
+                if (const SfxGrabBagItem* pBag = pTextNode->GetpSwAttrSet()->GetItemIfSet(RES_PARATR_GRABBAG, false))
+                {
+                    auto it = pBag->GetGrabBag().find(u"ParaThaiDistribute"_ustr);
+                    bool bThai = false;
+                    if (it != pBag->GetGrabBag().end() && (it->second >>= bThai) && bThai)
+                    {
+                        m_pSerializer->singleElementNS(XML_w, XML_jc, FSNS(XML_w, XML_val), "thaiDistribute");
+                        return;
+                    }
+                }
+            }
             switch ( rAdjust.GetPropWordSpacingMinimum() )
             {
                 case 133:
@@ -11392,6 +11410,10 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         else if (rGrabBagElement.first == "ParaPageBreakBefore")
         {
             // Handled in AttributeOutputBase::FormatBreak().
+        }
+        else if (rGrabBagElement.first == "ParaThaiDistribute")
+        {
+            // Handled in DocxAttributeOutput::ParaAdjust().
         }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::ParaGrabBag: unhandled grab bag property " << rGrabBagElement.first );

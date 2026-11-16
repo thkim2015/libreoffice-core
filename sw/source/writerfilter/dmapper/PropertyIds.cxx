@@ -346,6 +346,7 @@ const OUString & getPropertyName( PropertyIds eId )
         { PROP_MIRROR_INDENTS, u"MirrorIndents"_ustr},
         { PROP_PARA_WORD_WRAP, u"ParaWordWrap"_ustr},
         { PROP_PARA_PAGE_BREAK_BEFORE, u"ParaPageBreakBefore"_ustr},
+        { PROP_PARA_THAI_DISTRIBUTE, u"ParaThaiDistribute"_ustr},
         { PROP_PARA_ADJUST_RIGHT_IND, u"ParaAdjustRightInd"_ustr},
         { PROP_PARA_BAR_TABS, u"ParaBarTabs"_ustr},
         { PROP_SURROUND_TEXT_WRAP_SMALL, u"SurroundTextWrapSmall"_ustr},
