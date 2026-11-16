@@ -130,7 +130,8 @@ void FFDataHandler::lcl_sprm(Sprm & r_Sprm)
         break;
     case NS_ooxml::LN_CT_FFDDList_default:
         {
-            m_sDropDownDefault = sStringValue;
+            // CT_DecimalNumber: an integer value, its string form is empty
+            m_sDropDownDefault = OUString::number(nIntValue);
         }
         break;
     case NS_ooxml::LN_CT_FFDDList_listEntry:
