@@ -3592,7 +3592,7 @@ eF_ResT SwWW8ImplReader::Read_F_Shape(WW8FieldDesc* /*pF*/, OUString& /*rStr*/)
 
 eF_ResT SwWW8ImplReader::Read_F_Hyperlink( WW8FieldDesc* /*pF*/, OUString& rStr )
 {
-    OUString sURL, sTarget, sMark;
+    OUString sURL, sTarget, sMark, sTooltip;
 
     //HYPERLINK "filename" [switches]
     rStr = comphelper::string::stripEnd(rStr, 1);
@@ -3644,6 +3644,11 @@ eF_ResT SwWW8ImplReader::Read_F_Hyperlink( WW8FieldDesc* /*pF*/, OUString& rStr 
                 if ( aReadParam.SkipToNextToken()==-2 )
                     sTarget = aReadParam.GetResult();
                 break;
+            case 'o': // ScreenTip
+                bOptions = true;
+                if ( aReadParam.SkipToNextToken()==-2 )
+                    sTooltip = aReadParam.GetResult();
+                break;
             case 'h':
             case 'm':
                 OSL_ENSURE( false, "Analysis still missing - unknown data" );
@@ -3661,6 +3666,8 @@ eF_ResT SwWW8ImplReader::Read_F_Hyperlink( WW8FieldDesc* /*pF*/, OUString& rStr 
         sURL += "#" + sMark;
 
     SwFormatINetFormat aURL(sURL, sTarget);
+    if (!sTooltip.isEmpty())
+        aURL.SetName(sTooltip);
     // If on loading TOC field, change the default style into the "index link"
     if (m_bLoadingTOXCache)
     {
