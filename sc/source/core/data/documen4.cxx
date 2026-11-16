@@ -534,6 +534,10 @@ void ScDocument::ResizeMatrixFormula(const ScAddress& rOrigin, SCCOL nNewCols, S
 
         ScTokenArray aArr(*this);
         auto* pToken = static_cast<ScSingleRefToken*>(aArr.AddMatrixSingleReference(aRefData));
+        const ScMatrix* pMatrix = pOrigin->GetMatrix();
+        SCSIZE nMatCols = 0, nMatRows = 0;
+        if (pMatrix)
+            pMatrix->GetDimensions(nMatCols, nMatRows);
 
         for (SCCOL nColumn = nOriginColumn; nColumn <= nNewEndColumn; ++nColumn)
         {
@@ -551,6 +555,18 @@ void ScDocument::ResizeMatrixFormula(const ScAddress& rOrigin, SCCOL nNewCols, S
                     *this, aPos, aTokArr, formula::FormulaGrammar::GRAM_DEFAULT,
                     ScMatrixMode::Reference);
                 pTab->SetFormulaCell(nColumn, nRow, pNewCell);
+                // weboffice: a TRUE/FALSE element shows as TRUE/FALSE like Excel. The new cell may
+                // first be interpreted while layout strings are collected (optimal row height),
+                // where InterpretTail does not set the logical format, so set it here already.
+                const SCSIZE nC = static_cast<SCSIZE>(nColumn - nOriginColumn);
+                const SCSIZE nR = static_cast<SCSIZE>(nRow - nOriginRow);
+                if (pMatrix && nC < nMatCols && nR < nMatRows && pMatrix->IsBoolean(nC, nR))
+                {
+                    const sal_uInt32 nOld = GetNumberFormat(nColumn, nRow, nTab);
+                    if ((nOld % SV_COUNTRY_LANGUAGE_OFFSET) == 0)
+                        SetNumberFormat(aPos, GetFormatTable()->GetStandardFormat(
+                                                  SvNumFormatType::LOGICAL, ScGlobal::eLnge));
+                }
             }
         }
     }
