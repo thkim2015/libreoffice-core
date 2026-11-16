@@ -8464,6 +8464,15 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
                 nCollLevel = pLevelItem->GetValue();
             if (nCollLevel != nLevel)
                 continue;
+            // Imported style whose numPr did not number: the level is linked to another style.
+            uno::Any aStyleGrabBag;
+            pColl->GetGrabBagItem(aStyleGrabBag);
+            uno::Sequence<beans::PropertyValue> aStyleProps;
+            if ((aStyleGrabBag >>= aStyleProps)
+                && std::any_of(aStyleProps.begin(), aStyleProps.end(), [](const beans::PropertyValue& rProp) {
+                       return rProp.Name == "OoxmlListLevelNotLinked" && rProp.Value == uno::Any(true);
+                   }))
+                continue;
             pLinked = pColl;
             ++nFound;
         }

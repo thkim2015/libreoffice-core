@@ -5741,9 +5741,9 @@ OUString DomainMapper::GetListStyleName(sal_Int32 nListId) const
     return m_pImpl->GetListStyleName( nListId );
 }
 
-void DomainMapper::ValidateListLevel(const OUString& sStyleIdentifierD)
+bool DomainMapper::ValidateListLevel(const OUString& sStyleIdentifierD)
 {
-    m_pImpl->ValidateListLevel(sStyleIdentifierD);
+    return m_pImpl->ValidateListLevel(sStyleIdentifierD);
 }
 
 void DomainMapper::SetDocDefaultsImport(bool bSet)
