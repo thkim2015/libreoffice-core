@@ -554,10 +554,15 @@ void DataTableView::initializeValues(
     {
         m_pSeriesPlotterList.push_back(rSeriesPlotter.get());
 
-        for (auto const& rCategory :
-             rSeriesPlotter->getExplicitCategoriesProvider()->getSimpleCategories())
+        // A combined chart (e.g. columns + line) has one plotter per chart type, but they all
+        // share the same categories: take them once, otherwise the table gets the columns twice
+        if (m_aXValues.empty())
         {
-            m_aXValues.push_back(rCategory);
+            for (auto const& rCategory :
+                 rSeriesPlotter->getExplicitCategoriesProvider()->getSimpleCategories())
+            {
+                m_aXValues.push_back(rCategory);
+            }
         }
 
         for (auto const& rString : rSeriesPlotter->getAllSeriesNames())
