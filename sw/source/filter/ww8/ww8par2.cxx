@@ -20,6 +20,7 @@
 #include <sal/config.h>
 #include <sal/log.hxx>
 
+#include <comphelper/propertysequence.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/string.hxx>
 #include <svl/grabbagitem.hxx>
@@ -1274,6 +1275,10 @@ void WW8TabBandDesc::ProcessSprmTSetBRC(int nBrcVer, const sal_uInt8* pParamsTSe
             pCurrentTC->rgbrc[ WW8_BOT   ] = brcVer9;
         if( bChangeRight )
             pCurrentTC->rgbrc[ WW8_RIGHT ] = brcVer9;
+        if (nFlag & 0x10) // top left to bottom right
+            pCurrentTC->rgbrcDiag[0] = brcVer9;
+        if (nFlag & 0x20) // top right to bottom left
+            pCurrentTC->rgbrcDiag[1] = brcVer9;
     }
 }
 
@@ -3040,6 +3045,35 @@ void WW8TabDesc::InsertCells( short nIns )
     // Here it is possible to optimize to save (reduce) FrameFormats.
 }
 
+// A diagonal cell border as the DOCX import keeps it (w:tl2br/w:tr2bl attributes)
+static css::uno::Sequence<css::beans::PropertyValue> lcl_DiagonalBorderAttrs(const WW8_BRCVer9& rBrc)
+{
+    // MS-DOC BrcType -> ST_Border
+    static const char* const aNames[] = {
+        "nil", "single", "thick", "double", "single", "single", "dotted", "dashed", "dotDash",
+        "dotDotDash", "triple", "thinThickSmallGap", "thickThinSmallGap",
+        "thinThickThinSmallGap", "thinThickMediumGap", "thickThinMediumGap",
+        "thinThickThinMediumGap", "thinThickLargeGap", "thickThinLargeGap",
+        "thinThickThinLargeGap", "wave", "doubleWave", "dashSmallGap", "dashDotStroked",
+        "threeDEmboss", "threeDEngrave", "outset", "inset" };
+    const sal_uInt8 nType = rBrc.brcType();
+    const OUString aVal = OUString::createFromAscii(nType < SAL_N_ELEMENTS(aNames) ? aNames[nType] : "single");
+    OUString aColor(u"auto"_ustr);
+    const sal_uInt32 nCv = rBrc.cv(); // COLORREF 0x00BBGGRR, 0xFF000000 = automatic
+    if (nCv != 0xFF000000)
+    {
+        aColor = OUString::number((nCv & 0xFF) << 16 | (nCv & 0xFF00) | (nCv >> 16 & 0xFF), 16)
+                     .toAsciiUpperCase();
+        while (aColor.getLength() < 6)
+            aColor = "0" + aColor;
+    }
+    return comphelper::InitPropertySequence({
+        { "val", css::uno::Any(aVal) },
+        { "sz", css::uno::Any(OUString::number(rBrc.dptLineWidth())) },
+        { "space", css::uno::Any(OUString::number(rBrc.dptSpace())) },
+        { "color", css::uno::Any(aColor) } });
+}
+
 void WW8TabDesc::SetTabBorders(SwTableBox* pBox, short nWwIdx)
 {
     if( nWwIdx < 0 || nWwIdx >= m_pActBand->nWwCols )
@@ -3093,6 +3127,26 @@ void WW8TabDesc::SetTabBorders(SwTableBox* pBox, short nWwIdx)
         aFormatBox.SetDistance(nRightDist,SvxBoxItemLine::RIGHT);
 
     pBox->GetFrameFormat()->SetFormatAttr(aFormatBox);
+
+    // Diagonal cell borders (sprmTSetBrc 0x10/0x20): Writer table cells have none, keep them in
+    // the cell grab bag like the DOCX import (w:tl2br, w:tr2bl), for the DOC/DOCX export.
+    if (m_pActBand->pTCs)
+    {
+        const WW8_TCell& rT = m_pActBand->pTCs[nWwIdx];
+        std::map<OUString, css::uno::Any> aGrabBag;
+        for (int i = 0; i < 2; ++i)
+        {
+            const WW8_BRCVer9& rBrc = rT.rgbrcDiag[i];
+            if (!rBrc.brcType() || rBrc.brcType() == 0xFF)
+                continue;
+            if (aGrabBag.empty())
+                if (const SfxGrabBagItem* pOld = pBox->GetFrameFormat()->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false))
+                    aGrabBag = pOld->GetGrabBag();
+            aGrabBag[i == 0 ? u"CellTl2br"_ustr : u"CellTr2bl"_ustr] <<= lcl_DiagonalBorderAttrs(rBrc);
+        }
+        if (!aGrabBag.empty())
+            pBox->GetFrameFormat()->SetFormatAttr(SfxGrabBagItem(RES_FRMATR_GRABBAG, std::move(aGrabBag)));
+    }
 }
 
 void WW8TabDesc::SetTabShades( SwTableBox* pBox, short nWwIdx )

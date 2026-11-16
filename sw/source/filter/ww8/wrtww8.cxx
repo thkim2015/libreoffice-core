@@ -2737,6 +2737,41 @@ void WW8AttributeOutput::TableDefaultBorders( const ww8::WW8TableNodeInfoInner::
     }
 }
 
+// A diagonal cell border kept as w:tl2br/w:tr2bl attributes -> BRC (see the DOC import)
+static WW8_BRCVer9 lcl_DiagonalBorderToBrc(const css::uno::Sequence<css::beans::PropertyValue>& rAttrs)
+{
+    static const char* const aNames[] = {
+        "nil", "single", "thick", "double", "", "", "dotted", "dashed", "dotDash",
+        "dotDotDash", "triple", "thinThickSmallGap", "thickThinSmallGap",
+        "thinThickThinSmallGap", "thinThickMediumGap", "thickThinMediumGap",
+        "thinThickThinMediumGap", "thinThickLargeGap", "thickThinLargeGap",
+        "thinThickThinLargeGap", "wave", "doubleWave", "dashSmallGap", "dashDotStroked",
+        "threeDEmboss", "threeDEngrave", "outset", "inset" };
+    comphelper::SequenceAsHashMap aMap(rAttrs);
+    OUString aVal, aSz, aSpace, aColor;
+    aMap.getValue(u"val"_ustr) >>= aVal;
+    aMap.getValue(u"sz"_ustr) >>= aSz;
+    aMap.getValue(u"space"_ustr) >>= aSpace;
+    aMap.getValue(u"color"_ustr) >>= aColor;
+    sal_uInt8 nType = 0;
+    for (sal_uInt8 i = 1; i < SAL_N_ELEMENTS(aNames); ++i)
+        if (*aNames[i] && aVal.equalsAscii(aNames[i]))
+        {
+            nType = i;
+            break;
+        }
+    if (!nType)
+        return WW8_BRCVer9();
+    sal_uInt32 nCv = 0xFF000000; // automatic
+    if (aColor.getLength() == 6 && aColor != "auto")
+    {
+        const sal_uInt32 nRgb = aColor.toUInt32(16);
+        nCv = (nRgb & 0xFF) << 16 | (nRgb & 0xFF00) | (nRgb >> 16 & 0xFF);
+    }
+    return WW8_BRCVer9(nCv, static_cast<sal_uInt8>(std::clamp<sal_Int32>(aSz.toInt32(), 1, 255)), nType,
+                       static_cast<sal_uInt8>(std::clamp<sal_Int32>(aSpace.toInt32(), 0, 31)), false, false);
+}
+
 void WW8AttributeOutput::TableCellBorders(
     ww8::WW8TableNodeInfoInner::Pointer_t const & pTableTextNodeInfoInner )
 {
@@ -2818,6 +2853,31 @@ void WW8AttributeOutput::TableCellBorders(
 
             nSeqStart = n;
             pLastBox = pBox;
+        }
+    }
+
+    // diagonal borders kept by the DOC/DOCX import in the cell grab bag: sprmTSetBrc 0x10/0x20
+    for (sal_uInt8 n = 0; n < nBoxes; ++n)
+    {
+        const SfxGrabBagItem* pBag
+            = rTabBoxes[n]->GetFrameFormat()->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false);
+        if (!pBag)
+            continue;
+        for (int i = 0; i < 2; ++i)
+        {
+            auto it = pBag->GetGrabBag().find(i == 0 ? u"CellTl2br"_ustr : u"CellTr2bl"_ustr);
+            css::uno::Sequence<css::beans::PropertyValue> aAttrs;
+            if (it == pBag->GetGrabBag().end() || !(it->second >>= aAttrs))
+                continue;
+            WW8_BRCVer9 aBrc = lcl_DiagonalBorderToBrc(aAttrs);
+            if (!aBrc.brcType())
+                continue;
+            m_rWW8Export.InsUInt16(NS_sprm::TSetBrc::val);
+            m_rWW8Export.m_pO->push_back(11);
+            m_rWW8Export.m_pO->push_back(n);
+            m_rWW8Export.m_pO->push_back(n + 1);
+            m_rWW8Export.m_pO->push_back(i == 0 ? 0x10 : 0x20);
+            m_rWW8Export.m_pO->insert(m_rWW8Export.m_pO->end(), aBrc.aBits1, aBrc.aBits2 + 4);
         }
     }
 }
