@@ -66,6 +66,9 @@
 
 #include <officecfg/Office/Draw.hxx>
 #include <officecfg/Office/Impress.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/beans/PropertyValue.hpp>
+#include <algorithm>
 
 /** retrieves the page that is currently painted. This will only be the master page
     if the current drawn view only shows the master page*/
@@ -143,6 +146,32 @@ static SdPage* GetCurrentPage( sd::ViewShell const * pViewSh, EditFieldInfo cons
 /**
  * Link for CalcFieldValue of Outliners
  */
+// zeta: first slide number (1 when not set)
+static sal_Int32 lcl_ZetaFirstSlideNum(SdDrawDocument* pDoc)
+{
+    ::sd::DrawDocShell* pShell = pDoc ? pDoc->GetDocSh() : nullptr;
+    if (!pShell)
+        return 1;
+    try
+    {
+        css::uno::Reference<css::beans::XPropertySet> xProps(pShell->GetModel(), css::uno::UNO_QUERY);
+        if (!xProps.is())
+            return 1;
+        css::uno::Sequence<css::beans::PropertyValue> aGrabBag;
+        xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+        for (const auto& rProp : aGrabBag)
+        {
+            sal_Int32 nFirst = 1;
+            if (rProp.Name == "ZetaFirstSlideNum" && (rProp.Value >>= nFirst))
+                return nFirst;
+        }
+    }
+    catch (const css::uno::Exception&)
+    {
+    }
+    return 1;
+}
+
 IMPL_LINK(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
 {
     if (!pInfo)
@@ -240,8 +269,11 @@ IMPL_LINK(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
             else
             {
                 nPgNum = (pPage->GetPageNum() - 1) / 2 + 1;
+                // zeta: first slide number of a pptx (p:presentation firstSlideNum), kept in the
+                // document grab bag as ZetaFirstSlideNum by the import and the app
+                nPgNum += lcl_ZetaFirstSlideNum(pDoc) - 1;
             }
-            aRepresentation = pDoc->CreatePageNumValue(static_cast<sal_uInt16>(nPgNum));
+            aRepresentation = pDoc->CreatePageNumValue(static_cast<sal_uInt16>(std::max(nPgNum, 0)));
         }
         else
             aRepresentation = SdResId(STR_FIELD_PLACEHOLDER_NUMBER);

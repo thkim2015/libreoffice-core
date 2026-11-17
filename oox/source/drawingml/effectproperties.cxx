@@ -17,6 +17,7 @@
 #include <docmodel/theme/FormatScheme.hxx>
 
 #include <algorithm>
+#include <cmath>
 
 namespace oox::drawingml {
 
@@ -59,11 +60,88 @@ void EffectProperties::assignUsed( const EffectProperties& rSourceProps )
     }
 }
 
+PresetShadowApprox approximatePresetShadow(std::u16string_view rPrst, sal_Int64 nDistEmu,
+                                           sal_Int64 nDir)
+{
+    // zeta: measured on PowerPoint 2021 (Shadow.Type 1-20 exported as pictures): the drop presets
+    // are offset copies (shdw9 75 % from the top left, shdw10 125 % from the bottom right), the
+    // back perspective ones lie behind the lower half, the front ones below the shape
+    PresetShadowApprox aRet;
+    const double fAngle = basegfx::deg2rad(static_cast<double>(nDir) / PER_DEGREE);
+    const sal_Int32 nDist = convertEmuToHmm(nDistEmu);
+    aRet.nXDist = std::cos(fAngle) * nDist;
+    aRet.nYDist = std::sin(fAngle) * nDist;
+    constexpr sal_Int32 nSlant = 1058; // 30 pt: half of the slant of the perspective presets
+    const auto eTop = static_cast<sal_Int32>(model::RectangleAlignment::Top);
+    const auto eBottom = static_cast<sal_Int32>(model::RectangleAlignment::Bottom);
+    if (rPrst == u"shdw9")
+    {
+        aRet.nSizeX = aRet.nSizeY = 75000;
+        aRet.nAlignment = static_cast<sal_Int32>(model::RectangleAlignment::TopLeft);
+    }
+    else if (rPrst == u"shdw10")
+    {
+        aRet.nSizeX = aRet.nSizeY = 125000;
+        aRet.nAlignment = static_cast<sal_Int32>(model::RectangleAlignment::BottomRight);
+    }
+    else if (rPrst == u"shdw3" || rPrst == u"shdw11" || rPrst == u"shdw4" || rPrst == u"shdw12"
+             || rPrst == u"shdw19")
+    {
+        aRet.nSizeY = 50000;
+        aRet.nAlignment = eBottom;
+        if (rPrst == u"shdw3" || rPrst == u"shdw11")
+            aRet.nXDist -= nSlant;
+        else if (rPrst != u"shdw19")
+            aRet.nXDist += nSlant;
+    }
+    else if (rPrst == u"shdw7" || rPrst == u"shdw15" || rPrst == u"shdw8" || rPrst == u"shdw16")
+    {
+        aRet.nSizeY = 150000;
+        aRet.nAlignment = eTop;
+        aRet.nXDist += (rPrst == u"shdw7" || rPrst == u"shdw15") ? -nSlant : nSlant;
+    }
+    else if (rPrst == u"shdw20")
+    {
+        aRet.nSizeY = 200000;
+        aRet.nAlignment = eTop;
+    }
+    return aRet;
+}
+
 void EffectProperties::pushToPropMap( PropertyMap& rPropMap,
         const GraphicHelper& rGraphicHelper ) const
 {
+    const bool bOuterShdw = std::any_of(m_Effects.begin(), m_Effects.end(),
+                                        [](const auto& p) { return p->msName == "outerShdw"; });
     for (auto const& it : m_Effects)
     {
+        if (it->msName == "prstShdw" && !bOuterShdw)
+        {
+            // zeta: draw the preset shadow approximately (the export writes the prstShdw again
+            // while these properties are unchanged, see DrawingML::WriteShapeEffects)
+            OUString sPrst;
+            sal_Int32 nDist = 0, nDir = 0;
+            auto attribIt = it->maAttribs.find(u"prst"_ustr);
+            if (attribIt != it->maAttribs.end())
+                attribIt->second >>= sPrst;
+            attribIt = it->maAttribs.find(u"dist"_ustr);
+            if (attribIt != it->maAttribs.end())
+                attribIt->second >>= nDist;
+            attribIt = it->maAttribs.find(u"dir"_ustr);
+            if (attribIt != it->maAttribs.end())
+                attribIt->second >>= nDir;
+            const PresetShadowApprox aShadow = approximatePresetShadow(sPrst, nDist, nDir);
+            rPropMap.setProperty(PROP_Shadow, true);
+            rPropMap.setProperty(PROP_ShadowXDistance, aShadow.nXDist);
+            rPropMap.setProperty(PROP_ShadowYDistance, aShadow.nYDist);
+            rPropMap.setProperty(PROP_ShadowSizeX, aShadow.nSizeX);
+            rPropMap.setProperty(PROP_ShadowSizeY, aShadow.nSizeY);
+            rPropMap.setProperty(PROP_ShadowColor, it->moColor.getColor(rGraphicHelper));
+            rPropMap.setProperty(PROP_ShadowTransparence, it->moColor.getTransparency());
+            rPropMap.setProperty(PROP_ShadowBlur, sal_Int32(0));
+            rPropMap.setProperty(PROP_ShadowAlignment, aShadow.nAlignment);
+            continue;
+        }
         if( it->msName == "outerShdw" )
         {
             sal_Int32 nAttrDir = 0, nAttrDist = 0;
