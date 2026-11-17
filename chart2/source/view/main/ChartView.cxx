@@ -1231,14 +1231,13 @@ sal_Int32 lcl_getPivotFieldButtons(ChartModel& rModel)
 }
 
 // Width of an Excel field button: the label (10pt, CJK about one em) plus the
-// drop-down arrow area when the button has one.
+// VButton paragraph margins (100 left, 600 right with the drop-down arrow,
+// else 100) and some slack so the label never wraps.
 sal_Int32 lcl_fieldButtonWidth(std::u16string_view aLabel, bool bArrow)
 {
-    sal_Int32 nWidth = 150;
+    sal_Int32 nWidth = 100 + (bArrow ? 600 : 100) + 150;
     for (char16_t c : aLabel)
-        nWidth += c >= 0x1100 ? 340 : (c == ' ' ? 100 : 190);
-    if (bArrow)
-        nWidth += 450;
+        nWidth += c >= 0x1100 ? 370 : (c == ' ' ? 110 : 200);
     return std::max<sal_Int32>(nWidth, 800);
 }
 

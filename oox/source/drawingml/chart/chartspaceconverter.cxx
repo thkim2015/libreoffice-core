@@ -42,6 +42,7 @@
 #include <drawingml/chart/plotareamodel.hxx>
 #include <drawingml/chart/seriesmodel.hxx>
 #include <drawingml/chart/typegroupmodel.hxx>
+#include <drawingml/chart/titlemodel.hxx>
 #include <o3tl/string_view.hxx>
 #include <rtl/character.hxx>
 #include <drawingml/chart/titleconverter.hxx>
@@ -121,6 +122,36 @@ static OUString lcl_trimPivotRows( const OUString& rFormula, sal_Int32 nPoints )
     return rFormula.copy( 0, rFormula.getLength() - nDigits2 ) + OUString::number( nRow1 + nPoints - 1 );
 }
 
+/*  The series name of a pivot chart references the column header rows
+    starting at the "Column Labels" caption row (e.g. 'P1'!$B$3:$B$4 =
+    "Column Labels" / "Qtr1"); Excel names the series after the column items
+    only (cache "Qtr1"): drop the caption row. */
+static OUString lcl_dropPivotCaptionRow( const OUString& rFormula )
+{
+    sal_Int32 nColon = rFormula.lastIndexOf( ':' );
+    sal_Int32 nBang = rFormula.lastIndexOf( '!' );
+    if( nColon < 0 || nColon < nBang || rFormula.indexOf( ',' ) >= 0 )
+        return rFormula;
+    // row digits of the last cell
+    sal_Int32 nEnd = rFormula.getLength();
+    sal_Int32 nDigits = nEnd;
+    while( nDigits > nColon + 1 && rtl::isAsciiDigit( rFormula[ nDigits - 1 ] ) )
+        --nDigits;
+    if( nDigits == nEnd )
+        return rFormula;
+    // row digits of the first cell
+    sal_Int32 nFirst = nColon;
+    while( nFirst > nBang + 1 && rtl::isAsciiDigit( rFormula[ nFirst - 1 ] ) )
+        --nFirst;
+    if( nFirst == nColon )
+        return rFormula;
+    sal_Int32 nRow1 = o3tl::toInt32( rFormula.subView( nFirst, nColon - nFirst ) );
+    sal_Int32 nRow2 = o3tl::toInt32( rFormula.subView( nDigits ) );
+    if( nRow1 <= 0 || nRow2 <= nRow1 )
+        return rFormula;
+    return rFormula.replaceAt( nFirst, nColon - nFirst, OUString::number( nRow1 + 1 ) );
+}
+
 static void lcl_trimPivotSeries( PlotAreaModel& rPlotArea )
 {
     for( auto const& xTypeGroup : rPlotArea.maTypeGroups )
@@ -131,6 +162,11 @@ static void lcl_trimPivotSeries( PlotAreaModel& rPlotArea )
         {
             if( !xSeries )
                 continue;
+            if( xSeries->mxText.is() && xSeries->mxText->mxDataSeq.is() )
+            {
+                DataSequenceModel& rName = *xSeries->mxText->mxDataSeq;
+                rName.maFormula = lcl_dropPivotCaptionRow( rName.maFormula );
+            }
             for( DataSourceType eType : { DataSourceType::STR_CAT, DataSourceType::NUM_VAL } )
             {
                 DataSourceModel* pSource = xSeries->maSources.get( eType ).get();

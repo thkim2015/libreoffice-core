@@ -103,7 +103,8 @@ void VButton::createShapes(const uno::Reference<beans::XPropertySet>& xTextProp)
     aTextValueMap[u"TextHorizontalAdjust"_ustr] <<= drawing::TextHorizontalAdjust_LEFT;
     aTextValueMap[u"TextVerticalAdjust"_ustr] <<= drawing::TextVerticalAdjust_CENTER;
     aTextValueMap[u"ParaLeftMargin"_ustr] <<= sal_Int32(100);
-    aTextValueMap[u"ParaRightMargin"_ustr] <<= sal_Int32(600);
+    // room for the drop-down arrow only when there is one
+    aTextValueMap[u"ParaRightMargin"_ustr] <<= sal_Int32(m_bShowArrow ? 600 : 100);
 
     aTextValueMap[u"Name"_ustr] <<= m_sCID; //CID OUString
 
