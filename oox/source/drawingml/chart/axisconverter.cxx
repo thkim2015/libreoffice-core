@@ -288,6 +288,14 @@ void AxisConverter::convertFromModel(const Reference<XCoordinateSystem>& rxCoord
             // element carried an explicit cx:spPr child.
             if (eCT == ChartType::CX && mrModel.mbMajorGridLinesHasSpPr)
                 aGridProp.setProperty(PROP_HasExplicitSpPr, true);
+            // Without cx:spPr Excel draws chartex gridlines with the chart style
+            // (style1.xml gridlineMajor: tx1 lumMod 15% lumOff 85% = #D9D9D9, 0.75pt), not with
+            // the dark automatic line of the old chart styles
+            else if (eCT == ChartType::CX)
+            {
+                aGridProp.setProperty(PROP_LineColor, sal_Int32(0xD9D9D9));
+                aGridProp.setProperty(PROP_LineWidth, sal_Int32(26));
+            }
         }
 
         // sub grid
