@@ -1230,15 +1230,20 @@ sal_Int32 lcl_getPivotFieldButtons(ChartModel& rModel)
     return nMask;
 }
 
-// Width of an Excel field button: the label (10pt, CJK about one em) plus the
-// VButton paragraph margins (100 left, 600 right with the drop-down arrow,
-// else 100) and some slack so the label never wraps.
-sal_Int32 lcl_fieldButtonWidth(std::u16string_view aLabel, bool bArrow)
+// Excel field button: as wide as its label on one line (10pt) plus the room of
+// the drop-down arrow (13pt) - Excel 2021 tests/tmp/pvdrill/01-make.ps1: value
+// button "Sum : Sales" 46.5pt, axis buttons with two CJK letters 33pt.
+constexpr sal_Int32 nFieldButtonLeft = 40;
+constexpr sal_Int32 nFieldButtonArrow = 460;
+constexpr sal_Int32 nFieldButtonRight = 40;
+
+sal_Int32 lcl_fieldButtonWidth(VButton& rButton, const uno::Reference<beans::XPropertySet>& xTextProp,
+                               bool bArrow)
 {
-    sal_Int32 nWidth = 100 + (bArrow ? 600 : 100) + 150;
-    for (char16_t c : aLabel)
-        nWidth += c >= 0x1100 ? 370 : (c == ' ' ? 110 : 200);
-    return std::max<sal_Int32>(nWidth, 800);
+    const sal_Int32 nRight = bArrow ? nFieldButtonArrow : nFieldButtonRight;
+    rButton.setMargins(nFieldButtonLeft, nRight);
+    // slack so rounding in the text layout never wraps the label
+    return std::max<sal_Int32>(rButton.measureLabel(xTextProp) + nFieldButtonLeft + nRight + 30, 500);
 }
 
 /*  Excel pivot chart field buttons: report filter and value field buttons in a
@@ -1274,7 +1279,7 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
             sal_Int32 nDimensionIndex = rPageFieldEntry.DimensionIndex;
             aButton.setLabel(rPageFieldEntry.Name);
             aButton.setCID("FieldButton.Page." + OUString::number(nDimensionIndex));
-            awt::Size aSize(lcl_fieldButtonWidth(rPageFieldEntry.Name, true), nHeight);
+            awt::Size aSize(lcl_fieldButtonWidth(aButton, xModelPage, true), nHeight);
             aButton.setPosition(awt::Point(rRemainingSpace.X + x + nGap, rRemainingSpace.Y + nGap));
             aButton.setSize(aSize);
             aButton.setBGColor(Color(0x00FFFFFF));
@@ -1295,7 +1300,7 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
             aButton.init(xPageShapes);
             aButton.setLabel(rDataFieldEntry.Name);
             aButton.setCID("FieldButton.Data." + OUString::number(rDataFieldEntry.DimensionIndex));
-            awt::Size aSize(lcl_fieldButtonWidth(rDataFieldEntry.Name, false), nHeight);
+            awt::Size aSize(lcl_fieldButtonWidth(aButton, xModelPage, false), nHeight);
             aButton.setPosition(awt::Point(rRemainingSpace.X + x + nGap, rRemainingSpace.Y + nGap));
             aButton.setSize(aSize);
             aButton.setBGColor(Color(0x00FFFFFF));
@@ -1315,6 +1320,7 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
     if (!(nButtons & 4))
         return;
     bool bAnyRowButton = false;
+    sal_Int32 nRowButtons = 0;
     x = 0;
     for (css::chart2::data::PivotTableFieldEntry const & rRowFieldEntry : pPivotTableDataProvider->getRowFields())
     {
@@ -1323,10 +1329,10 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
         bAnyRowButton = true;
         VButton aButton;
         aButton.init(xPageShapes);
-        awt::Size aSize(lcl_fieldButtonWidth(rRowFieldEntry.Name, true), nHeight);
+        aButton.setLabel(rRowFieldEntry.Name);
+        awt::Size aSize(lcl_fieldButtonWidth(aButton, xModelPage, true), nHeight);
         aButton.setPosition(awt::Point(rRemainingSpace.X + x + nGap,
                                        rRemainingSpace.Y + rRemainingSpace.Height - nHeight - nGap));
-        aButton.setLabel(rRowFieldEntry.Name);
         aButton.setCID("FieldButton.Row." + OUString::number(rRowFieldEntry.DimensionIndex));
         aButton.setSize(aSize);
         aButton.setBGColor(Color(0x00FFFFFF));
@@ -1334,6 +1340,30 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
             aButton.setArrowColor(Color(0x0000FF));
         aButton.createShapes(xModelPage);
         x += aSize.Width + nGap;
+        ++nRowButtons;
+    }
+    // Excel "Expand/Collapse Entire Field" buttons: with two or more axis
+    // fields, "+" and "-" (15px each, 1px apart) at the bottom right
+    if ((nButtons & 16) && nRowButtons >= 2)
+    {
+        const sal_Int32 nSquare = 397;
+        const sal_Int32 nY = rRemainingSpace.Y + rRemainingSpace.Height - nHeight - nGap;
+        const sal_Int32 nRight = rRemainingSpace.X + rRemainingSpace.Width - nGap;
+        const std::pair<OUString, OUString> aSigns[] = { { u"+"_ustr, u"FieldButton.Expand.-1"_ustr },
+                                                         { u"\u2212"_ustr, u"FieldButton.Collapse.-1"_ustr } };
+        for (size_t i = 0; i < 2; ++i)
+        {
+            VButton aButton;
+            aButton.init(xPageShapes);
+            aButton.setLabel(aSigns[i].first);
+            aButton.setCID(aSigns[i].second);
+            aButton.showArrow(false);
+            aButton.setMargins(0, 0);
+            aButton.setPosition(awt::Point(nRight - (2 - sal_Int32(i)) * nSquare - (i == 0 ? 26 : 0), nY));
+            aButton.setSize(awt::Size(nSquare, nHeight));
+            aButton.setBGColor(Color(0x00FFFFFF));
+            aButton.createShapes(xModelPage);
+        }
     }
     if (bAnyRowButton)
         rRemainingSpace.Height -= (nHeight + 2 * nGap);

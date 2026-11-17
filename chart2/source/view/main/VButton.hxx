@@ -33,6 +33,8 @@ private:
     bool m_bShowArrow;
     Color m_nArrowColor;
     Color m_nBGColor;
+    sal_Int32 m_nLeftMargin;
+    sal_Int32 m_nRightMargin; // < 0: 600 with the drop-down arrow, else 100
 
     rtl::Reference<SvxShapePolyPolygon>
         createTriangle(css::awt::Size aSize);
@@ -43,6 +45,15 @@ public:
     void init(const rtl::Reference<SvxShapeGroupAnyD>& xTargetPage);
 
     void createShapes(const css::uno::Reference<css::beans::XPropertySet>& xTextProp);
+
+    // width of the label on one line in the button font (1/100 mm), without margins
+    sal_Int32 measureLabel(const css::uno::Reference<css::beans::XPropertySet>& xTextProp) const;
+
+    void setMargins(sal_Int32 nLeft, sal_Int32 nRight)
+    {
+        m_nLeftMargin = nLeft;
+        m_nRightMargin = nRight;
+    }
 
     void showArrow(bool bShowArrow)
     {
