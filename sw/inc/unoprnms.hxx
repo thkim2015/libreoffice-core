@@ -613,6 +613,9 @@ inline constexpr OUString UNO_NAME_PARA_IS_CHARACTER_DISTANCE = u"ParaIsCharacte
 inline constexpr OUString UNO_NAME_PARA_IS_FORBIDDEN_RULES = u"ParaIsForbiddenRules"_ustr;
 inline constexpr OUString UNO_NAME_PARA_VERT_ALIGNMENT = u"ParaVertAlignment"_ustr;
 inline constexpr OUString UNO_NAME_IS_MAIN_ENTRY = u"IsMainEntry"_ustr;
+// internal (not in IDL): Word XE \i and \t
+inline constexpr OUString UNO_NAME_IS_ITALIC_PAGE_NUMBER = u"IsItalicPageNumber"_ustr;
+inline constexpr OUString UNO_NAME_PAGE_NUMBER_TEXT = u"PageNumberText"_ustr;
 inline constexpr OUString UNO_NAME_GRAPHIC_ROTATION = u"GraphicRotation"_ustr;
 inline constexpr OUString UNO_NAME_ADJUST_LUMINANCE = u"AdjustLuminance"_ustr;
 inline constexpr OUString UNO_NAME_ADJUST_CONTRAST = u"AdjustContrast"_ustr;

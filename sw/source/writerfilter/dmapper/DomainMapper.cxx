@@ -1309,6 +1309,7 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
         case NS_ooxml::LN_CT_FramePr_wrap:
         case NS_ooxml::LN_CT_FramePr_hSpace:
         case NS_ooxml::LN_CT_FramePr_vSpace:
+        case NS_ooxml::LN_CT_FramePr_anchorLock:
         {
             ParagraphPropertiesPropertyMap* pParaProperties = nullptr;
             // handle frame properties at styles
@@ -1454,6 +1455,10 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
                     case NS_ooxml::LN_CT_FramePr_vSpace:
                         pParaProperties->props().SetvSpace(
                             ConversionHelper::convertTwipToMm100_Limited(nIntValue));
+                    break;
+                    case NS_ooxml::LN_CT_FramePr_anchorLock:
+                        // kept in the frame grab bag for DOCX export (Writer frames have no anchor lock)
+                        pParaProperties->props().SetAnchorLock(nIntValue != 0);
                     break;
                     default:;
                 }
@@ -2281,7 +2286,20 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                 }
                 break;
             case NS_ooxml::LN_CT_PBdr_between:
-                if (m_pImpl->handlePreviousParagraphBorderInBetween())
+            {
+                // Writer has no border in between: keep Word's attributes in the paragraph grab bag
+                // so that DOCX export can write <w:between> (and the borders replaced by the emulation) back
+                uno::Sequence<beans::PropertyValue> aBetween;
+                pBorderHandler->getInteropGrabBag(u"between"_ustr).Value >>= aBetween;
+                if (pBorderHandler->getShadow())
+                {
+                    aBetween.realloc(aBetween.getLength() + 1);
+                    aBetween.getArray()[aBetween.getLength() - 1] = comphelper::makePropertyValue(u"shadow"_ustr, u"1"_ustr);
+                }
+                const bool bKeep = !IsStyleSheetImport();
+                std::optional<PropertyMap::Property> oOrigTop = rContext->getProperty(PROP_TOP_BORDER);
+                std::optional<PropertyMap::Property> oOrigTopDist = rContext->getProperty(PROP_TOP_BORDER_DISTANCE);
+                if (m_pImpl->handlePreviousParagraphBorderInBetween(rContext, aBetween))
                 {
                     // If previous paragraph also had border in between property
                     // then it is possible to emulate this border as top border
@@ -2289,10 +2307,18 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
                     eBorderId = PROP_TOP_BORDER;
                     eBorderComplexColorId = PROP_BORDER_TOP_COMPLEX_COLOR;
                     eBorderDistId = PROP_TOP_BORDER_DISTANCE;
+                    if (bKeep)
+                    {
+                        rContext->Insert(PROP_PARA_BORDER_ORIG_TOP, oOrigTop ? oOrigTop->second : uno::Any(table::BorderLine2()), true, PARA_GRAB_BAG);
+                        rContext->Insert(PROP_PARA_BORDER_ORIG_TOP_DIST, oOrigTopDist ? oOrigTopDist->second : uno::Any(sal_Int32(0)), true, PARA_GRAB_BAG);
+                    }
                 }
+                if (bKeep)
+                    rContext->Insert(PROP_PARA_BORDER_BETWEEN, uno::Any(aBetween), true, PARA_GRAB_BAG);
                 // Since there are borders in between, each paragraph will have own borders. No more joining
                 rContext->Insert(PROP_PARA_CONNECT_BORDERS, uno::Any(false));
                 break;
+            }
             default:;
             }
 

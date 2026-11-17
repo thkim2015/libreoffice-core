@@ -1301,7 +1301,8 @@ public:
     void ClearPreviousParagraph();
 
     /// Check if previous paragraph has borders in between and do the border magic to it if so
-    bool handlePreviousParagraphBorderInBetween() const;
+    bool handlePreviousParagraphBorderInBetween(const PropertyMapPtr& rContext,
+                                                const css::uno::Sequence<css::beans::PropertyValue>& rBetween) const;
 
     /// An empty SectPr paragraph is not kept in LO. Do some adjustments before it gets deleted.
     void handleSectPrBeforeRemoval();

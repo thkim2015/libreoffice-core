@@ -2142,6 +2142,11 @@ void DomainMapper_Impl::CheckUnregisteredFrameConversion(bool bPreventOverlap)
 
     uno::Sequence<beans::PropertyValue> aGrabBag(comphelper::InitPropertySequence(
         { { "ParaFrameProperties", uno::Any(true) } }));
+    if (rAppendContext.pLastParagraphProperties->GetAnchorLock())
+    {
+        aGrabBag.realloc(2);
+        aGrabBag.getArray()[1] = comphelper::makePropertyValue(u"AnchorLocked"_ustr, true);
+    }
     aFrameProperties.push_back(comphelper::makePropertyValue(u"FrameInteropGrabBag"_ustr, aGrabBag));
 
     lcl_MoveBorderPropertiesToFrame(aFrameProperties,
@@ -9134,6 +9139,21 @@ void DomainMapper_Impl::CloseFieldCommand()
                     {
                         xTC->setPropertyValue(u"IsMainEntry"_ustr, uno::Any(true));
                     }
+                    // XE \i: italic page number, XE \t "text": text instead of the page number
+                    // (internal index mark properties, see doctxm UpdatePageNum_)
+                    OUString sSwitch;
+                    if (sUserIndex.isEmpty()
+                        && lcl_FindInCommand(pContext->GetCommand(), 'i', sSwitch))
+                    {
+                        xTC->setPropertyValue(u"IsItalicPageNumber"_ustr, uno::Any(true));
+                    }
+                    if (sUserIndex.isEmpty()
+                        && lcl_FindInCommand(pContext->GetCommand(), 't', sSwitch))
+                    {
+                        sSwitch = lcl_trim(sSwitch);
+                        if (!sSwitch.isEmpty())
+                            xTC->setPropertyValue(u"PageNumberText"_ustr, uno::Any(sSwitch));
+                    }
                     uno::Reference< text::XTextContent > xToInsert( xTC, uno::UNO_QUERY );
                     uno::Reference< text::XTextAppend >  xTextAppend = m_aTextAppendStack.top().xTextAppend;
                     if (xTextAppend.is())
@@ -10821,7 +10841,8 @@ void DomainMapper_Impl::commentProps(const OUString& sId, const CommentPropertie
 }
 
 
-bool DomainMapper_Impl::handlePreviousParagraphBorderInBetween() const
+bool DomainMapper_Impl::handlePreviousParagraphBorderInBetween(
+    const PropertyMapPtr& rContext, const uno::Sequence<beans::PropertyValue>& rBetween) const
 {
     if (!m_StreamStateStack.top().xPreviousParagraph.is())
         return false;
@@ -10835,6 +10856,48 @@ bool DomainMapper_Impl::handlePreviousParagraphBorderInBetween() const
 
     if (bConnectBorders)
         return false;
+
+    // Word draws the border in between only inside a group of paragraphs with the same borders:
+    // a previous paragraph with other side borders or another border in between starts no group
+    // (its own bottom border stays and the current paragraph keeps its top border)
+    uno::Sequence<beans::PropertyValue> aPrevBag;
+    m_StreamStateStack.top().xPreviousParagraph->getPropertyValue(u"ParaInteropGrabBag"_ustr) >>= aPrevBag;
+    bool bSameGroup = false;
+    for (const auto& rProp : aPrevBag)
+    {
+        if (rProp.Name == "ParaBorderBetween")
+        {
+            uno::Sequence<beans::PropertyValue> aPrevBetween;
+            rProp.Value >>= aPrevBetween;
+            bSameGroup = aPrevBetween == rBetween;
+        }
+    }
+    if (bSameGroup && rContext)
+    {
+        for (PropertyIds eSide : { PROP_LEFT_BORDER, PROP_RIGHT_BORDER })
+        {
+            table::BorderLine2 aCur, aPrev;
+            if (std::optional<PropertyMap::Property> oCur = rContext->getProperty(eSide))
+                oCur->second >>= aCur;
+            m_StreamStateStack.top().xPreviousParagraph->getPropertyValue(getPropertyName(eSide)) >>= aPrev;
+            if (aCur.LineStyle != aPrev.LineStyle || aCur.Color != aPrev.Color
+                || std::abs(sal_Int64(aCur.LineWidth) - sal_Int64(aPrev.LineWidth)) > 2)
+                bSameGroup = false;
+        }
+    }
+    if (!bSameGroup)
+        return false;
+
+    // remember the previous paragraph's bottom border for DOCX export before it is removed
+    {
+        uno::Any aBottom = m_StreamStateStack.top().xPreviousParagraph->getPropertyValue(getPropertyName(PROP_BOTTOM_BORDER));
+        uno::Any aBottomDist = m_StreamStateStack.top().xPreviousParagraph->getPropertyValue(getPropertyName(PROP_BOTTOM_BORDER_DISTANCE));
+        sal_Int32 nLen = aPrevBag.getLength();
+        aPrevBag.realloc(nLen + 2);
+        aPrevBag.getArray()[nLen] = comphelper::makePropertyValue(u"ParaBorderOrigBottom"_ustr, aBottom);
+        aPrevBag.getArray()[nLen + 1] = comphelper::makePropertyValue(u"ParaBorderOrigBottomDist"_ustr, aBottomDist);
+        m_StreamStateStack.top().xPreviousParagraph->setPropertyValue(u"ParaInteropGrabBag"_ustr, uno::Any(aPrevBag));
+    }
 
     // Previous paragraph has border in between. Current one also has (since this
     // method is called). So current paragraph will get border above, but

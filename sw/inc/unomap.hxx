@@ -173,6 +173,8 @@ class SfxItemPropertySet;
 #define WID_CREATE_FROM_MARKS                   1005
 #define WID_CREATE_FROM_OUTLINE                 1006
 #define WID_MAIN_ENTRY                          1007
+#define WID_ITALIC_PAGE_NUMBER                  1065
+#define WID_PAGE_NUMBER_TEXT                    1066
 #define WID_CREATE_FROM_CHAPTER                 1008
 #define WID_CREATE_FROM_LABELS                  1009
 #define WID_USE_ALPHABETICAL_SEPARATORS         1010

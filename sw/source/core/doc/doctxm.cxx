@@ -19,7 +19,10 @@
 
 #include <limits.h>
 #include <hintids.hxx>
+#include <tuple>
 #include <editeng/formatbreakitem.hxx>
+#include <editeng/postitem.hxx>
+#include <svl/itemset.hxx>
 #include <comphelper/classids.hxx>
 #include <o3tl/string_view.hxx>
 #include <docsh.hxx>
@@ -1184,9 +1187,13 @@ void SwTOXBaseSection::Update(const SfxItemSet* pAttr,
         // page number. If it is a TOX_INDEX and the SwForm IsCommaSeparated()
         // then a range of entries must be generated into one paragraph
         size_t nRange = 1;
+        // Word \r (run-in index): only the sub-entries are run into the paragraph
+        // of their main entry ("Main: sub1 1; sub2 2"), entries without a key keep
+        // their own paragraphs
         if(TOX_INDEX == SwTOXBase::GetType() &&
                 GetTOXForm().IsCommaSeparated() &&
-                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX)
+                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX &&
+                !m_aSortArr[nCnt]->pTextMark->GetTOXMark().GetPrimaryKey().isEmpty())
         {
             const SwTOXMark& rMark = m_aSortArr[nCnt]->pTextMark->GetTOXMark();
             const OUString& sPrimKey = rMark.GetPrimaryKey();
@@ -1203,6 +1210,20 @@ void SwTOXBaseSection::Update(const SfxItemSet* pAttr,
                 nRange++;
             }
         }
+        else if (TOX_INDEX == SwTOXBase::GetType() && GetTOXForm().IsCommaSeparated()
+                 && m_aSortArr[nCnt]->GetType() == TOX_SORT_CUSTOM
+                 && m_aSortArr[nCnt]->GetLevel() >= FORM_PRIMARY_KEY)
+        {
+            // a key (main entry) takes its directly following sub-entries
+            const sal_uInt16 nSubLevel = m_aSortArr[nCnt]->GetLevel() + 1;
+            while (m_aSortArr.size() > (nCnt + nRange)
+                   && m_aSortArr[nCnt + nRange]->GetType() == TOX_SORT_INDEX
+                   && m_aSortArr[nCnt + nRange]->GetLevel() == nSubLevel)
+                nRange++;
+        }
+        // UpdatePageNum looks the paragraph up from the first run-in entry
+        for (size_t nRunIn = 1; nRunIn < nRange; ++nRunIn)
+            m_aSortArr[nCnt + nRunIn]->pTOXNd = pTOXNd;
         // pass node index of table-of-content section and default page description
         // to method <GenerateText(..)>.
         ::SetProgressState( 0, rDoc.GetDocShell() );
@@ -1925,8 +1946,10 @@ void SwTOXBaseSection::UpdatePageNum()
 
         // process run in lines
         size_t nRange = 0;
+        // Word \r: entries without a key are not run in (see Update)
         if(GetTOXForm().IsCommaSeparated() &&
-                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX)
+                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX &&
+                !m_aSortArr[nCnt]->pTextMark->GetTOXMark().GetPrimaryKey().isEmpty())
         {
             const SwTOXMark& rMark = m_aSortArr[nCnt]->pTextMark->GetTOXMark();
             const OUString& sPrimKey = rMark.GetPrimaryKey();
@@ -1947,6 +1970,9 @@ void SwTOXBaseSection::UpdatePageNum()
             std::vector<sal_uInt16> aNums; // the PageNumber
             std::vector<SwPageDesc*> aDescs; // The PageDescriptors matching the PageNumbers
             std::vector<sal_uInt16> aMainNums; // contains page numbers of main entries
+            std::vector<sal_uInt16> aItalicNums; // page numbers of Word XE \i entries
+            // Word XE \t: text shown instead of the page number (1: main entry, 2: italic)
+            std::vector<std::pair<OUString, sal_uInt8>> aPageTexts;
             SwTOXSortTabBase* pSortBase = m_aSortArr[nRunInEntry].get();
             size_t nSize = pSortBase->aTOXSources.size();
             for (size_t j = 0; j < nSize; ++j)
@@ -1954,6 +1980,15 @@ void SwTOXBaseSection::UpdatePageNum()
                 ::SetProgressState( 0, rDoc.GetDocShell() );
 
                 SwTOXSource& rTOXSource = pSortBase->aTOXSources[j];
+                if (TOX_SORT_INDEX == pSortBase->GetType() && !rTOXSource.aPageNumberText.isEmpty())
+                {
+                    const sal_uInt8 nClass = (rTOXSource.bMainEntry ? 1 : 0)
+                                             | (rTOXSource.bItalicPageNumber ? 2 : 0);
+                    if (std::ranges::find(aPageTexts, std::make_pair(rTOXSource.aPageNumberText, nClass))
+                        == aPageTexts.end())
+                        aPageTexts.emplace_back(rTOXSource.aPageNumberText, nClass);
+                    continue;
+                }
                 if( rTOXSource.pNd )
                 {
                     SwContentFrame* pFrame = rTOXSource.pNd->getLayoutFrame( rDoc.getIDocumentLayoutAccess().GetCurrentLayout() );
@@ -1999,6 +2034,10 @@ void SwTOXBaseSection::UpdatePageNum()
                     {
                         aMainNums.push_back(nPage);
                     }
+                    if (TOX_SORT_INDEX == pSortBase->GetType() && rTOXSource.bItalicPageNumber)
+                    {
+                        aItalicNums.push_back(nPage);
+                    }
                 }
             }
             // Insert the PageNumber into the TOC TextNode
@@ -2009,7 +2048,7 @@ void SwTOXBaseSection::UpdatePageNum()
                 OSL_ENSURE( pTextNd, "no TextNode, wrong TOC" );
 
                 UpdatePageNum_( const_cast<SwTextNode*>(pTextNd), aNums, aDescs, &aMainNums,
-                                aIntl );
+                                aIntl, &aItalicNums, &aPageTexts );
             }
         }
     }
@@ -2031,12 +2070,18 @@ void SwTOXBaseSection::UpdatePageNum_( SwTextNode* pNd,
                                     const std::vector<sal_uInt16>& rNums,
                                     const std::vector<SwPageDesc*>& rDescs,
                                     const std::vector<sal_uInt16>* pMainEntryNums,
-                                    const SwTOXInternational& rIntl )
+                                    const SwTOXInternational& rIntl,
+                                    const std::vector<sal_uInt16>* pItalicNums,
+                                    const std::vector<std::pair<OUString, sal_uInt8>>* pPageTexts )
 {
-    // collect starts end ends of main entry character style
-    std::optional< std::vector<sal_uInt16> > xCharStyleIdx;
-    if (pMainEntryNums)
-        xCharStyleIdx.emplace();
+    // emphasis class of a page number: 1 = main entry (character style),
+    // 2 = italic (Word XE \i)
+    auto lcl_Class = [&](sal_uInt16 nPage) -> sal_uInt8
+    {
+        return (lcl_HasMainEntry(pMainEntryNums, nPage) ? 1 : 0)
+               | (lcl_HasMainEntry(pItalicNums, nPage) ? 2 : 0);
+    };
+    const bool bTexts = pPageTexts && !pPageTexts->empty();
 
     OUString sSrchStr
         = OUStringChar(C_NUM_REPL) + SwTOXMark::S_PAGE_DELI + OUStringChar(C_NUM_REPL);
@@ -2044,20 +2089,14 @@ void SwTOXBaseSection::UpdatePageNum_( SwTextNode* pNd,
     sSrchStr = OUStringChar(C_NUM_REPL) + OUStringChar(C_END_PAGE_NUM);
     sal_Int32 nEndPos = pNd->GetText().indexOf(sSrchStr);
 
-    if (-1 == nEndPos || rNums.empty())
+    if (-1 == nEndPos || (rNums.empty() && !bTexts))
         return;
 
     if (-1 == nStartPos || nStartPos > nEndPos)
         nStartPos = nEndPos;
 
-    sal_uInt16 nOld = rNums[0],
-           nBeg = nOld,
-           nCount  = 0;
-    OUString aNumStr( rDescs[0]->GetNumType().GetNumStr( nBeg ) );
-    if( xCharStyleIdx && lcl_HasMainEntry( pMainEntryNums, nBeg ))
-    {
-        xCharStyleIdx->push_back( 0 );
-    }
+    // [start, end) of the inserted string with its emphasis class
+    std::vector<std::tuple<sal_Int32, sal_Int32, sal_uInt8>> aSegs;
 
     // Delete place holder
     SwContentIndex aPos(pNd, nStartPos);
@@ -2078,76 +2117,102 @@ void SwTOXBaseSection::UpdatePageNum_( SwTextNode* pNd,
         }
     pNd->EraseText(aPos, nEndPos - nStartPos + 2);
 
-    std::vector<sal_uInt16>::size_type i;
-    for( i = 1; i < rNums.size(); ++i)
+    OUString aNumStr;
+    if (!rNums.empty())
     {
-        SvxNumberType aType( rDescs[i]->GetNumType() );
-        if( TOX_INDEX == SwTOXBase::GetType() )
-        {   // Summarize for the following
-            // Add up all following
-            // break up if main entry starts or ends and
-            // insert a char style index
-            bool bMainEntryChanges = lcl_HasMainEntry(pMainEntryNums, nOld)
-                    != lcl_HasMainEntry(pMainEntryNums, rNums[i]);
+        sal_uInt16 nOld = rNums[0],
+               nBeg = nOld,
+               nCount  = 0;
+        aNumStr = rDescs[0]->GetNumType().GetNumStr( nBeg );
+        sal_Int32 nSegStart = 0;
+        sal_uInt8 nSegClass = lcl_Class(nBeg);
 
-            if(nOld == rNums[i]-1 && !bMainEntryChanges &&
-                (GetOptions() & (SwTOIOptions::FF|SwTOIOptions::Dash)))
-                nCount++;
+        std::vector<sal_uInt16>::size_type i;
+        for( i = 1; i < rNums.size(); ++i)
+        {
+            SvxNumberType aType( rDescs[i]->GetNumType() );
+            if( TOX_INDEX == SwTOXBase::GetType() )
+            {   // Summarize for the following
+                // Add up all following
+                // break up if the emphasis (main entry, italic) changes
+                const sal_uInt8 nNewClass = lcl_Class(rNums[i]);
+                const bool bClassChanges = lcl_Class(nOld) != nNewClass;
+
+                if(nOld == rNums[i]-1 && !bClassChanges &&
+                    (GetOptions() & (SwTOIOptions::FF|SwTOIOptions::Dash)))
+                    nCount++;
+                else
+                {
+                    // Flush for the following old values
+                    if(GetOptions() & SwTOIOptions::FF)
+                    {
+                        if ( nCount >= 1 )
+                            aNumStr += rIntl.GetFollowingText( nCount > 1 );
+                    }
+                    else if (nCount) //#58127# If nCount == 0, then the only PageNumber is already in aNumStr!
+                    {
+                        if (nCount == 1 )
+                            aNumStr += SwTOXMark::S_PAGE_DELI;
+                        else
+                            aNumStr += "-";
+
+                        aNumStr += aType.GetNumStr( nBeg + nCount );
+                    }
+                    if (bClassChanges)
+                        aSegs.emplace_back(nSegStart, aNumStr.getLength(), nSegClass);
+
+                    // Create new String
+                    nBeg     = rNums[i];
+                    aNumStr += SwTOXMark::S_PAGE_DELI;
+                    //the change of the character style must apply after sPageDeli is appended
+                    if (bClassChanges)
+                    {
+                        nSegStart = aNumStr.getLength();
+                        nSegClass = nNewClass;
+                    }
+                    aNumStr += aType.GetNumStr( nBeg );
+                    nCount   = 0;
+                }
+                nOld = rNums[i];
+            }
+            else
+            {   // Insert all Numbers
+                aNumStr += aType.GetNumStr( rNums[i] );
+                if (i+1 != rNums.size())
+                    aNumStr += SwTOXMark::S_PAGE_DELI;
+            }
+        }
+        // Flush when ending and the following old values
+        if( TOX_INDEX == SwTOXBase::GetType() )
+        {
+            if(GetOptions() & SwTOIOptions::FF)
+            {
+                if( nCount >= 1 )
+                    aNumStr += rIntl.GetFollowingText( nCount > 1 );
+            }
             else
             {
-                // Flush for the following old values
-                if(GetOptions() & SwTOIOptions::FF)
-                {
-                    if ( nCount >= 1 )
-                        aNumStr += rIntl.GetFollowingText( nCount > 1 );
-                }
-                else if (nCount) //#58127# If nCount == 0, then the only PageNumber is already in aNumStr!
-                {
-                    if (nCount == 1 )
-                        aNumStr += SwTOXMark::S_PAGE_DELI;
-                    else
-                        aNumStr += "-";
-
-                    aNumStr += aType.GetNumStr( nBeg + nCount );
-                }
-
-                // Create new String
-                nBeg     = rNums[i];
-                aNumStr += SwTOXMark::S_PAGE_DELI;
-                //the change of the character style must apply after sPageDeli is appended
-                if (xCharStyleIdx && bMainEntryChanges)
-                {
-                    xCharStyleIdx->push_back(aNumStr.getLength());
-                }
-                aNumStr += aType.GetNumStr( nBeg );
-                nCount   = 0;
+                if(nCount >= 2)
+                    aNumStr += "-";
+                else if(nCount == 1)
+                    aNumStr += SwTOXMark::S_PAGE_DELI;
+                //#58127# If nCount == 0, then the only PageNumber is already in aNumStr!
+                if(nCount)
+                    aNumStr += rDescs[i-1]->GetNumType().GetNumStr( nBeg+nCount );
             }
-            nOld = rNums[i];
         }
-        else
-        {   // Insert all Numbers
-            aNumStr += aType.GetNumStr( rNums[i] );
-            if (i+1 != rNums.size())
-                aNumStr += SwTOXMark::S_PAGE_DELI;
-        }
+        aSegs.emplace_back(nSegStart, aNumStr.getLength(), nSegClass);
     }
-    // Flush when ending and the following old values
-    if( TOX_INDEX == SwTOXBase::GetType() )
+    // Word XE \t: the text of the mark replaces its page number
+    if (bTexts)
     {
-        if(GetOptions() & SwTOIOptions::FF)
+        for (const auto& [sText, nClass] : *pPageTexts)
         {
-            if( nCount >= 1 )
-                aNumStr += rIntl.GetFollowingText( nCount > 1 );
-        }
-        else
-        {
-            if(nCount >= 2)
-                aNumStr += "-";
-            else if(nCount == 1)
+            if (!aNumStr.isEmpty())
                 aNumStr += SwTOXMark::S_PAGE_DELI;
-            //#58127# If nCount == 0, then the only PageNumber is already in aNumStr!
-            if(nCount)
-                aNumStr += rDescs[i-1]->GetNumType().GetNumStr( nBeg+nCount );
+            const sal_Int32 nTextStart = aNumStr.getLength();
+            aNumStr += sText;
+            aSegs.emplace_back(nTextStart, aNumStr.getLength(), nClass);
         }
     }
     pNd->InsertText( aNumStr, aPos, SwInsertFlags::EMPTYEXPAND | SwInsertFlags::FORCEHINTEXPAND );
@@ -2157,35 +2222,44 @@ void SwTOXBaseSection::UpdatePageNum_( SwTextNode* pNd,
         pNd->InsertItem(aCharFormat, nStartPos, nStartPos + aNumStr.getLength(), SetAttrMode::DONTEXPAND);
     }
 
-    // The main entries should get their character style
-    if (!xCharStyleIdx || xCharStyleIdx->empty() || GetMainEntryCharStyle().isEmpty())
-        return;
-
-    // eventually the last index must be appended
-    if (xCharStyleIdx->size()&0x01)
-        xCharStyleIdx->push_back(aNumStr.getLength());
-
-    // search by name
-    SwDoc& rDoc = pNd->GetDoc();
-    SwPoolFormatId nPoolId = SwStyleNameMapper::GetPoolIdFromUIName( GetMainEntryCharStyle(), SwGetPoolIdFromName::ChrFmt );
-    SwCharFormat* pCharFormat = nullptr;
-    if(SwPoolFormatId::UNKNOWN != nPoolId)
-        pCharFormat = rDoc.getIDocumentStylePoolAccess().GetCharFormatFromPool(nPoolId);
-    else
-        pCharFormat = rDoc.FindCharFormatByName( GetMainEntryCharStyle() );
-    if(!pCharFormat)
-        pCharFormat = rDoc.MakeCharFormat(GetMainEntryCharStyle(), nullptr);
-
-    // find the page numbers in aNumStr and set the character style
+    // The main entries should get their character style, Word XE \i italic
     // aNumStr was inserted at nStartPos: in a run-in (comma separated) index
     // the paragraph holds all entries, so the numbers are not at its end
-    sal_Int32 nOffset = nStartPos;
-    SwFormatCharFormat aCharFormat(pCharFormat);
-    for (size_t j = 0; j < xCharStyleIdx->size(); j += 2)
+    SwDoc& rDoc = pNd->GetDoc();
+    SwCharFormat* pCharFormat = nullptr;
+    for (const auto& [nSegBeg, nSegEnd, nClass] : aSegs)
     {
-        sal_Int32 nStartIdx = (*xCharStyleIdx)[j] + nOffset;
-        sal_Int32 nEndIdx   = (*xCharStyleIdx)[j + 1]  + nOffset;
-        pNd->InsertItem(aCharFormat, nStartIdx, nEndIdx, SetAttrMode::DONTEXPAND);
+        if (nSegBeg >= nSegEnd || !nClass)
+            continue;
+        const sal_Int32 nStartIdx = nSegBeg + nStartPos;
+        const sal_Int32 nEndIdx = nSegEnd + nStartPos;
+        if ((nClass & 1) && !GetMainEntryCharStyle().isEmpty())
+        {
+            if (!pCharFormat)
+            {
+                // search by name
+                SwPoolFormatId nPoolId = SwStyleNameMapper::GetPoolIdFromUIName( GetMainEntryCharStyle(), SwGetPoolIdFromName::ChrFmt );
+                if(SwPoolFormatId::UNKNOWN != nPoolId)
+                    pCharFormat = rDoc.getIDocumentStylePoolAccess().GetCharFormatFromPool(nPoolId);
+                else
+                    pCharFormat = rDoc.FindCharFormatByName( GetMainEntryCharStyle() );
+                if(!pCharFormat)
+                    pCharFormat = rDoc.MakeCharFormat(GetMainEntryCharStyle(), nullptr);
+            }
+            SwFormatCharFormat aCharFormat(pCharFormat);
+            pNd->InsertItem(aCharFormat, nStartIdx, nEndIdx, SetAttrMode::DONTEXPAND);
+        }
+        if (nClass & 2)
+        {
+            SfxItemSet aSet(SfxItemSet::makeFixedSfxItemSet<
+                            RES_CHRATR_POSTURE, RES_CHRATR_POSTURE,
+                            RES_CHRATR_CJK_POSTURE, RES_CHRATR_CJK_POSTURE,
+                            RES_CHRATR_CTL_POSTURE, RES_CHRATR_CTL_POSTURE>(rDoc.GetAttrPool()));
+            aSet.Put(SvxPostureItem(ITALIC_NORMAL, RES_CHRATR_POSTURE));
+            aSet.Put(SvxPostureItem(ITALIC_NORMAL, RES_CHRATR_CJK_POSTURE));
+            aSet.Put(SvxPostureItem(ITALIC_NORMAL, RES_CHRATR_CTL_POSTURE));
+            pNd->SetAttr(aSet, nStartIdx, nEndIdx, SetAttrMode::DONTEXPAND);
+        }
     }
 }
 

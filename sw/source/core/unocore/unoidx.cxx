@@ -1521,6 +1521,8 @@ public:
     SwDoc* m_pDoc;
 
     bool m_bMainEntry;
+    bool m_bItalicPageNumber;
+    OUString m_sPageNumberText;
     sal_uInt16 m_nLevel;
     OUString m_aBookmarkName;
     OUString m_sAltText;
@@ -1546,6 +1548,7 @@ public:
         , m_pTOXMark(pMark)
         , m_pDoc(pDoc)
         , m_bMainEntry(false)
+        , m_bItalicPageNumber(false)
         , m_nLevel(0)
     {
         auto pTypeNonConst = const_cast<SwTOXType*>(m_pTOXType);
@@ -1862,6 +1865,8 @@ SwXDocumentIndexMark::attach(
                 aMark.SetSecondaryKeyReading(m_pImpl->m_sSecondaryKeyReading);
             }
             aMark.SetMainEntry(m_pImpl->m_bMainEntry);
+            aMark.SetItalicPageNumber(m_pImpl->m_bItalicPageNumber);
+            aMark.SetPageNumberText(m_pImpl->m_sPageNumberText);
         break;
         case TOX_CITATION:
             aMark.SetMainEntry(m_pImpl->m_bMainEntry);
@@ -2088,6 +2093,12 @@ SwXDocumentIndexMark::setPropertyValue(
             case WID_MAIN_ENTRY:
                 aMark.SetMainEntry(lcl_AnyToType<bool>(rValue));
             break;
+            case WID_ITALIC_PAGE_NUMBER:
+                aMark.SetItalicPageNumber(lcl_AnyToType<bool>(rValue));
+            break;
+            case WID_PAGE_NUMBER_TEXT:
+                aMark.SetPageNumberText(lcl_AnyToType<OUString>(rValue));
+            break;
             case WID_TEXT_READING:
                 aMark.SetTextReading(lcl_AnyToType<OUString>(rValue));
             break;
@@ -2159,6 +2170,12 @@ SwXDocumentIndexMark::setPropertyValue(
             break;
             case WID_MAIN_ENTRY:
                 m_pImpl->m_bMainEntry = lcl_AnyToType<bool>(rValue);
+            break;
+            case WID_ITALIC_PAGE_NUMBER:
+                m_pImpl->m_bItalicPageNumber = lcl_AnyToType<bool>(rValue);
+            break;
+            case WID_PAGE_NUMBER_TEXT:
+                m_pImpl->m_sPageNumberText = lcl_AnyToType<OUString>(rValue);
             break;
             case PROPERTY_MAP_INDEX_OBJECTS:
                 // unsupported
@@ -2233,6 +2250,12 @@ SwXDocumentIndexMark::getPropertyValue(const OUString& rPropertyName)
                 aRet <<= bTemp;
             }
             break;
+            case WID_ITALIC_PAGE_NUMBER:
+                aRet <<= m_pImpl->m_pTOXMark->IsItalicPageNumber();
+            break;
+            case WID_PAGE_NUMBER_TEXT:
+                aRet <<= m_pImpl->m_pTOXMark->GetPageNumberText();
+            break;
         }
     }
     else if (m_pImpl->m_bIsDescriptor)
@@ -2268,6 +2291,12 @@ SwXDocumentIndexMark::getPropertyValue(const OUString& rPropertyName)
             break;
             case WID_MAIN_ENTRY:
                 aRet <<= m_pImpl->m_bMainEntry;
+            break;
+            case WID_ITALIC_PAGE_NUMBER:
+                aRet <<= m_pImpl->m_bItalicPageNumber;
+            break;
+            case WID_PAGE_NUMBER_TEXT:
+                aRet <<= m_pImpl->m_sPageNumberText;
             break;
         }
     }

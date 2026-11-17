@@ -502,6 +502,7 @@ private:
     sal_Int32                                    m_xAlign;         // from ST_XAlign center, inside, left, outside, right
     sal_Int32                                    m_yAlign;         // from ST_YAlign bottom, center, inline, inside, outside, top
     sal_Int8                                     m_nDropCapLength; // number of characters
+    bool                                         m_bAnchorLock = false; // w:framePr/@w:anchorLock
     OUString                                     m_sParaStyleName;
     OUString                                     m_sParaId;        // [MS-DOCX] sect. 2.2.4 "p and tr Extensions"
 
@@ -553,6 +554,8 @@ public:
     bool      IsyValid() const       { return m_byValid; }
 
     void      SethSpace( sal_Int32 nSet ) { m_hSpace = nSet; }
+    bool      GetAnchorLock() const       { return m_bAnchorLock; }
+    void      SetAnchorLock( bool bSet )  { m_bAnchorLock = bSet; }
     sal_Int32 GethSpace() const           { return m_hSpace; }
 
     sal_Int32 GetvSpace() const           { return m_vSpace; }
