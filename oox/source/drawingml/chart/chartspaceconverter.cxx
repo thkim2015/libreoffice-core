@@ -32,6 +32,7 @@
 #include <chart2/AbstractPivotTableDataProvider.hxx>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/util/DateTime.hpp>
+#include <com/sun/star/util/XModifyListener.hpp>
 #include <oox/core/xmlfilterbase.hxx>
 #include <oox/drawingml/chart/chartconverter.hxx>
 #include <oox/token/properties.hxx>
@@ -150,6 +151,27 @@ static OUString lcl_dropPivotCaptionRow( const OUString& rFormula )
     if( nRow1 <= 0 || nRow2 <= nRow1 )
         return rFormula;
     return rFormula.replaceAt( nFirst, nColon - nFirst, OUString::number( nRow1 + 1 ) );
+}
+
+/*  Two or more row fields: Excel writes the categories as c:multiLvlStrRef
+    over the table body, where an outer item shares its row with the inner
+    items (and subtotals), so the cell range cannot give the nested axis. */
+static bool lcl_hasMultiLevelCategories( const PlotAreaModel& rPlotArea )
+{
+    for( auto const& xTypeGroup : rPlotArea.maTypeGroups )
+    {
+        if( !xTypeGroup )
+            continue;
+        for( auto const& xSeries : xTypeGroup->maSeries )
+        {
+            if( !xSeries )
+                continue;
+            const DataSourceModel* pSource = xSeries->maSources.get( DataSourceType::STR_CAT ).get();
+            if( pSource && pSource->mxDataSeq && pSource->mxDataSeq->mnLevelCount > 1 )
+                return true;
+        }
+    }
+    return false;
 }
 
 static void lcl_trimPivotSeries( PlotAreaModel& rPlotArea )
@@ -272,8 +294,12 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
         aBackPropSet.setProperty(PROP_HasExplicitSpPr, true);
 
     // pivot chart: plot the pivot items only, not the grand total row
+    bool bPivotMultiLevel = false;
     if( mrModel.mbPivotChart && mrModel.mxPlotArea.is() )
+    {
+        bPivotMultiLevel = lcl_hasMultiLevelCategories( *mrModel.mxPlotArea );
         lcl_trimPivotSeries( *mrModel.mxPlotArea );
+    }
 
     bool bMSO2007Doc = getFilter().isMSO2007Document();
     // convert plot area (container of all chart type groups)
@@ -468,6 +494,18 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
                 pPivot->setPivotTableName( aPivotName );
                 Reference< XDataReceiver > xReceiver( getChartDocument(), UNO_QUERY_THROW );
                 xReceiver->attachDataProvider( xProvider );
+
+                /*  ZetaOffice: the cell ranges cannot hold nested row items
+                    (see lcl_hasMultiLevelCategories). The pivot tables are
+                    inserted before the drawings are imported, so take the
+                    pivot data now, as after a pivot table change: the
+                    two-level category axis of Excel. */
+                if( bPivotMultiLevel && xProvider->createDataSourcePossible( {} ) )
+                {
+                    Reference< util::XModifyListener > xListener( getChartDocument(), UNO_QUERY );
+                    if( xListener.is() )
+                        xListener->modified( lang::EventObject( xProvider ) );
+                }
             }
         }
         catch( Exception& )
