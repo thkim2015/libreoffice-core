@@ -2374,6 +2374,47 @@ void ChartExport::exportChart( const Reference< css::chart::XChartDocument >& xC
         pFS->singleElement(FSNS(XML_c, XML_autoTitleDeleted), XML_val, "1");
     }
 
+    // pivot chart: Excel keeps one c:pivotFmt per series (the formats the pivot
+    // table's chartFormat elements point at) right after autoTitleDeleted
+    if (!bIsChartex)
+    {
+        Reference<chart2::XChartDocument> xNewDoc(xChartDoc, UNO_QUERY);
+        Reference<chart2::XCoordinateSystemContainer> xCooSysCnt(
+            xNewDoc.is() ? xNewDoc->getFirstDiagram() : nullptr, UNO_QUERY);
+        if (xCooSysCnt.is()
+            && dynamic_cast<chart2api::AbstractPivotTableDataProvider*>(xNewDoc->getDataProvider().get()))
+        {
+            sal_Int32 nFmt = 0;
+            for (const auto& xCooSys : xCooSysCnt->getCoordinateSystems())
+            {
+                Reference<chart2::XChartTypeContainer> xCTCnt(xCooSys, UNO_QUERY);
+                if (!xCTCnt.is())
+                    continue;
+                for (const auto& xChartType : xCTCnt->getChartTypes())
+                {
+                    Reference<chart2::XDataSeriesContainer> xDSCnt(xChartType, UNO_QUERY);
+                    if (!xDSCnt.is())
+                        continue;
+                    for (const auto& xSeries : xDSCnt->getDataSeries())
+                    {
+                        Reference<XPropertySet> xSeriesProps(xSeries, UNO_QUERY);
+                        if (!xSeriesProps.is())
+                            continue;
+                        if (nFmt == 0)
+                            pFS->startElement(FSNS(XML_c, XML_pivotFmts));
+                        pFS->startElement(FSNS(XML_c, XML_pivotFmt));
+                        pFS->singleElement(FSNS(XML_c, XML_idx), XML_val, OString::number(nFmt));
+                        exportShapeProps(xSeriesProps, XML_c);
+                        pFS->endElement(FSNS(XML_c, XML_pivotFmt));
+                        ++nFmt;
+                    }
+                }
+            }
+            if (nFmt > 0)
+                pFS->endElement(FSNS(XML_c, XML_pivotFmts));
+        }
+    }
+
     if( mbIs3DChart )
     {
         if (!bIsChartex) {
