@@ -670,6 +670,12 @@ namespace sw
 
              See the import for details
             */
+            // Pixel-mapped graphics: the DOCX import (correctWordWrapPolygonPixel) maps
+            // 0..21600 straight onto the pixels, so export must not add the 15 twip hack,
+            // otherwise each round trip shifts the polygon left and up.
+            if (bCorrectCrop && pNd->GetGraphic().GetPrefMapMode().GetMapUnit() == MapUnit::MapPixel)
+                return aPoly;
+
             const Size aSize = pNd->GetTwipSize();
             double fMoveHack = double(ww::nWrap100Percent) / aSize.Width();
             fMoveHack *= 15;
