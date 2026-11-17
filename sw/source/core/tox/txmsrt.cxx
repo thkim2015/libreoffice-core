@@ -20,6 +20,10 @@
 #include <com/sun/star/uri/UriReferenceFactory.hpp>
 
 #include <unotools/charclass.hxx>
+#include <i18nlangtag/mslangid.hxx>
+#include <i18nlangtag/lang.h>
+#include <unicode/uchar.h>
+#include <unicode/uscript.h>
 #include <osl/diagnose.h>
 #include <tools/urlobj.hxx>
 #include <comphelper/processfactory.hxx>
@@ -112,11 +116,50 @@ bool SwTOXInternational::IsNumeric( const OUString& rStr ) const
     return m_oCharClass->isNumeric( rStr );
 }
 
+namespace
+{
+// script order group of a letter: Word sorts a Korean index (\z 1042) like the root collation,
+// i.e. Latin and the other scripts before Hangul and Han, but the CLDR Korean collation used by the
+// "dict" algorithm reorders Hangul and Han before them. 0 = no letter (leave it to the collator)
+int lcl_KoreanScriptGroup(sal_uInt32 c)
+{
+    if (!u_isalpha(c))
+        return 0;
+    UErrorCode nErr = U_ZERO_ERROR;
+    const UScriptCode eScript = uscript_getScript(c, &nErr);
+    if (U_FAILURE(nErr))
+        return 0;
+    if (eScript == USCRIPT_HANGUL)
+        return 2;
+    if (eScript == USCRIPT_HAN)
+        return 3;
+    return 1;
+}
+}
+
 sal_Int32 SwTOXInternational::Compare( const TextAndReading& rTaR1,
                                        const lang::Locale& rLocale1,
                                        const TextAndReading& rTaR2,
                                        const lang::Locale& rLocale2 ) const
 {
+    if (MsLangId::getPrimaryLanguage(m_eLang) == MsLangId::getPrimaryLanguage(LANGUAGE_KOREAN))
+    {
+        const OUString& r1 = rTaR1.sReading.isEmpty() ? rTaR1.sText : rTaR1.sReading;
+        const OUString& r2 = rTaR2.sReading.isEmpty() ? rTaR2.sText : rTaR2.sReading;
+        sal_Int32 i1 = 0, i2 = 0;
+        while (i1 < r1.getLength() && i2 < r2.getLength())
+        {
+            const sal_uInt32 c1 = r1.iterateCodePoints(&i1);
+            const sal_uInt32 c2 = r2.iterateCodePoints(&i2);
+            if (u_foldCase(c1, U_FOLD_CASE_DEFAULT) == u_foldCase(c2, U_FOLD_CASE_DEFAULT))
+                continue;
+            const int n1 = lcl_KoreanScriptGroup(c1);
+            const int n2 = lcl_KoreanScriptGroup(c2);
+            if (n1 && n2 && n1 != n2)
+                return n1 < n2 ? -1 : 1;
+            break;
+        }
+    }
     return m_pIndexWrapper->CompareIndexEntry( rTaR1.sText, rTaR1.sReading, rLocale1,
                                              rTaR2.sText, rTaR2.sReading, rLocale2 );
 }
