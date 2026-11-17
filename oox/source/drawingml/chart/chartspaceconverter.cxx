@@ -39,6 +39,11 @@
 #include <drawingml/chart/chartdrawingfragment.hxx>
 #include <drawingml/chart/chartspacemodel.hxx>
 #include <drawingml/chart/plotareaconverter.hxx>
+#include <drawingml/chart/plotareamodel.hxx>
+#include <drawingml/chart/seriesmodel.hxx>
+#include <drawingml/chart/typegroupmodel.hxx>
+#include <o3tl/string_view.hxx>
+#include <rtl/character.hxx>
 #include <drawingml/chart/titleconverter.hxx>
 #include <ooxresid.hxx>
 #include <strings.hrc>
@@ -70,6 +75,72 @@ ChartSpaceConverter::ChartSpaceConverter( const ConverterRoot& rParent, ChartSpa
 
 ChartSpaceConverter::~ChartSpaceConverter()
 {
+}
+
+/*  Excel pivot charts reference the whole pivot table body including the
+    grand total row (e.g. 'P1'!$A$5:$A$9) but plot only the cached points
+    (ptCount 4): the grand total is never a category. Trim the rows of a
+    single-area reference to the cached point count. */
+static OUString lcl_trimPivotRows( const OUString& rFormula, sal_Int32 nPoints )
+{
+    if( nPoints <= 0 || rFormula.isEmpty() )
+        return rFormula;
+    sal_Int32 nStart = 0;
+    if( rFormula.startsWith( "'" ) )
+    {
+        sal_Int32 nQuote = rFormula.indexOf( "'!" );
+        if( nQuote < 0 )
+            return rFormula;
+        nStart = nQuote + 2;
+    }
+    else
+    {
+        sal_Int32 nBang = rFormula.indexOf( '!' );
+        nStart = nBang < 0 ? 0 : nBang + 1;
+    }
+    std::u16string_view aRef = std::u16string_view( rFormula ).substr( nStart );
+    size_t nColon = aRef.find( ':' );
+    if( nColon == std::u16string_view::npos || aRef.find_first_of( u",;() " ) != std::u16string_view::npos )
+        return rFormula;
+    // the row number at the end of each cell reference
+    auto rowOf = []( std::u16string_view aCell, size_t& rnDigits ) -> sal_Int32
+    {
+        rnDigits = 0;
+        while( rnDigits < aCell.size() && rtl::isAsciiDigit( aCell[ aCell.size() - 1 - rnDigits ] ) )
+            ++rnDigits;
+        if( rnDigits == 0 || rnDigits == aCell.size() )
+            return -1;
+        return o3tl::toInt32( aCell.substr( aCell.size() - rnDigits ) );
+    };
+    size_t nDigits1 = 0, nDigits2 = 0;
+    sal_Int32 nRow1 = rowOf( aRef.substr( 0, nColon ), nDigits1 );
+    std::u16string_view aCell2 = aRef.substr( nColon + 1 );
+    sal_Int32 nRow2 = rowOf( aCell2, nDigits2 );
+    if( nRow1 <= 0 || nRow2 < nRow1 || nRow2 - nRow1 + 1 <= nPoints )
+        return rFormula;
+    return rFormula.copy( 0, rFormula.getLength() - nDigits2 ) + OUString::number( nRow1 + nPoints - 1 );
+}
+
+static void lcl_trimPivotSeries( PlotAreaModel& rPlotArea )
+{
+    for( auto const& xTypeGroup : rPlotArea.maTypeGroups )
+    {
+        if( !xTypeGroup )
+            continue;
+        for( auto const& xSeries : xTypeGroup->maSeries )
+        {
+            if( !xSeries )
+                continue;
+            for( DataSourceType eType : { DataSourceType::STR_CAT, DataSourceType::NUM_VAL } )
+            {
+                DataSourceModel* pSource = xSeries->maSources.get( eType ).get();
+                if( !pSource || !pSource->mxDataSeq )
+                    continue;
+                DataSequenceModel& rSeq = *pSource->mxDataSeq;
+                rSeq.maFormula = lcl_trimPivotRows( rSeq.maFormula, rSeq.mnPointCount );
+            }
+        }
+    }
 }
 
 // Formulas with no numeric values and strings are zeroes in OOXML line charts also in the mode DispBlanksAs=gap,
@@ -163,6 +234,10 @@ void ChartSpaceConverter::convertFromModel( const Reference< XShapes >& rxExtern
 
     if (mrModel.mxPlotArea.is() && mrModel.mxShapeProp.is())
         aBackPropSet.setProperty(PROP_HasExplicitSpPr, true);
+
+    // pivot chart: plot the pivot items only, not the grand total row
+    if( mrModel.mbPivotChart && mrModel.mxPlotArea.is() )
+        lcl_trimPivotSeries( *mrModel.mxPlotArea );
 
     bool bMSO2007Doc = getFilter().isMSO2007Document();
     // convert plot area (container of all chart type groups)

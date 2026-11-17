@@ -14,6 +14,7 @@
 #include <PivotTableDataProvider.hxx>
 #include <PivotTableDataSource.hxx>
 #include <PivotTableDataSequence.hxx>
+#include <chart2uno.hxx>
 
 #include <miscuno.hxx>
 #include <document.hxx>
@@ -221,6 +222,18 @@ uno::Reference<chart2::data::XDataSource> SAL_CALL
 
     uno::Reference<chart2::data::XDataSource> xResult;
 
+    /*  A pivot chart imported from xlsx keeps the cell ranges of its series
+        until the pivot table changes; the chart asks for a cell range (e.g.
+        to split complex categories) - answer it from the cells instead of
+        with the pivot values. */
+    if (!aRangeRepresentation.isEmpty() && !aRangeRepresentation.startsWith("PT@")
+        && aRangeRepresentation != "PivotChart")
+    {
+        rtl::Reference<ScChart2DataProvider> xCells(new ScChart2DataProvider(m_pDocument));
+        if (xCells->createDataSourcePossible(aArguments))
+            return xCells->createDataSource(aArguments);
+    }
+
     if (aRangeRepresentation == lcl_identifierForCategories())
         xResult = createCategoriesDataSource(bOrientCol);
     else
@@ -334,6 +347,7 @@ void PivotTableDataProvider::collectPivotTableData()
     std::vector<OUString> aDataFieldNamesVectors;
 
     std::unordered_map<OUString, OUString> aDataFieldCaptionNames;
+    std::unordered_map<OUString, OUString> aDataFieldLayoutNames;
 
     sheet::DataPilotFieldOrientation eDataFieldOrientation = sheet::DataPilotFieldOrientation_HIDDEN;
 
@@ -517,6 +531,8 @@ void PivotTableDataProvider::collectPivotTableData()
                     {
                         aDataFieldNumberFormatMap[xLevelName->getName()] = nNumberFormat;
                         m_aDataFields.emplace_back(xLevelName->getName(), nDim, nDimPos, bHasHiddenMember);
+                        aDataFieldLayoutNames[xLevelName->getName()]
+                            = ScUnoHelpFunctions::GetStringProperty(xDimProp, SC_UNO_DP_LAYOUTNAME, OUString());
                     }
                     break;
 
@@ -530,7 +546,11 @@ void PivotTableDataProvider::collectPivotTableData()
     // Transform the name of data fields
     for (chart2::data::PivotTableFieldEntry& rDataFields : m_aDataFields)
     {
-        rDataFields.Name = aDataFieldCaptionNames[rDataFields.Name];
+        auto itCaption = aDataFieldCaptionNames.find(rDataFields.Name);
+        if (itCaption != aDataFieldCaptionNames.end() && !itCaption->second.isEmpty())
+            rDataFields.Name = itCaption->second;
+        else if (!aDataFieldLayoutNames[rDataFields.Name].isEmpty())
+            rDataFields.Name = aDataFieldLayoutNames[rDataFields.Name];
     }
 
     // Apply number format to the data
@@ -725,21 +745,33 @@ uno::Reference<sheet::XRangeSelection> SAL_CALL PivotTableDataProvider::getRange
 
 const std::vector<chart2::data::PivotTableFieldEntry>& PivotTableDataProvider::getColumnFields() const
 {
+    // the field buttons are drawn before any pivot data sequence was made
+    if (m_bNeedsUpdate && m_pDocument)
+        const_cast<PivotTableDataProvider*>(this)->collectPivotTableData();
     return m_aColumnFields;
 }
 
 const std::vector<chart2::data::PivotTableFieldEntry>& PivotTableDataProvider::getRowFields() const
 {
+    // the field buttons are drawn before any pivot data sequence was made
+    if (m_bNeedsUpdate && m_pDocument)
+        const_cast<PivotTableDataProvider*>(this)->collectPivotTableData();
     return m_aRowFields;
 }
 
 const std::vector<chart2::data::PivotTableFieldEntry>& PivotTableDataProvider::getPageFields() const
 {
+    // the field buttons are drawn before any pivot data sequence was made
+    if (m_bNeedsUpdate && m_pDocument)
+        const_cast<PivotTableDataProvider*>(this)->collectPivotTableData();
     return m_aPageFields;
 }
 
 const std::vector<chart2::data::PivotTableFieldEntry>& PivotTableDataProvider::getDataFields() const
 {
+    // the field buttons are drawn before any pivot data sequence was made
+    if (m_bNeedsUpdate && m_pDocument)
+        const_cast<PivotTableDataProvider*>(this)->collectPivotTableData();
     return m_aDataFields;
 }
 
@@ -807,7 +839,8 @@ OUString PivotTableDataProvider::getFieldOutputDescription(sal_Int32 nDimensionI
 {
     if (nDimensionIndex < 0)
         return OUString();
-    return m_aFieldOutputDescriptionMap.at(size_t(nDimensionIndex));
+    auto it = m_aFieldOutputDescriptionMap.find(nDimensionIndex);
+    return it == m_aFieldOutputDescriptionMap.end() ? OUString() : it->second;
 }
 
 // XModifyBroadcaster ========================================================
