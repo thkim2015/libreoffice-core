@@ -396,6 +396,11 @@ void DrawingFragment::onEndElement()
 
                     mxShape->addShape( getOoxFilter(), &getTheme(), mxDrawPage, aTransformation, mxShape->getFillProperties() );
 
+                    // ZetaOffice: 'Print object' off (clientData fPrintsWithSheet="0")
+                    if( !mxAnchor->isPrintsWithSheet() )
+                        if( SdrObject* pPrintObj = SdrObject::getSdrObjectFromXShape( mxShape->getXShape() ) )
+                            pPrintObj->SetPrintable( false );
+
                     /*  Collect all shape positions in the WorksheetHelper base
                         class. But first, scale EMUs to 1/100 mm. */
                     Rectangle aShapeRectHmm(
@@ -409,7 +414,15 @@ void DrawingFragment::onEndElement()
                         if ( pObj )
                         {
                             bool bResizeWithCell = mxAnchor->getEditAs() == ShapeAnchor::ANCHOR_TWOCELL;
+                            // SetCellAnchoredFromPosition skips invisible objects; a hidden shape
+                            // (cNvPr hidden="1") still has its cell anchor in the file, so anchor it
+                            // while visible or it is exported as editAs="absolute"
+                            const bool bHidden = !pObj->IsVisible();
+                            if (bHidden)
+                                pObj->SetVisible(true);
                             ScDrawLayer::SetCellAnchoredFromPosition( *pObj, getScDocument(), getSheetIndex(), bResizeWithCell );
+                            if (bHidden)
+                                pObj->SetVisible(false);
                         }
                     }
                 }

@@ -935,6 +935,15 @@ void drawDataBars(vcl::RenderContext& rRenderContext, const ScDataBarInfo* pOldD
         rRenderContext.DrawRect(aPaintRect);
     }
 
+    // Excel data bar border (x14:dataBar border="1")
+    if (pOldDataBarInfo->mxBorderColor)
+    {
+        rRenderContext.SetFillColor();
+        rRenderContext.SetLineColor(*pOldDataBarInfo->mxBorderColor);
+        rRenderContext.DrawRect(aPaintRect);
+        rRenderContext.SetLineColor();
+    }
+
     //draw axis
     if(!(pOldDataBarInfo->mnZero && pOldDataBarInfo->mnZero != 100))
         return;
@@ -2485,8 +2494,13 @@ void ScOutputData::DrawSparklines(vcl::RenderContext& rRenderContext)
                     Point aPoint(nStartPosX, nStartPosY);
                     Size aSize(nWidth, nHeight);
 
+                    // one device pixel in logic units: 1 on screen, but e.g. 26 (1/100 mm) when printing
+                    // or rendering pages, otherwise lines, markers and the border shrink to nothing there
+                    const Size aOnePixel = rRenderContext.PixelToLogic(Size(1, 1));
                     sc::SparklineRenderer renderer(*mpDoc);
-                    renderer.render(pSparkline, rRenderContext, tools::Rectangle(aPoint, aSize), 1, 1, mfZoomX, mfZoomY);
+                    renderer.render(pSparkline, rRenderContext, tools::Rectangle(aPoint, aSize),
+                                    std::max<tools::Long>(1, aOnePixel.Width()),
+                                    std::max<tools::Long>(1, aOnePixel.Height()), mfZoomX, mfZoomY);
                 }
 
                 nPosX += mpRowInfo[0].basicCellInfo(nX).nWidth * nLayoutSign;

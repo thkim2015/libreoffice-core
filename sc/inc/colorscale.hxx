@@ -124,6 +124,8 @@ struct SC_DLLPUBLIC ScDataBarFormatData
         mbOnlyBar(r.mbOnlyBar)
     {
         mxNegativeColor = r.mxNegativeColor;
+        mxBorderColor = r.mxBorderColor;
+        mxNegativeBorderColor = r.mxNegativeBorderColor;
 
         if(r.mpLowerLimit)
             mpLowerLimit.reset( new ScColorScaleEntry(*r.mpLowerLimit));
@@ -145,6 +147,14 @@ struct SC_DLLPUBLIC ScDataBarFormatData
      * Default color is 0xFF0000, this value is not set
      */
     std::optional<Color> mxNegativeColor;
+    /**
+     * Bar border color (xlsx x14:dataBar border="1" + x14:borderColor). Empty = no border.
+     */
+    std::optional<Color> mxBorderColor;
+    /**
+     * Border color of negative bars (x14:negativeBorderColor). Empty = same as mxBorderColor.
+     */
+    std::optional<Color> mxNegativeBorderColor;
     /**
      * Color of the axis if used
      * Default color is black

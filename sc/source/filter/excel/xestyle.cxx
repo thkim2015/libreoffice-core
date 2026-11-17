@@ -496,6 +496,13 @@ void XclExpPaletteImpl::SaveXml( XclExpXmlStream& rStrm )
     sax_fastparser::FSHelperPtr& rStyleSheet = rStrm.GetCurrentStream();
     rStyleSheet->startElement(XML_colors);
     rStyleSheet->startElement(XML_indexedColors);
+    // ZetaOffice: indexedColors replaces the whole table from index 0, but maPalette holds the
+    // user colors from index EXC_COLOR_USEROFFSET (8) - write the 8 fixed colors first, otherwise
+    // every indexed color (e.g. note text, grid colorId) is read shifted by 8 (10 red -> navy).
+    static const char* const spcFixed[] = { "FF000000", "FFFFFFFF", "FFFF0000", "FF00FF00",
+                                            "FF0000FF", "FFFFFF00", "FFFF00FF", "FF00FFFF" };
+    for( const char* pcFixed : spcFixed )
+        rStyleSheet->singleElement(XML_rgbColor, XML_rgb, pcFixed);
     for( const auto& rColor : maPalette )
         rStyleSheet->singleElement(XML_rgbColor, XML_rgb, XclXmlUtils::ToOString(rColor.maColor));
     rStyleSheet->endElement( XML_indexedColors );
@@ -3513,11 +3520,10 @@ XclExpXmlTableStyles::XclExpXmlTableStyles( const XclExpRoot& rRoot):
         }
     }
 
-    // custom PivotTable styles are written even when no table uses them (Excel keeps them
-    // in the gallery; pivotTableStyleInfo refers to them by name)
+    // custom styles are written even when nothing uses them (Excel keeps them in the
+    // workbook; pivotTableStyleInfo refers to them by name)
     for (const ScTableStyle* pCustom : pTableStyles->GetCustomTableStyles())
-        if (!pCustom->IsTable())
-            aTableStyleNames.insert(pCustom->GetName());
+        aTableStyleNames.insert(pCustom->GetName());
     if (ScDPCollection* pDPs = GetDoc().GetDPCollection())
         for (size_t i = 0; i < pDPs->GetCount(); ++i)
             if (const auto& rInfo = (*pDPs)[i].getStyleInfo(); rInfo.isSet() && !rInfo.maName.isEmpty()

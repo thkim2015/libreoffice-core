@@ -149,6 +149,11 @@ public:
      */
     OUString getLabelForRole( const OUString & rLabelSequenceRole );
 
+    /** Excel: a series without a name is shown as "Series<n>" (Korean U+ACC4 U+C5F4 + n),
+        n = 1-based position of the series in the diagram. The view sets the position
+        (SeriesPlotterContainer); -1 keeps the generated cell range label ("Column A"). */
+    void setAutoLabelIndex( sal_Int32 nIndex ) { m_nAutoLabelIndex = nIndex; }
+
     bool hasUnhiddenData();
 
     bool hasPointOwnColor(
@@ -197,6 +202,7 @@ public:
     void clearCalculatedYSequence();
 
 private:
+    sal_Int32 m_nAutoLabelIndex = -1;
 
     // late initialization to call after copy-constructing
     void Init( const DataSeries & rOther );

@@ -254,8 +254,9 @@ ContextHandlerRef StylesFragment::onCreateContext( sal_Int32 nElement, const Att
             if( nElement == XLS_TOKEN( dxf ) ) return new DxfContext( *this, getStyles().createDxf() );
         break;
         case XLS_TOKEN( tableStyles ):
-            // pivot-only styles (table="0") are kept too: custom PivotTable styles
-            if( nElement == XLS_TOKEN( tableStyle ) && (rAttribs.getBool(XML_table, true) || rAttribs.getBool(XML_pivot, true))) return new TableStyleContext( *this, getStyles().createTableStyle() );
+            // all custom styles are kept: pivot-only (table="0") ones and styles hidden from both
+            // galleries (table="0" pivot="0") that a table can still use by name
+            if( nElement == XLS_TOKEN( tableStyle ) ) return new TableStyleContext( *this, getStyles().createTableStyle() );
         break;
         case XLS_TOKEN( cellStyles ):
             if( nElement == XLS_TOKEN( cellStyle ) ) getStyles().importCellStyle( rAttribs );

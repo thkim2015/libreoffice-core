@@ -33,6 +33,10 @@ public:
     virtual void        onStartElement( const AttributeList& rAttribs ) override;
     virtual void        onCharacters( const OUString& rChars ) override;
     virtual void        onEndElement() override;
+    // x14:borderColor·x14:negativeBorderColor (not in the oox token list)
+    virtual css::uno::Reference< css::xml::sax::XFastContextHandler > SAL_CALL createUnknownChildContext(
+        const OUString& Namespace, const OUString& Name,
+        const css::uno::Reference< css::xml::sax::XFastAttributeList >& Attribs ) override;
 
 private:
     ScDataBarFormatData* mpTarget;

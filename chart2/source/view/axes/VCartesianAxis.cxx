@@ -30,12 +30,16 @@
 #include <ExplicitCategoriesProvider.hxx>
 #include <com/sun/star/chart2/AxisType.hpp>
 #include <o3tl/safeint.hxx>
+#include <o3tl/unit_conversion.hxx>
 #include <rtl/math.hxx>
 #include <comphelper/diagnose_ex.hxx>
 #include <tools/color.hxx>
 #include <svx/unoshape.hxx>
 #include <svx/unoshtxt.hxx>
 #include <DataTableView.hxx>
+#include <vcl/svapp.hxx>
+#include <vcl/settings.hxx>
+#include <i18nlangtag/languagetag.hxx>
 
 #include <comphelper/scopeguard.hxx>
 
@@ -403,9 +407,64 @@ static bool lcl_hasWordBreak( const rtl::Reference<SvxShapeText>& xShape )
     return false;
 }
 
+// Excel display units (c:dispUnits/c:builtInUnit, imported as the axis properties DisplayUnits
+// and BuiltInUnit): the value labels are divided by the unit and a unit label is shown. The
+// label texts are the ones Excel 2021 shows (Korean UI measured, tests/tmp/vis/28-disp-units.ps1)
+static double lcl_getDisplayUnit(const AxisProperties& rAxisProp, OUString* pLabel)
+{
+    if (!rAxisProp.m_xAxisModel.is()
+        || (rAxisProp.m_nAxisType != css::chart2::AxisType::REALNUMBER
+            && rAxisProp.m_nAxisType != css::chart2::AxisType::PERCENT))
+        return 1.0;
+    bool bDisplayUnits = false;
+    OUString aUnit;
+    try
+    {
+        rAxisProp.m_xAxisModel->getPropertyValue(u"DisplayUnits"_ustr) >>= bDisplayUnits;
+        rAxisProp.m_xAxisModel->getPropertyValue(u"BuiltInUnit"_ustr) >>= aUnit;
+    }
+    catch (const uno::Exception&)
+    {
+        return 1.0;
+    }
+    if (!bDisplayUnits || aUnit.isEmpty())
+        return 1.0;
+    struct Unit
+    {
+        std::u16string_view aName;
+        double fValue;
+        std::u16string_view aKo;
+        std::u16string_view aEn;
+    };
+    static constexpr Unit aUnits[] = {
+        { u"hundreds", 1e2, u"\uBC31", u"Hundreds" },
+        { u"thousands", 1e3, u"\uCC9C", u"Thousands" },
+        { u"tenThousands", 1e4, u"x 10000", u"x 10000" },
+        { u"hundredThousands", 1e5, u"x 100000", u"x 100000" },
+        { u"millions", 1e6, u"\uBC31\uB9CC", u"Millions" },
+        { u"tenMillions", 1e7, u"x 10000000", u"x 10000000" },
+        { u"hundredMillions", 1e8, u"x 100000000", u"x 100000000" },
+        { u"billions", 1e9, u"10\uC5B5", u"Billions" },
+        { u"trillions", 1e12, u"\uC870", u"Trillions" },
+    };
+    for (const Unit& rUnit : aUnits)
+    {
+        if (aUnit != rUnit.aName)
+            continue;
+        if (pLabel)
+        {
+            const bool bKo = Application::GetSettings().GetUILanguageTag().getLanguage() == "ko";
+            *pLabel = OUString(bKo ? rUnit.aKo : rUnit.aEn);
+        }
+        return rUnit.fValue;
+    }
+    return 1.0;
+}
+
 static OUString getTextLabelString(
     const FixedNumberFormatter& rFixedNumberFormatter, const uno::Sequence<OUString>* pCategories,
-    const TickInfo* pTickInfo, bool bComplexCat, Color& rExtraColor, bool& rHasExtraColor )
+    const TickInfo* pTickInfo, bool bComplexCat, Color& rExtraColor, bool& rHasExtraColor,
+    double fDisplayUnit = 1.0 )
 {
     if (pCategories)
     {
@@ -424,7 +483,7 @@ static OUString getTextLabelString(
     }
 
     // This is a numeric axis.  Format the original tick value per number format.
-    return rFixedNumberFormatter.getFormattedString(pTickInfo->getUnscaledTickValue(), rExtraColor, rHasExtraColor);
+    return rFixedNumberFormatter.getFormattedString(pTickInfo->getUnscaledTickValue() / fDisplayUnit, rExtraColor, rHasExtraColor);
 }
 
 static void getAxisLabelProperties(
@@ -859,7 +918,7 @@ bool VCartesianAxis::createTextShapes(
 
         OUString aLabel = getTextLabelString(
             aFixedNumberFormatter, pCategories, pTickInfo, isComplexCategoryAxis(),
-            nExtraColor, bHasExtraColor);
+            nExtraColor, bHasExtraColor, lcl_getDisplayUnit(m_aAxisProperties, nullptr));
 
         if(pColorAny)
             *pColorAny <<= bHasExtraColor?nExtraColor:nColor;
@@ -1032,7 +1091,7 @@ bool VCartesianAxis::createTextShapesSimple(
 
         OUString aLabel = getTextLabelString(
             aFixedNumberFormatter, pCategories, pTickInfo, isComplexCategoryAxis(),
-            nExtraColor, bHasExtraColor);
+            nExtraColor, bHasExtraColor, lcl_getDisplayUnit(m_aAxisProperties, nullptr));
 
         if(pColorAny)
             *pColorAny <<= bHasExtraColor?nExtraColor:nColor;
@@ -1585,7 +1644,7 @@ sal_Int32 VCartesianAxis::estimateMaximumAutoMainIncrementCount()
         {
             Color nColor = COL_AUTO;
             bool bHasColor = false;
-            OUString sValueLabel = aFixedNumberFormatterTest.getFormattedString(nLabel.fScaledTickValue, nColor, bHasColor);
+            OUString sValueLabel = aFixedNumberFormatterTest.getFormattedString(nLabel.fScaledTickValue / lcl_getDisplayUnit(m_aAxisProperties, nullptr), nColor, bHasColor);
             if (sValueLabel == sPreviousValueLabel)
             {
                 nSameLabel++;
@@ -1598,8 +1657,9 @@ sal_Int32 VCartesianAxis::estimateMaximumAutoMainIncrementCount()
         }
     }
     //for horizontal axis:
-    if( (m_nDimensionIndex == 0 && !m_aAxisProperties.m_bSwapXAndY)
-        || (m_nDimensionIndex == 1 && m_aAxisProperties.m_bSwapXAndY) )
+    const bool bHorizontal = (m_nDimensionIndex == 0 && !m_aAxisProperties.m_bSwapXAndY)
+                             || (m_nDimensionIndex == 1 && m_aAxisProperties.m_bSwapXAndY);
+    if( bHorizontal )
     {
         nTotalAvailable = nMaxWidth;
         nSingleNeeded = m_nMaximumTextWidthSoFar;
@@ -1607,6 +1667,25 @@ sal_Int32 VCartesianAxis::estimateMaximumAutoMainIncrementCount()
 
     if( nSingleNeeded>0 )
         nRet = nTotalAvailable/nSingleNeeded;
+
+    // A horizontal value axis in Excel does not pack the labels side by side: measured
+    // (Excel 2021, labels of any width) it allows N intervals only when the axis length
+    // plus 27pt holds N times 3.83 x the label font height - a 0..85 bar chart at 9pt on a
+    // 262pt axis gets 0..100 step 20, not 0..90 step 10
+    if (bHorizontal && m_aAxisProperties.m_xAxisModel.is()
+        && (m_aAxisProperties.m_nAxisType == css::chart2::AxisType::REALNUMBER
+            || m_aAxisProperties.m_nAxisType == css::chart2::AxisType::PERCENT))
+    {
+        float fCharHeight = 0.0;
+        m_aAxisProperties.m_xAxisModel->getPropertyValue(u"CharHeight"_ustr) >>= fCharHeight;
+        if (fCharHeight > 0)
+        {
+            const double fPt = o3tl::convert(1.0, o3tl::Length::pt, o3tl::Length::mm100);
+            const sal_Int32 nExcel = static_cast<sal_Int32>((nMaxWidth + 27.0 * fPt) / (3.83 * fCharHeight * fPt));
+            if (nExcel < nRet)
+                nRet = nExcel;
+        }
+    }
 
     if ( nMaxSameLabel > 0 )
     {
@@ -1757,6 +1836,7 @@ void VCartesianAxis::createLabels()
         }
     }
     doStaggeringOfLabels( m_aAxisLabelProperties, pTickFactory2D );
+    updateDisplayUnitLabel( pTickFactory2D );
 
     if (m_pDataTableView)
     {
@@ -1807,6 +1887,7 @@ void VCartesianAxis::createMaximumLabels()
         }
     }
     doStaggeringOfLabels( aAxisLabelProperties, pTickFactory2D );
+    updateDisplayUnitLabel( pTickFactory2D );
 }
 
 void VCartesianAxis::updatePositions()
@@ -1869,6 +1950,71 @@ void VCartesianAxis::updatePositions()
     }
 
     doStaggeringOfLabels( m_aAxisLabelProperties, pTickFactory2D );
+    updateDisplayUnitLabel( pTickFactory2D );
+}
+
+void VCartesianAxis::updateDisplayUnitLabel(TickFactory2D const* pTickFactory2D)
+{
+    if (m_xDisplayUnitLabel.is())
+    {
+        try
+        {
+            if (m_xTextTarget.is())
+                m_xTextTarget->remove(uno::Reference<drawing::XShape>(m_xDisplayUnitLabel));
+        }
+        catch (const uno::Exception&)
+        {
+        }
+        m_xDisplayUnitLabel.clear();
+    }
+    OUString aLabel;
+    if (!pTickFactory2D || !m_xTextTarget.is() || !m_aAxisProperties.m_bDisplayLabels
+        || lcl_getDisplayUnit(m_aAxisProperties, &aLabel) == 1.0 || aLabel.isEmpty())
+        return;
+
+    // the tick labels already placed
+    tools::Rectangle aLabels;
+    for (auto const& rTickInfos : m_aAllTickInfos)
+        for (auto const& rTickInfo : rTickInfos)
+            if (rTickInfo.xTextShape.is() && rTickInfo.xTextShape->GetSdrObject())
+                aLabels.Union(rTickInfo.xTextShape->GetSdrObject()->GetCurrentBoundRect());
+    if (aLabels.IsEmpty())
+        return;
+
+    const bool bVertical = pTickFactory2D->isVerticalAxis();
+    tNameSequence aPropNames;
+    tAnySequence aPropValues;
+    getAxisLabelProperties(aPropNames, aPropValues, m_aAxisProperties, m_aAxisLabelProperties, -1, false);
+    // Excel writes the unit label upward on a vertical axis
+    const double fAngle = bVertical ? 90.0 : 0.0;
+    m_xDisplayUnitLabel = ShapeFactory::createText(m_xTextTarget, aLabel, aPropNames, aPropValues,
+                                                   ShapeFactory::makeTransformation(awt::Point(0, 0), -basegfx::deg2rad(fAngle)));
+    if (!m_xDisplayUnitLabel.is() || !m_xDisplayUnitLabel->GetSdrObject())
+        return;
+    SdrObject* pObj = m_xDisplayUnitLabel->GetSdrObject();
+    const tools::Rectangle aOwn = pObj->GetCurrentBoundRect();
+
+    B2DVector aStart, aEnd;
+    AxisLabelAlignment aLabelAlign = m_aAxisProperties.maLabelAlignment;
+    get2DAxisMainLine(aStart, aEnd, aLabelAlign, getAxisIntersectionValue());
+    tools::Long nX, nY;
+    if (bVertical)
+    {
+        // beside the tick labels away from the axis, at the top of the axis
+        const tools::Long nGap = aOwn.GetWidth() / 4;
+        nX = aLabels.Center().X() < aStart.getX() ? aLabels.Left() - nGap - aOwn.GetWidth()
+                                                  : aLabels.Right() + nGap;
+        nY = static_cast<tools::Long>(std::min(aStart.getY(), aEnd.getY()));
+    }
+    else
+    {
+        // beside the tick labels away from the axis, at the right end of the axis
+        const tools::Long nGap = aOwn.GetHeight() / 4;
+        nX = static_cast<tools::Long>(std::max(aStart.getX(), aEnd.getX())) - aOwn.GetWidth();
+        nY = aLabels.Center().Y() < aStart.getY() ? aLabels.Top() - nGap - aOwn.GetHeight()
+                                                  : aLabels.Bottom() + nGap;
+    }
+    pObj->Move(Size(nX - aOwn.Left(), nY - aOwn.Top()));
 }
 
 void VCartesianAxis::createTickMarkLineShapes( TickInfoArrayType& rTickInfos, const TickmarkProperties& rTickmarkProperties, TickFactory2D const & rTickFactory2D, bool bOnlyAtLabels )

@@ -98,6 +98,7 @@ XclExpExtCfvo::XclExpExtCfvo( const XclExpRoot& rRoot, const ScColorScaleEntry& 
     }
     else
         maValue = OString::number(rEntry.GetValue());
+    mbGreater = rEntry.GetMode() == ScConditionMode::Greater;
 }
 
 namespace {
@@ -132,7 +133,8 @@ const char* getColorScaleType( ScColorScaleEntryType eType, bool bFirst )
 void XclExpExtCfvo::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
-    rWorksheet->startElementNS(XML_x14, XML_cfvo, XML_type, getColorScaleType(meType, mbFirst));
+    rWorksheet->startElementNS(XML_x14, XML_cfvo, XML_type, getColorScaleType(meType, mbFirst),
+                               XML_gte, sax_fastparser::UseIf("0", mbGreater));
 
     if (meType == COLORSCALE_FORMULA ||
             meType == COLORSCALE_PERCENT ||
@@ -286,6 +288,9 @@ XclExpExtDataBar::XclExpExtDataBar( const XclExpRoot& rRoot, const ScDataBarForm
     mbGradient = rFormatData.mbGradient;
     mnMinLength = rFormatData.mnMinLength;
     mnMaxLength = rFormatData.mnMaxLength;
+    mxBorderColor = rFormatData.mxBorderColor;
+    if (mxBorderColor)
+        mxNegativeBorderColor = rFormatData.mxNegativeBorderColor;
 }
 
 namespace {
@@ -382,18 +387,36 @@ const char* GetTypeString(ScConditionMode eMode)
 void XclExpExtDataBar::SaveXml( XclExpXmlStream& rStrm )
 {
     sax_fastparser::FSHelperPtr& rWorksheet = rStrm.GetCurrentStream();
-    rWorksheet->startElementNS( XML_x14, XML_dataBar,
-                                XML_minLength, OString::number(mnMinLength),
-                                XML_maxLength, OString::number(mnMaxLength),
-                                XML_axisPosition, getAxisPosition(meAxisPosition),
-                                XML_gradient, ToPsz(mbGradient) );
+    if (!mxBorderColor)
+    {
+        rWorksheet->startElementNS( XML_x14, XML_dataBar,
+                                    XML_minLength, OString::number(mnMinLength),
+                                    XML_maxLength, OString::number(mnMaxLength),
+                                    XML_axisPosition, getAxisPosition(meAxisPosition),
+                                    XML_gradient, ToPsz(mbGradient) );
 
+        mpLowerLimit->SaveXml( rStrm );
+        mpUpperLimit->SaveXml( rStrm );
+        mpNegativeColor->SaveXml( rStrm );
+        mpAxisColor->SaveXml( rStrm );
+
+        rWorksheet->endElementNS( XML_x14, XML_dataBar );
+        return;
+    }
+
+    OString aStart = "<x14:dataBar minLength=\"" + OString::number(mnMinLength)
+        + "\" maxLength=\"" + OString::number(mnMaxLength) + "\" border=\"1\""
+        + OString::Concat(mxNegativeBorderColor ? " negativeBarBorderColorSameAsPositive=\"0\"" : "")
+        + " axisPosition=\"" + getAxisPosition(meAxisPosition) + "\" gradient=\"" + ToPsz(mbGradient) + "\">";
+    rWorksheet->write(aStart);
     mpLowerLimit->SaveXml( rStrm );
     mpUpperLimit->SaveXml( rStrm );
+    rWorksheet->write(OString("<x14:borderColor rgb=\"" + XclXmlUtils::ToOString(*mxBorderColor) + "\"/>"));
     mpNegativeColor->SaveXml( rStrm );
+    if (mxNegativeBorderColor)
+        rWorksheet->write(OString("<x14:negativeBorderColor rgb=\"" + XclXmlUtils::ToOString(*mxNegativeBorderColor) + "\"/>"));
     mpAxisColor->SaveXml( rStrm );
-
-    rWorksheet->endElementNS( XML_x14, XML_dataBar );
+    rWorksheet->write("</x14:dataBar>");
 }
 
 XclExpExtIconSet::XclExpExtIconSet(const XclExpRoot& rRoot, const ScIconSetFormat& rFormat, const ScAddress& rPos):

@@ -103,6 +103,11 @@ public:
                              rtl::Reference<::chart::ChartModel> const& xChartDoc,
                              css::uno::Reference<css::uno::XComponentContext> const& rComponentContext) override;
 private: //methods
+    /// Excel display units (c:dispUnits): remove and re-create the unit label ("Thousands")
+    /// next to the tick labels; nothing when the axis has no display units
+    void updateDisplayUnitLabel(TickFactory2D const* pTickFactory2D);
+    rtl::Reference<SvxShapeText> m_xDisplayUnitLabel;
+
     /**
      * Go through all tick label positions and decide which labels to display
      * based on the text shape geometry, overlap setting, tick interval,

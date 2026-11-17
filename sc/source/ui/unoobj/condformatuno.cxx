@@ -153,7 +153,9 @@ enum DataBarProperties
     NegativeColor,
     DataBarEntries,
     MinimumLength,
-    MaximumLength
+    MaximumLength,
+    ZetaBorderColor,
+    ZetaNegativeBorderColor
 };
 
 std::span<const SfxItemPropertyMapEntry> getDataBarPropSet()
@@ -170,6 +172,8 @@ std::span<const SfxItemPropertyMapEntry> getDataBarPropSet()
         {u"DataBarEntries"_ustr, DataBarEntries, cppu::UnoType<uno::Sequence< sheet::XDataBarEntry >>::get(), 0, 0 },
         {u"MinimumLength"_ustr, MinimumLength, cppu::UnoType<double>::get(), 0, 0 },
         {u"MaximumLength"_ustr, MaximumLength, cppu::UnoType<double>::get(), 0, 0 },
+        {u"ZetaBorderColor"_ustr, ZetaBorderColor, cppu::UnoType<sal_Int32>::get(), 0, 0 },
+        {u"ZetaNegativeBorderColor"_ustr, ZetaNegativeBorderColor, cppu::UnoType<sal_Int32>::get(), 0, 0 },
     };
     return aDataBarPropertyMap_Impl;
 }
@@ -209,7 +213,8 @@ enum IconSetProperties
     Icons,
     Reverse,
     ShowValue,
-    IconSetEntries
+    IconSetEntries,
+    ZetaGreaterMask
 };
 
 std::span<const SfxItemPropertyMapEntry> getIconSetPropSet()
@@ -220,6 +225,7 @@ std::span<const SfxItemPropertyMapEntry> getIconSetPropSet()
         {u"Reverse"_ustr, Reverse, cppu::UnoType<bool>::get(), 0, 0 },
         {u"ShowValue"_ustr, ShowValue, cppu::UnoType<bool>::get(), 0, 0 },
         {u"IconSetEntries"_ustr, IconSetEntries, cppu::UnoType<uno::Sequence< sheet::XIconSetEntry >>::get(), 0, 0 },
+        {u"ZetaGreaterMask"_ustr, ZetaGreaterMask, cppu::UnoType<sal_Int32>::get(), 0, 0 },
     };
     return aIconSetPropertyMap_Impl;
 }
@@ -1276,6 +1282,21 @@ void SAL_CALL ScDataBarFormatObj::setPropertyValue(
 
         }
         break;
+        case ZetaBorderColor:
+        case ZetaNegativeBorderColor:
+        {
+            sal_Int32 nColor = -1;
+            if (!(aValue >>= nColor))
+                throw lang::IllegalArgumentException();
+            std::optional<Color>& rColor = pEntry->nWID == ZetaBorderColor
+                ? getCoreObject()->GetDataBarData()->mxBorderColor
+                : getCoreObject()->GetDataBarData()->mxNegativeBorderColor;
+            if (nColor < 0)
+                rColor.reset();
+            else
+                rColor = Color(ColorTransparency, nColor & 0xFFFFFF);
+        }
+        break;
         case DataBarEntries:
         {
             uno::Sequence<uno::Reference<sheet::XDataBarEntry> > aEntries;
@@ -1371,6 +1392,15 @@ uno::Any SAL_CALL ScDataBarFormatObj::getPropertyValue( const OUString& aPropert
             {
                 aAny <<= *getCoreObject()->GetDataBarData()->mxNegativeColor;
             }
+        }
+        break;
+        case ZetaBorderColor:
+        case ZetaNegativeBorderColor:
+        {
+            const std::optional<Color>& rColor = pEntry->nWID == ZetaBorderColor
+                ? getCoreObject()->GetDataBarData()->mxBorderColor
+                : getCoreObject()->GetDataBarData()->mxNegativeBorderColor;
+            aAny <<= rColor ? sal_Int32(rColor->GetRGBColor()) : sal_Int32(-1);
         }
         break;
         case DataBarEntries:
@@ -1639,6 +1669,17 @@ void SAL_CALL ScIconSetFormatObj::setPropertyValue(
 
         }
         break;
+        case ZetaGreaterMask:
+        {
+            // bit i set: threshold i compares with '>' (xlsx cfvo gte="0"), otherwise '>='
+            sal_Int32 nMask = 0;
+            if (!(aValue >>= nMask))
+                throw lang::IllegalArgumentException();
+            ScIconSetFormatData::Entries_t& rEntries = getCoreObject()->GetIconSetData()->m_Entries;
+            for (size_t i = 0; i < rEntries.size() && i < 31; ++i)
+                rEntries[i]->SetMode((nMask >> i) & 1 ? ScConditionMode::Greater : ScConditionMode::EqGreater);
+        }
+        break;
         default:
         break;
     }
@@ -1686,6 +1727,16 @@ uno::Any SAL_CALL ScIconSetFormatObj::getPropertyValue( const OUString& aPropert
                 aEntriesRange[i] = new ScIconSetEntryObj(this, i);
             }
             aAny <<= aEntries;
+        }
+        break;
+        case ZetaGreaterMask:
+        {
+            sal_Int32 nMask = 0;
+            const ScIconSetFormatData::Entries_t& rEntries = getCoreObject()->GetIconSetData()->m_Entries;
+            for (size_t i = 0; i < rEntries.size() && i < 31; ++i)
+                if (rEntries[i]->GetMode() == ScConditionMode::Greater)
+                    nMask |= sal_Int32(1) << i;
+            aAny <<= nMask;
         }
         break;
         default:

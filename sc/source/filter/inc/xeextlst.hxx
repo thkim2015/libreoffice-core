@@ -54,6 +54,7 @@ private:
     ScColorScaleEntryType meType;
     OString maValue;
     bool mbFirst;
+    bool mbGreater = false; // icon set threshold compares with '>' (gte="0")
 };
 
 class XclExpExtNegativeColor
@@ -114,6 +115,8 @@ private:
     std::unique_ptr<XclExpExtCfvo> mpUpperLimit;
     std::unique_ptr<XclExpExtNegativeColor> mpNegativeColor;
     std::unique_ptr<XclExpExtAxisColor> mpAxisColor;
+    std::optional<Color> mxBorderColor;
+    std::optional<Color> mxNegativeBorderColor;
 
 };
 

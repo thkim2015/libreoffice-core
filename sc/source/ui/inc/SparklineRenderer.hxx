@@ -255,6 +255,20 @@ private:
         rMarker.maColor = rColor;
     }
 
+    // Draw a polyline given in sparkline-local coordinates. The polygon is moved to the output
+    // position here instead of passing the translation as the object transform: when the output
+    // device records a metafile (print, PDF, page rendering), DrawPolyLineDirect stores the
+    // untransformed polygon, so lines and axes ended up at the page origin and were not visible.
+    // DrawPolyLine records the moved polygon and still draws directly when it can.
+    static void drawPolyLine(vcl::RenderContext& rRenderContext,
+                             basegfx::B2DHomMatrix const& rMatrix, basegfx::B2DPolygon aPolygon,
+                             double fLineWidth,
+                             basegfx::B2DLineJoin eLineJoin = basegfx::B2DLineJoin::Round)
+    {
+        aPolygon.transform(rMatrix);
+        rRenderContext.DrawPolyLine(aPolygon, fLineWidth, eLineJoin);
+    }
+
     void drawLine(vcl::RenderContext& rRenderContext, tools::Rectangle const& rRectangle,
                   SparklineValues const& rSparklineValues,
                   sc::SparklineAttributes const& rAttributes)
@@ -342,7 +356,7 @@ private:
                 aAxisPolygon.append({ x2, y });
 
                 rRenderContext.SetLineColor(rAttributes.getColorAxis().getFinalColor());
-                rRenderContext.DrawPolyLineDirect(aMatrix, aAxisPolygon, 0.2 * mfScaleX);
+                drawPolyLine(rRenderContext, aMatrix, aAxisPolygon, 0.2 * mfScaleX * mnOneX);
             }
         }
 
@@ -350,9 +364,8 @@ private:
 
         for (auto& rPolygon : aPolygons)
         {
-            rRenderContext.DrawPolyLineDirect(aMatrix, rPolygon,
-                                              rAttributes.getLineWeight() * mfScaleX, 0.0, nullptr,
-                                              basegfx::B2DLineJoin::Round);
+            drawPolyLine(rRenderContext, aMatrix, rPolygon,
+                         rAttributes.getLineWeight() * mfScaleX * mnOneX);
         }
 
         for (auto& rMarker : aMarkers)
@@ -442,7 +455,7 @@ private:
                 aAxisPolygon.append({ x2, nZeroPosition });
 
                 rRenderContext.SetLineColor(rAttributes.getColorAxis().getFinalColor());
-                rRenderContext.DrawPolyLineDirect(aMatrix, aAxisPolygon, 0.2 * mfScaleX);
+                drawPolyLine(rRenderContext, aMatrix, aAxisPolygon, 0.2 * mfScaleX * mnOneX);
             }
         }
         else
@@ -500,7 +513,7 @@ public:
         rRenderContext.SetClipRegion(vcl::Region(rRectangle));
 
         tools::Rectangle aOutputRectangle(rRectangle);
-        aOutputRectangle.shrink(6); // provide border
+        aOutputRectangle.shrink(6 * nOneX); // provide border
 
         mnOneX = nOneX;
         mnOneY = nOneY;

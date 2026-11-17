@@ -65,9 +65,12 @@ struct ScDataBarInfo
     bool mbGradient;
     bool mbShowValue;
     Color maAxisColor;
+    std::optional<Color> mxBorderColor;
 
     bool operator==(const ScDataBarInfo& r) const
     {
+        if (mxBorderColor != r.mxBorderColor)
+            return false;
         if( mnZero != r.mnZero )
             return false;
         if( maColor != r.maColor )
