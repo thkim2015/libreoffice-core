@@ -145,25 +145,38 @@ sal_Int32 VButton::measureLabel(const uno::Reference<beans::XPropertySet>& xText
     // grown size here, so measure with the chart text font on a virtual device
     if (m_sLabel.isEmpty())
         return 0;
-    bool bAsian = false;
-    for (sal_Int32 i = 0; i < m_sLabel.getLength(); ++i)
-        if (m_sLabel[i] >= 0x1100)
-            bAsian = true;
-    OUString aFontName;
+    // Asian letters use the Asian font, the rest (spaces, colon, Latin) the
+    // Western one, like the drawn label - measure each run with its own font
+    OUString aWestern, aAsian;
     try
     {
         if (xTextProp.is())
-            xTextProp->getPropertyValue(bAsian ? u"CharFontNameAsian"_ustr : u"CharFontName"_ustr)
-                >>= aFontName;
+        {
+            xTextProp->getPropertyValue(u"CharFontName"_ustr) >>= aWestern;
+            xTextProp->getPropertyValue(u"CharFontNameAsian"_ustr) >>= aAsian;
+        }
     }
     catch (const uno::Exception&)
     {
     }
     ScopedVclPtrInstance<VirtualDevice> pDev;
     pDev->SetMapMode(MapMode(MapUnit::Map100thMM));
-    vcl::Font aFont(aFontName, Size(0, 353)); // 10pt
-    pDev->SetFont(aFont);
-    return pDev->GetTextWidth(m_sLabel);
+    const vcl::Font aWesternFont(aWestern, Size(0, 353)); // 10pt
+    const vcl::Font aAsianFont(aAsian, Size(0, 353));
+    sal_Int32 nWidth = 0;
+    sal_Int32 nStart = 0;
+    const sal_Int32 nLen = m_sLabel.getLength();
+    while (nStart < nLen)
+    {
+        const bool bAsian = m_sLabel[nStart] >= 0x1100;
+        sal_Int32 nEnd = nStart + 1;
+        while (nEnd < nLen && (m_sLabel[nEnd] >= 0x1100) == bAsian)
+            ++nEnd;
+        pDev->SetFont(bAsian ? aAsianFont : aWesternFont);
+        nWidth += pDev->GetTextWidth(m_sLabel.copy(nStart, nEnd - nStart));
+        nStart = nEnd;
+    }
+    return nWidth;
 }
 
 } //namespace chart
