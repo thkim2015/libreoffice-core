@@ -287,8 +287,8 @@ std::span<const SfxItemPropertyMapEntry> getCondDatePropSet()
 {
     static const SfxItemPropertyMapEntry aCondDatePropertyMap_Impl[] =
     {
-        {u"StyleName"_ustr, StyleName, cppu::UnoType<OUString>::get(), 0, 0},
-        {u"DateType"_ustr, Icons, cppu::UnoType<decltype(sheet::DateType::TODAY)>::get(), 0, 0 },
+        {u"StyleName"_ustr, Date_StyleName, cppu::UnoType<OUString>::get(), 0, 0},
+        {u"DateType"_ustr, DateType, cppu::UnoType<decltype(sheet::DateType::TODAY)>::get(), 0, 0 },
     };
     return aCondDatePropertyMap_Impl;
 }

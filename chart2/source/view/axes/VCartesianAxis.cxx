@@ -1972,12 +1972,13 @@ void VCartesianAxis::updateDisplayUnitLabel(TickFactory2D const* pTickFactory2D)
         || lcl_getDisplayUnit(m_aAxisProperties, &aLabel) == 1.0 || aLabel.isEmpty())
         return;
 
-    // the tick labels already placed
+    // the tick labels already placed. The chart model is locked while the view is created, so
+    // the bound rects are not calculated yet (empty) - use the snap rects (rotation included)
     tools::Rectangle aLabels;
     for (auto const& rTickInfos : m_aAllTickInfos)
         for (auto const& rTickInfo : rTickInfos)
             if (rTickInfo.xTextShape.is() && rTickInfo.xTextShape->GetSdrObject())
-                aLabels.Union(rTickInfo.xTextShape->GetSdrObject()->GetCurrentBoundRect());
+                aLabels.Union(rTickInfo.xTextShape->GetSdrObject()->GetSnapRect());
     if (aLabels.IsEmpty())
         return;
 
@@ -1992,7 +1993,7 @@ void VCartesianAxis::updateDisplayUnitLabel(TickFactory2D const* pTickFactory2D)
     if (!m_xDisplayUnitLabel.is() || !m_xDisplayUnitLabel->GetSdrObject())
         return;
     SdrObject* pObj = m_xDisplayUnitLabel->GetSdrObject();
-    const tools::Rectangle aOwn = pObj->GetCurrentBoundRect();
+    const tools::Rectangle aOwn = pObj->GetSnapRect();
 
     B2DVector aStart, aEnd;
     AxisLabelAlignment aLabelAlign = m_aAxisProperties.maLabelAlignment;
