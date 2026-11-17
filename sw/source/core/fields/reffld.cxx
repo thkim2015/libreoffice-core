@@ -491,6 +491,9 @@ static void FilterText(OUString & rText, LanguageType const eLang,
 // #i81002# - parameter <pFieldTextAttr> added
 void SwGetRefField::UpdateField( const SwTextField* pFieldTextAttr, SwFrame* pFrame )
 {
+    // weboffice: a locked field (bookmark "_ZetaLock..." at it) keeps its result
+    if (pFieldTextAttr && !m_sText.isEmpty() && pFieldTextAttr->IsZetaLocked())
+        return;
     SwDoc& rDoc = static_cast<SwGetRefFieldType*>(GetTyp())->GetDoc();
 
     for (SwRootFrame const* const pLay : rDoc.GetAllLayouts())
