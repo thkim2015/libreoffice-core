@@ -148,6 +148,15 @@ Reference< XDataSequence > ChartConverter::createDataSequence(
         {
             OSL_FAIL( "ChartConverter::createDataSequence - cannot create data sequence" );
         }
+        // A series name linked to an empty cell (c:tx/c:strRef with an empty cache) is still a name:
+        // keep an empty label so the series does not get an automatic Series<n> name (Office shows it blank)
+        if( rRole == "label" && rDataSeq.maData.empty() && !rDataSeq.maFormula.isEmpty() ) try
+        {
+            return rxDataProvider->createDataSequenceByValueArray( rRole, u"{\"\"}"_ustr, rRoleQualifier );
+        }
+        catch( Exception& )
+        {
+        }
     }
 
     return nullptr;
