@@ -908,8 +908,11 @@ std::vector<std::shared_ptr<VButton>> lcl_createButtons(
         awt::Point aNewPosition(x, y);
         const bool bArrow = sColumnFieldEntry.Name != "Data";
         sal_Int32 nWidth = 100 + (bArrow ? 600 : 100) + 150;
-        for (char16_t c : sColumnFieldEntry.Name)
+        for (sal_Int32 i = 0; i < sColumnFieldEntry.Name.getLength(); ++i)
+        {
+            const sal_Unicode c = sColumnFieldEntry.Name[i];
             nWidth += c >= 0x1100 ? 370 : (c == ' ' ? 110 : 200);
+        }
         awt::Size aSize(std::max<sal_Int32>(nWidth, 800), nHeight);
         rMinWidth = bPlaceButtonsVertically ? std::max<sal_Int32>(rMinWidth, aSize.Width + 200)
                                             : x + aSize.Width + 100;
