@@ -664,7 +664,11 @@ static OUString getLabelForLabeledDataSequence(
         Reference< chart2::data::XDataSequence > xSeq( xLabeledSeq->getLabel());
         if( xSeq.is() )
             aResult = lcl_getDataSequenceLabel( xSeq );
-        if( ( !xSeq.is() || aResult.isEmpty() ) && nAutoLabelIndex >= 0 )
+        // A series whose name points to an empty cell keeps an empty name (Office shows a blank
+        // legend entry); only a series without any name gets the automatic Series<n>
+        if( xSeq.is() && aResult.isEmpty() && nAutoLabelIndex >= 0 )
+            return aResult;
+        if( !xSeq.is() && nAutoLabelIndex >= 0 )
             aResult = lcl_getUnnamedSeriesLabel( nAutoLabelIndex );
         else if( !xSeq.is() || aResult.isEmpty() )
         {
