@@ -1774,8 +1774,8 @@ void lcl_collectFieldButtons(const SdrObjList* pList, std::vector<OUString>& rOu
     }
 }
 // Every text shape of the chart view (title, legend entry, axis label, data label):
-// "text\tx\ty\tw\th\tParaIsCharacterDistance" - lets the web shell (and its tests) read
-// the rendered legend names and the Asian/Latin spacing flag.
+// "text\tx\ty\tw\th\tParaIsCharacterDistance\tCharWeight" - lets the web shell (and its tests)
+// read the rendered legend names, the Asian/Latin spacing flag and the font weight.
 void lcl_collectTexts(const SdrObjList* pList, std::vector<OUString>& rOut)
 {
     if (!pList)
@@ -1794,12 +1794,16 @@ void lcl_collectTexts(const SdrObjList* pList, std::vector<OUString>& rOut)
             continue;
         OUString aText;
         bool bDistance = false;
+        float fWeight = 0;
         try
         {
             aText = xText->getString();
             uno::Reference<beans::XPropertySet> xProps(xText, uno::UNO_QUERY);
             if (xProps.is())
+            {
                 xProps->getPropertyValue(u"ParaIsCharacterDistance"_ustr) >>= bDistance;
+                xProps->getPropertyValue(u"CharWeight"_ustr) >>= fWeight;
+            }
         }
         catch (const uno::Exception&)
         {
@@ -1811,7 +1815,8 @@ void lcl_collectTexts(const SdrObjList* pList, std::vector<OUString>& rOut)
                        + OUString::number(aRect.Top()) + "\t"
                        + OUString::number(aRect.GetWidth()) + "\t"
                        + OUString::number(aRect.GetHeight()) + "\t"
-                       + OUString::number(bDistance ? 1 : 0));
+                       + OUString::number(bDistance ? 1 : 0) + "\t"
+                       + OUString::number(fWeight));
     }
 }
 // Every chart object shape carries its ObjectIdentifier ("CID/...") as name.

@@ -29,6 +29,7 @@
 #include "Tickmarks_Equidistant.hxx"
 #include <ExplicitCategoriesProvider.hxx>
 #include <com/sun/star/chart2/AxisType.hpp>
+#include <com/sun/star/awt/FontWeight.hpp>
 #include <o3tl/safeint.hxx>
 #include <o3tl/unit_conversion.hxx>
 #include <rtl/math.hxx>
@@ -1986,6 +1987,19 @@ void VCartesianAxis::updateDisplayUnitLabel(TickFactory2D const* pTickFactory2D)
     tNameSequence aPropNames;
     tAnySequence aPropValues;
     getAxisLabelProperties(aPropNames, aPropValues, m_aAxisProperties, m_aAxisLabelProperties, -1, false);
+    // Excel draws the unit label bold (Chart.Export of an empty c:dispUnitsLbl, Excel 2021)
+    for (const OUString& rName : { u"CharWeight"_ustr, u"CharWeightAsian"_ustr, u"CharWeightComplex"_ustr })
+    {
+        const auto it = std::find(std::cbegin(aPropNames), std::cend(aPropNames), rName);
+        const sal_Int32 nAt = it - std::cbegin(aPropNames);
+        if (nAt == aPropNames.getLength())
+        {
+            aPropNames.realloc(nAt + 1);
+            aPropNames.getArray()[nAt] = rName;
+            aPropValues.realloc(nAt + 1);
+        }
+        aPropValues.getArray()[nAt] <<= css::awt::FontWeight::BOLD;
+    }
     // Excel writes the unit label upward on a vertical axis
     const double fAngle = bVertical ? 90.0 : 0.0;
     m_xDisplayUnitLabel = ShapeFactory::createText(m_xTextTarget, aLabel, aPropNames, aPropValues,
@@ -2001,11 +2015,14 @@ void VCartesianAxis::updateDisplayUnitLabel(TickFactory2D const* pTickFactory2D)
     tools::Long nX, nY;
     if (bVertical)
     {
-        // beside the tick labels away from the axis, at the top of the axis
-        const tools::Long nGap = aOwn.GetWidth() / 4;
+        // beside the tick labels away from the axis, near the top of the axis. Measured
+        // (Excel 2021 Chart.Export, 9pt labels): the glyph starts 6.5px below the axis top and
+        // 10px left of the tick labels - about 0.3 glyph advance down and 0.4 line height apart
+        const tools::Long nGap = aOwn.GetWidth() * 2 / 5;
         nX = aLabels.Center().X() < aStart.getX() ? aLabels.Left() - nGap - aOwn.GetWidth()
                                                   : aLabels.Right() + nGap;
-        nY = static_cast<tools::Long>(std::min(aStart.getY(), aEnd.getY()));
+        nY = static_cast<tools::Long>(std::min(aStart.getY(), aEnd.getY()))
+             + aOwn.GetHeight() * 3 / 10;
     }
     else
     {
