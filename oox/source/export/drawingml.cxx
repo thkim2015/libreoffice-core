@@ -6776,7 +6776,10 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
                     }
                     else if( rAttribsProp.Name == "dir" )
                     {
-                        rAttribsProp.Value <<= lcl_CalculateDir(dX, dY);
+                        // zeta: without a distance the direction cannot be computed; keep the
+                        // imported one (PowerPoint perspective shadows have dir but no dist)
+                        if (dX != 0 || dY != 0)
+                            rAttribsProp.Value <<= lcl_CalculateDir(dX, dY);
                     }
                     else if( rAttribsProp.Name == "blurRad" )
                     {
