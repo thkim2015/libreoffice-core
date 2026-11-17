@@ -22,6 +22,32 @@ using namespace ::com::sun::star::uno;
 
 namespace oox::drawingml {
 
+namespace {
+
+// zeta: remember an a:prstClr name of an effect colour (PowerPoint writes preset shadows with
+// prstClr black) so that export can write the same element instead of an equal a:srgbClr
+class EffectColorContext : public ColorContext
+{
+public:
+    EffectColorContext(ContextHandler2Helper const& rParent, Effect& rEffect, model::ComplexColor* pComplexColor)
+        : ColorContext(rParent, &rEffect.moColor, pComplexColor)
+        , mrEffect(rEffect)
+    {
+    }
+
+    virtual ContextHandlerRef onCreateContext(sal_Int32 nElement, const AttributeList& rAttribs) override
+    {
+        if (nElement == A_TOKEN(prstClr))
+            mrEffect.maAttribs[u"prstClr"_ustr] <<= rAttribs.getStringDefaulted(XML_val);
+        return ColorContext::onCreateContext(nElement, rAttribs);
+    }
+
+private:
+    Effect& mrEffect;
+};
+
+}
+
 EffectPropertiesContext::EffectPropertiesContext( ContextHandler2Helper const& rParent,
         EffectProperties& rEffectProperties, model::EffectStyle* pEffectStyle) noexcept
     : ContextHandler2(rParent)
@@ -107,7 +133,7 @@ ContextHandlerRef EffectPropertiesContext::onCreateContext( sal_Int32 nElement, 
                 rEffect.mbRotateWithShape = rAttribs.getBool(XML_rotWithShape, true); // boolean, default "true"
                 pColor = &rEffect.maColor;
             }
-            return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, pColor);
+            return new EffectColorContext(*this, *mrEffectProperties.m_Effects[nPos], pColor);
         }
         break;
         case A_TOKEN( innerShdw ):
@@ -128,7 +154,7 @@ ContextHandlerRef EffectPropertiesContext::onCreateContext( sal_Int32 nElement, 
                 rEffect.mnDirection = rAttribs.getInteger(XML_dir, 0); // ST_PositiveFixedAngle, default 0
                 pColor = &rEffect.maColor;
             }
-            return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, pColor);
+            return new EffectColorContext(*this, *mrEffectProperties.m_Effects[nPos], pColor);
         }
         break;
         case A_TOKEN( prstShdw ):
@@ -136,7 +162,7 @@ ContextHandlerRef EffectPropertiesContext::onCreateContext( sal_Int32 nElement, 
             // zeta: LibreOffice cannot draw preset shadows - keep them in the grab bag for export
             mrEffectProperties.m_Effects[nPos]->msName = "prstShdw";
             saveUnsupportedAttribs(*mrEffectProperties.m_Effects[nPos], rAttribs);
-            return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, nullptr);
+            return new EffectColorContext(*this, *mrEffectProperties.m_Effects[nPos], nullptr);
         }
         break;
         case A_TOKEN( glow ):
@@ -196,7 +222,7 @@ ContextHandlerRef EffectPropertiesContext::onCreateContext( sal_Int32 nElement, 
 
                 pColor = &rEffect.maColor;
             }
-            return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, pColor);
+            return new EffectColorContext(*this, *mrEffectProperties.m_Effects[nPos], pColor);
         }
         case A_TOKEN( blur ):
         {
@@ -212,7 +238,7 @@ ContextHandlerRef EffectPropertiesContext::onCreateContext( sal_Int32 nElement, 
                 rEffect.mbGrow = rAttribs.getBool(XML_grow, true); // boolean, default true
                 pColor = &rEffect.maColor;
             }
-            return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, pColor);
+            return new EffectColorContext(*this, *mrEffectProperties.m_Effects[nPos], pColor);
         }
         break;
     }
