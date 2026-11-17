@@ -28,6 +28,7 @@
 #include <oox/export/utils.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/drawingml/color.hxx>
+#include <oox/token/tokenmap.hxx>
 #include <drawingml/fillproperties.hxx>
 #include <drawingml/effectproperties.hxx>
 #include <drawingml/fontworkhelpers.hxx>
@@ -6515,6 +6516,7 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
         nEffectToken = FSNS( XML_a, XML_blur );
 
     OUString sSchemeClr;
+    OUString sPrstClr; // zeta
     ::Color nRgbClr;
     sal_Int32 nAlpha = MAX_PERCENT;
     Sequence< PropertyValue > aTransformations;
@@ -6533,6 +6535,10 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
                     OUString sVal;
                     rOuterShdwProp.Value >>= sVal;
                     aOuterShdwAttrList->add( XML_algn, sVal );
+                }
+                else if( rOuterShdwProp.Name == "prstClr" ) // zeta: a:prstClr name, not an attribute
+                {
+                    rOuterShdwProp.Value >>= sPrstClr;
                 }
                 else if( rOuterShdwProp.Name == "prst" ) // zeta: prstShdw
                 {
@@ -6659,7 +6665,18 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
 
     mpFS->startElement( nEffectToken, aOuterShdwAttrList );
 
-    if( bContainsColor )
+    // zeta: an imported (or app-set) a:prstClr is written again while the colour is unchanged
+    const sal_Int32 nPrstToken = sPrstClr.isEmpty() ? XML_TOKEN_INVALID : oox::TokenMap::getTokenFromUnicode(sPrstClr);
+    const bool bPrstClr = bContainsColor && sSchemeClr.isEmpty() && nPrstToken != XML_TOKEN_INVALID
+        && Color::getDmlPresetColor(nPrstToken, API_RGB_TRANSPARENT) == nRgbClr;
+    if( bPrstClr )
+    {
+        mpFS->startElementNS(XML_a, XML_prstClr, XML_val, sPrstClr);
+        if( nAlpha < MAX_PERCENT )
+            mpFS->singleElementNS(XML_a, XML_alpha, XML_val, OString::number(nAlpha));
+        mpFS->endElementNS(XML_a, XML_prstClr);
+    }
+    else if( bContainsColor )
     {
         if( sSchemeClr.isEmpty() )
             WriteColor( nRgbClr, nAlpha );
