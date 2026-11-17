@@ -2741,7 +2741,9 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
         break;
     case NS_ooxml::LN_EG_RPrBase_specVanish:
         // tdf#131728 import inline heading
-        if ( nIntValue && !IsStyleSheetImport() &&
+        // only from the paragraph mark: Word also writes specVanish into the runs of
+        // ToC entries of numbered headings with style separator, it means nothing there
+        if ( nIntValue && !IsStyleSheetImport() && m_pImpl->m_bInParaMarkRPr &&
                 // tdf#164901 but not in a floating table
                 !(m_pImpl->hasTableManager() &&
                         m_pImpl->getTableManager().getCurrentTablePosition().getLength() != 0) )
@@ -3154,7 +3156,12 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     {
         if (nSprmId == NS_ooxml::LN_CT_PPr_sectPr)
             m_pImpl->SetParaSectpr(true);
+        const bool bParaMarkRPr = nSprmId == NS_ooxml::LN_CT_PPr_rPr;
+        if (bParaMarkRPr)
+            m_pImpl->m_bInParaMarkRPr = true;
         resolveSprmProps(*this, rSprm);
+        if (bParaMarkRPr)
+            m_pImpl->m_bInParaMarkRPr = false;
         if (nSprmId == NS_ooxml::LN_EG_RPrBase_rFonts)
             m_pImpl->appendGrabBag(m_pImpl->m_aInteropGrabBag, u"rFonts"_ustr, m_pImpl->m_aSubInteropGrabBag);
         else if (nSprmId == NS_ooxml::LN_EG_RPrBase_lang)
