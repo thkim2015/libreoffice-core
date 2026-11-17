@@ -1187,9 +1187,13 @@ void SwTOXBaseSection::Update(const SfxItemSet* pAttr,
         // page number. If it is a TOX_INDEX and the SwForm IsCommaSeparated()
         // then a range of entries must be generated into one paragraph
         size_t nRange = 1;
+        // Word \r (run-in index): only the sub-entries are run into the paragraph
+        // of their main entry ("Main: sub1 1; sub2 2"), entries without a key keep
+        // their own paragraphs
         if(TOX_INDEX == SwTOXBase::GetType() &&
                 GetTOXForm().IsCommaSeparated() &&
-                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX)
+                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX &&
+                !m_aSortArr[nCnt]->pTextMark->GetTOXMark().GetPrimaryKey().isEmpty())
         {
             const SwTOXMark& rMark = m_aSortArr[nCnt]->pTextMark->GetTOXMark();
             const OUString& sPrimKey = rMark.GetPrimaryKey();
@@ -1206,6 +1210,20 @@ void SwTOXBaseSection::Update(const SfxItemSet* pAttr,
                 nRange++;
             }
         }
+        else if (TOX_INDEX == SwTOXBase::GetType() && GetTOXForm().IsCommaSeparated()
+                 && m_aSortArr[nCnt]->GetType() == TOX_SORT_CUSTOM
+                 && m_aSortArr[nCnt]->GetLevel() >= FORM_PRIMARY_KEY)
+        {
+            // a key (main entry) takes its directly following sub-entries
+            const sal_uInt16 nSubLevel = m_aSortArr[nCnt]->GetLevel() + 1;
+            while (m_aSortArr.size() > (nCnt + nRange)
+                   && m_aSortArr[nCnt + nRange]->GetType() == TOX_SORT_INDEX
+                   && m_aSortArr[nCnt + nRange]->GetLevel() == nSubLevel)
+                nRange++;
+        }
+        // UpdatePageNum looks the paragraph up from the first run-in entry
+        for (size_t nRunIn = 1; nRunIn < nRange; ++nRunIn)
+            m_aSortArr[nCnt + nRunIn]->pTOXNd = pTOXNd;
         // pass node index of table-of-content section and default page description
         // to method <GenerateText(..)>.
         ::SetProgressState( 0, rDoc.GetDocShell() );
@@ -1928,8 +1946,10 @@ void SwTOXBaseSection::UpdatePageNum()
 
         // process run in lines
         size_t nRange = 0;
+        // Word \r: entries without a key are not run in (see Update)
         if(GetTOXForm().IsCommaSeparated() &&
-                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX)
+                m_aSortArr[nCnt]->GetType() == TOX_SORT_INDEX &&
+                !m_aSortArr[nCnt]->pTextMark->GetTOXMark().GetPrimaryKey().isEmpty())
         {
             const SwTOXMark& rMark = m_aSortArr[nCnt]->pTextMark->GetTOXMark();
             const OUString& sPrimKey = rMark.GetPrimaryKey();

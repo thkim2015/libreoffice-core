@@ -179,12 +179,25 @@ ToxTextGenerator::GenerateText(SwDoc& rDoc,
     OUString & rText = const_cast<OUString&>(pTOXNd->GetText());
     rText.clear();
     OUString sAltText;
+    // Word \r: a key (main entry) followed by its run-in sub-entries
+    // "Main: sub1 1; sub2 2"
+    const bool bRunInKey = numberOfEntriesToProcess > 1
+        && entries.at(indexOfEntryToProcess)->GetType() == TOX_SORT_CUSTOM;
     for(sal_uInt16 nIndex = indexOfEntryToProcess; nIndex < indexOfEntryToProcess + numberOfEntriesToProcess; nIndex++)
     {
-        if(nIndex > indexOfEntryToProcess)
-            rText += ", "; // comma separation
+        if (nIndex > indexOfEntryToProcess)
+        {
+            if (!bRunInKey)
+                rText += ", "; // comma separation
+            else if (nIndex == indexOfEntryToProcess + 1)
+                rText += ": ";
+            else
+                rText += "; ";
+        }
         // Initialize String with the Pattern from the form
         const SwTOXSortTabBase& rBase = *entries.at(nIndex);
+        // the run-in key gives only its text
+        const bool bKeyTextOnly = bRunInKey && nIndex == indexOfEntryToProcess;
         sal_uInt16 nLvl = rBase.GetLevel();
         OSL_ENSURE( nLvl < mToxForm.GetFormMax(), "invalid FORM_LEVEL");
 
@@ -196,6 +209,9 @@ ToxTextGenerator::GenerateText(SwDoc& rDoc,
         for (size_t i = 0; i < aPattern.size(); ++i) // #i21237#
         {
             const auto& aToken = aPattern[i];
+            if (bKeyTextOnly && aToken.eTokenType != TOKEN_ENTRY_TEXT
+                && aToken.eTokenType != TOKEN_ENTRY)
+                continue;
             sal_Int32 nStartCharStyle = rText.getLength();
             UIName aCharStyleName = aToken.sCharStyleName;
             switch( aToken.eTokenType )
