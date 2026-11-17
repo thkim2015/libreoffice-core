@@ -1260,6 +1260,14 @@ void DocxAttributeOutput::PopulateFrameProperties(const SwFrameFormat* pFrameFor
     attrList->add( FSNS( XML_w, XML_vAnchor), relativeFromV );
     attrList->add( FSNS( XML_w, XML_hAnchor), relativeFromH );
     attrList->add( FSNS( XML_w, XML_hRule), "exact");
+    // anchor lock from DOCX import (frame grab bag)
+    if (const SfxGrabBagItem* pBag = pFrameFormat->GetAttrSet().GetItemIfSet(RES_FRMATR_GRABBAG, false))
+    {
+        bool bLocked = false;
+        auto it = pBag->GetGrabBag().find(u"AnchorLocked"_ustr);
+        if (it != pBag->GetGrabBag().end() && (it->second >>= bLocked) && bLocked)
+            attrList->add(FSNS(XML_w, XML_anchorLock), "1");
+    }
 
     m_pSerializer->singleElementNS( XML_w, XML_framePr, attrList );
 }
@@ -11296,8 +11304,71 @@ void DocxAttributeOutput::FormatBox( const SvxBoxItem& rBox )
         aStyleBorders[ SvxBoxItemLine::RIGHT ] = SvxBoxItem::SvxLineToLine(pInherited->GetRight(), false);
     }
     bool bUseFrame = m_aFramePr.UseFrameBorders(!m_xTableWrt ? -1 : m_tableReference.m_nTableDepth);
-    impl_borders(m_pSerializer, rBox, aOutputBorderOptions, aStyleBorders,
+
+    // Word's border in between (kept from DOCX import): the import emulated it as the top border of
+    // the following paragraphs of the group and removed the bottom border of the previous ones
+    uno::Sequence<beans::PropertyValue> aBetween;
+    std::optional<SvxBoxItem> oBox;
+    const SfxGrabBagItem* pParaBag = GetExport().m_pStyAttr ? nullptr
+        : static_cast<const SfxGrabBagItem*>(m_rExport.HasItem(RES_PARATR_GRABBAG));
+    if (pParaBag)
+    {
+        const std::map<OUString, uno::Any>& rBag = pParaBag->GetGrabBag();
+        auto itBetween = rBag.find(u"ParaBorderBetween"_ustr);
+        if (itBetween != rBag.end())
+            itBetween->second >>= aBetween;
+        if (aBetween.hasElements())
+        {
+            oBox.emplace(rBox);
+            auto lcl_restore = [&](const OUString& rName, SvxBoxItemLine eLine)
+            {
+                auto itLine = rBag.find(rName);
+                auto itDist = rBag.find(rName + "Dist");
+                if (itLine == rBag.end())
+                    return;
+                table::BorderLine2 aLine;
+                itLine->second >>= aLine;
+                editeng::SvxBorderLine aSvxLine;
+                if (SvxBoxItem::LineToSvxLine(aLine, aSvxLine, true))
+                    oBox->SetLine(&aSvxLine, eLine);
+                else
+                    oBox->SetLine(nullptr, eLine);
+                sal_Int32 nDist = 0;
+                if (itDist != rBag.end() && (itDist->second >>= nDist))
+                    oBox->SetDistance(o3tl::toTwips(nDist, o3tl::Length::mm100), eLine);
+            };
+            // the top border is the emulated border in between unless it was changed in the meantime
+            if (rBag.find(u"ParaBorderOrigTop"_ustr) != rBag.end() && rBox.GetTop())
+                lcl_restore(u"ParaBorderOrigTop"_ustr, SvxBoxItemLine::TOP);
+            if (!rBox.GetBottom())
+                lcl_restore(u"ParaBorderOrigBottom"_ustr, SvxBoxItemLine::BOTTOM);
+        }
+    }
+    impl_borders(m_pSerializer, oBox ? *oBox : rBox, aOutputBorderOptions, aStyleBorders,
                  bUseFrame ? m_aFramePr.Frame() : nullptr);
+    if (aBetween.hasElements())
+    {
+        rtl::Reference<FastAttributeList> pAttrs = FastSerializerHelper::createAttrList();
+        for (const auto& rProp : aBetween)
+        {
+            OUString aValue;
+            rProp.Value >>= aValue;
+            sal_Int32 nToken = 0;
+            if (rProp.Name == "val") nToken = XML_val;
+            else if (rProp.Name == "sz") nToken = XML_sz;
+            else if (rProp.Name == "space") nToken = XML_space;
+            else if (rProp.Name == "color") nToken = XML_color;
+            else if (rProp.Name == "themeColor") nToken = XML_themeColor;
+            else if (rProp.Name == "themeTint") nToken = XML_themeTint;
+            else if (rProp.Name == "themeShade") nToken = XML_themeShade;
+            else if (rProp.Name == "shadow") nToken = XML_shadow;
+            else if (rProp.Name == "frame") nToken = XML_frame;
+            if (nToken && !aValue.isEmpty())
+                pAttrs->add(FSNS(XML_w, nToken), aValue);
+        }
+        if (pAttrs->getFastAttributes().hasElements())
+            m_pSerializer->singleElementNS(XML_w, XML_between, pAttrs);
+    }
 
     // Close the paragraph's borders tag
     m_pSerializer->endElementNS( XML_w, XML_pBdr );
@@ -11573,6 +11644,10 @@ void DocxAttributeOutput::ParaGrabBag(const SfxGrabBagItem& rItem)
         else if (rGrabBagElement.first == "ParaSuppressAutoHyphens")
         {
             // Handled in DocxAttributeOutput::ParaHyphenZone().
+        }
+        else if (rGrabBagElement.first.startsWith("ParaBorder"))
+        {
+            // Handled in DocxAttributeOutput::FormatBox().
         }
         else
             SAL_WARN("sw.ww8", "DocxAttributeOutput::ParaGrabBag: unhandled grab bag property " << rGrabBagElement.first );

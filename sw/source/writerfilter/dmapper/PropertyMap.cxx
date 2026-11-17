@@ -2486,6 +2486,7 @@ void ParagraphProperties::ResetFrameProperties()
     m_xAlign         = -1;
     m_yAlign         = -1;
     m_nDropCapLength = 0;
+    m_bAnchorLock    = false;
 }
 
 bool TablePropertyMap::getValue( TablePropertyMapTarget eWhich, sal_Int32& nFill )
