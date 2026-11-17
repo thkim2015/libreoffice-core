@@ -1230,6 +1230,20 @@ sal_Int32 lcl_getPivotFieldButtons(ChartModel& rModel)
     return nMask;
 }
 
+// Width of an Excel field button: the label (10pt, CJK about one em) plus the
+// VButton paragraph margins (100 left, 600 right with the drop-down arrow,
+// else 100) and some slack so the label never wraps.
+sal_Int32 lcl_fieldButtonWidth(std::u16string_view aLabel, bool bArrow)
+{
+    sal_Int32 nWidth = 100 + (bArrow ? 600 : 100) + 150;
+    for (char16_t c : aLabel)
+        nWidth += c >= 0x1100 ? 370 : (c == ' ' ? 110 : 200);
+    return std::max<sal_Int32>(nWidth, 800);
+}
+
+/*  Excel pivot chart field buttons: report filter and value field buttons in a
+    row at the top left, axis field buttons at the bottom left, each as wide as
+    its label (Excel 2021 PDF export, tests/fixtures/pivot-visual.office.xlsx). */
 void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
                        ChartModel& rModel,
                        awt::Rectangle& rRemainingSpace)
@@ -1245,70 +1259,84 @@ void lcl_createButtons(const rtl::Reference<SvxShapeGroupAnyD>& xPageShapes,
     if (!(nButtons & 32))
         return;
 
-    awt::Size aSize(4000, 700); // size of the button
+    const sal_Int32 nHeight = 500;
+    const sal_Int32 nGap = 100;
 
+    // top row: report filter buttons, then value field buttons
     tools::Long x = 0;
-
-    if ((nButtons & 1) && !pPivotTableDataProvider->getPageFields().empty())
+    bool bAnyTopButton = false;
+    if (nButtons & 1)
     {
-        x = 0;
-
-        const std::vector<chart2::data::PivotTableFieldEntry>& aPivotFieldEntries = pPivotTableDataProvider->getPageFields();
-        for (css::chart2::data::PivotTableFieldEntry const & rPageFieldEntry : aPivotFieldEntries)
+        for (css::chart2::data::PivotTableFieldEntry const & rPageFieldEntry : pPivotTableDataProvider->getPageFields())
         {
             VButton aButton;
             aButton.init(xPageShapes);
-            awt::Point aNewPosition(rRemainingSpace.X + x + 100, rRemainingSpace.Y + 100);
             sal_Int32 nDimensionIndex = rPageFieldEntry.DimensionIndex;
-            OUString aFieldOutputDescription = pPivotTableDataProvider->getFieldOutputDescription(nDimensionIndex);
-            aButton.setLabel(rPageFieldEntry.Name + " | " + aFieldOutputDescription);
+            aButton.setLabel(rPageFieldEntry.Name);
             aButton.setCID("FieldButton.Page." + OUString::number(nDimensionIndex));
-            aButton.setPosition(aNewPosition);
+            awt::Size aSize(lcl_fieldButtonWidth(rPageFieldEntry.Name, true), nHeight);
+            aButton.setPosition(awt::Point(rRemainingSpace.X + x + nGap, rRemainingSpace.Y + nGap));
             aButton.setSize(aSize);
+            aButton.setBGColor(Color(0x00FFFFFF));
             if (rPageFieldEntry.HasHiddenMembers)
                 aButton.setArrowColor(Color(0x0000FF));
-
             aButton.createShapes(xModelPage);
-            x += aSize.Width + 100;
+            x += aSize.Width + nGap;
+            bAnyTopButton = true;
         }
-        rRemainingSpace.Y += (aSize.Height + 100 + 100);
-        rRemainingSpace.Height -= (aSize.Height + 100 + 100);
+    }
+    if (nButtons & 8)
+    {
+        for (css::chart2::data::PivotTableFieldEntry const & rDataFieldEntry : pPivotTableDataProvider->getDataFields())
+        {
+            if (rDataFieldEntry.Name.isEmpty())
+                continue;
+            VButton aButton;
+            aButton.init(xPageShapes);
+            aButton.setLabel(rDataFieldEntry.Name);
+            aButton.setCID("FieldButton.Data." + OUString::number(rDataFieldEntry.DimensionIndex));
+            awt::Size aSize(lcl_fieldButtonWidth(rDataFieldEntry.Name, false), nHeight);
+            aButton.setPosition(awt::Point(rRemainingSpace.X + x + nGap, rRemainingSpace.Y + nGap));
+            aButton.setSize(aSize);
+            aButton.setBGColor(Color(0x00FFFFFF));
+            aButton.showArrow(false);
+            aButton.createShapes(xModelPage);
+            x += aSize.Width + nGap;
+            bAnyTopButton = true;
+        }
+    }
+    if (bAnyTopButton)
+    {
+        rRemainingSpace.Y += (nHeight + 2 * nGap);
+        rRemainingSpace.Height -= (nHeight + 2 * nGap);
     }
 
-    aSize = awt::Size(3000, 700); // size of the button
-
-    if (pPivotTableDataProvider->getRowFields().empty())
+    // bottom row: axis field buttons ("Data" is the value fields, drawn above)
+    if (!(nButtons & 4))
         return;
-
     bool bAnyRowButton = false;
-    x = 200;
-    const std::vector<chart2::data::PivotTableFieldEntry>& aPivotFieldEntries = pPivotTableDataProvider->getRowFields();
-    for (css::chart2::data::PivotTableFieldEntry const & rRowFieldEntry : aPivotFieldEntries)
+    x = 0;
+    for (css::chart2::data::PivotTableFieldEntry const & rRowFieldEntry : pPivotTableDataProvider->getRowFields())
     {
-        // "Data" is the value field button, the others are axis field buttons
-        if (!(nButtons & (rRowFieldEntry.Name == "Data" ? 8 : 4)))
+        if (rRowFieldEntry.Name == "Data")
             continue;
         bAnyRowButton = true;
         VButton aButton;
         aButton.init(xPageShapes);
-        awt::Point aNewPosition(rRemainingSpace.X + x + 100,
-                                rRemainingSpace.Y + rRemainingSpace.Height - aSize.Height - 100);
+        awt::Size aSize(lcl_fieldButtonWidth(rRowFieldEntry.Name, true), nHeight);
+        aButton.setPosition(awt::Point(rRemainingSpace.X + x + nGap,
+                                       rRemainingSpace.Y + rRemainingSpace.Height - nHeight - nGap));
         aButton.setLabel(rRowFieldEntry.Name);
         aButton.setCID("FieldButton.Row." + OUString::number(rRowFieldEntry.DimensionIndex));
-        aButton.setPosition(aNewPosition);
         aButton.setSize(aSize);
-        if ( rRowFieldEntry.Name == "Data" )
-        {
-            aButton.setBGColor( Color(0x00F6F6F6) );
-            aButton.showArrow( false );
-        }
-        else if (rRowFieldEntry.HasHiddenMembers)
+        aButton.setBGColor(Color(0x00FFFFFF));
+        if (rRowFieldEntry.HasHiddenMembers)
             aButton.setArrowColor(Color(0x0000FF));
         aButton.createShapes(xModelPage);
-        x += aSize.Width + 100;
+        x += aSize.Width + nGap;
     }
     if (bAnyRowButton)
-        rRemainingSpace.Height -= (aSize.Height + 100 + 100);
+        rRemainingSpace.Height -= (nHeight + 2 * nGap);
 }
 
 void formatPage(

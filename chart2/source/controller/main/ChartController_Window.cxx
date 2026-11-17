@@ -1999,6 +1999,9 @@ void ChartController::impl_SetMousePointer( const MouseEvent & rEvent )
 
 void ChartController::sendPopupRequest(std::u16string_view rCID, tools::Rectangle aRectangle)
 {
+    // value field buttons have no member list
+    if (o3tl::starts_with(rCID, u"FieldButton.Data."))
+        return;
     ChartModel* pChartModel = m_aModel->getModel().get();
     if (!pChartModel)
         return;
