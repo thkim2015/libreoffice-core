@@ -1243,7 +1243,7 @@ sal_Int32 lcl_fieldButtonWidth(VButton& rButton, const uno::Reference<beans::XPr
     const sal_Int32 nRight = bArrow ? nFieldButtonArrow : nFieldButtonRight;
     rButton.setMargins(nFieldButtonLeft, nRight);
     // slack so rounding in the text layout never wraps the label
-    return std::max<sal_Int32>(rButton.measureLabel(xTextProp) + nFieldButtonLeft + nRight + 60, 500);
+    return std::max<sal_Int32>(rButton.measureLabel(xTextProp) + nFieldButtonLeft + nRight + 80, 500);
 }
 
 /*  Excel pivot chart field buttons: report filter and value field buttons in a

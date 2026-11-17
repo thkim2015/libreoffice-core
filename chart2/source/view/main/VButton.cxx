@@ -108,6 +108,9 @@ void VButton::createShapes(const uno::Reference<beans::XPropertySet>& xTextProp)
     aTextValueMap[u"TextVerticalAdjust"_ustr] <<= drawing::TextVerticalAdjust_CENTER;
     // a field button label stays on one line (Excel)
     aTextValueMap[u"TextWordWrap"_ustr] <<= false;
+    // the paragraph margins are the only inner space (no text frame distances)
+    aTextValueMap[u"TextLeftDistance"_ustr] <<= sal_Int32(0);
+    aTextValueMap[u"TextRightDistance"_ustr] <<= sal_Int32(0);
     aTextValueMap[u"ParaLeftMargin"_ustr] <<= m_nLeftMargin;
     // room for the drop-down arrow only when there is one
     aTextValueMap[u"ParaRightMargin"_ustr]
