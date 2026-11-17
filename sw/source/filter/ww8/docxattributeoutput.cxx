@@ -11309,7 +11309,7 @@ void DocxAttributeOutput::FormatBox( const SvxBoxItem& rBox )
     // the following paragraphs of the group and removed the bottom border of the previous ones
     uno::Sequence<beans::PropertyValue> aBetween;
     std::optional<SvxBoxItem> oBox;
-    const SfxGrabBagItem* pParaBag = GetExport().m_pStyAttr ? nullptr
+    const SfxGrabBagItem* pParaBag = m_rExport.m_bStyDef ? nullptr
         : static_cast<const SfxGrabBagItem*>(m_rExport.HasItem(RES_PARATR_GRABBAG));
     if (pParaBag)
     {
