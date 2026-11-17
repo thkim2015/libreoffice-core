@@ -39,6 +39,8 @@ protected:
     virtual void HandleBrace(const SmBraceNode* pNode, int nLevel) = 0;
     virtual void HandleVerticalBrace(const SmVerticalBraceNode* pNode, int nLevel) = 0;
     virtual void HandleBlank() = 0;
+    /// A font attribute (size, color ...) around a subexpression; by default only the body is written.
+    virtual void HandleFont(const SmFontNode* pNode, int nLevel) { HandleAllSubNodes(pNode, nLevel); }
     /// A function name (sin, func f ...) followed by its argument in an expression; returns false
     /// when not written as one structure (the caller then writes both nodes one after the other).
     virtual bool HandleFunction(const SmNode* /*pName*/, const SmNode* /*pArg*/, int /*nLevel*/)
