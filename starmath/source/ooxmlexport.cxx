@@ -198,6 +198,37 @@ void SmOoxmlExport::HandleFractions( const SmNode* pNode, int nLevel, const char
     m_pSerializer->endElementNS( XML_m, XML_f );
 }
 
+// "size -n", "size *0.7", "size /2" around a subexpression (e.g. a small fraction) is written the
+// way Office writes its small fraction: a box whose argument is one script level smaller.
+void SmOoxmlExport::HandleFont(const SmFontNode* pNode, int nLevel)
+{
+    bool bSmaller = false;
+    if (pNode->GetToken().eType == TSIZE)
+    {
+        const double f = pNode->GetSizeParameter();
+        switch (pNode->GetSizeType())
+        {
+            case FontSizeType::MINUS: bSmaller = f > 0; break;
+            case FontSizeType::MULTIPLY: bSmaller = f > 0 && f < 1; break;
+            case FontSizeType::DIVIDE: bSmaller = f > 1; break;
+            default: break;
+        }
+    }
+    if (!bSmaller)
+    {
+        HandleAllSubNodes(pNode, nLevel);
+        return;
+    }
+    m_pSerializer->startElementNS(XML_m, XML_box);
+    m_pSerializer->startElementNS(XML_m, XML_e);
+    m_pSerializer->startElementNS(XML_m, XML_argPr);
+    m_pSerializer->singleElementNS(XML_m, XML_argSz, FSNS(XML_m, XML_val), "-1");
+    m_pSerializer->endElementNS(XML_m, XML_argPr);
+    HandleAllSubNodes(pNode, nLevel + 1);
+    m_pSerializer->endElementNS(XML_m, XML_e);
+    m_pSerializer->endElementNS(XML_m, XML_box);
+}
+
 void SmOoxmlExport::HandleAttribute( const SmAttributeNode* pNode, int nLevel )
 {
     switch( pNode->Attribute()->GetToken().eType )
