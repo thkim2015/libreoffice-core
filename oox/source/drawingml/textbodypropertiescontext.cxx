@@ -26,6 +26,10 @@
 #include <com/sun/star/text/XTextColumns.hpp>
 
 #include <drawingml/textbodyproperties.hxx>
+#include <drawingml/fillproperties.hxx>
+#include <drawingml/lineproperties.hxx>
+#include <oox/drawingml/shape.hxx>
+#include <oox/ppt/pptimport.hxx>
 #include <drawingml/textbody.hxx>
 #include <drawingml/customshapegeometry.hxx>
 #include <drawingml/scene3dcontext.hxx>
@@ -45,6 +49,30 @@ using namespace ::com::sun::star::text;
 using namespace ::com::sun::star::uno;
 
 namespace oox::drawingml {
+
+namespace {
+// zeta: PowerPoint draws a shape with a text transform (prstTxWarp) as the shape itself with
+// warped text. LibreOffice turns it into Fontwork, which drops the shape fill and outline. When
+// the shape has a visible fill or line (own or from p:style), keep it a normal shape instead.
+bool lcl_keepShapeWithWarp(const Shape& rShape, ::oox::core::XmlFilterBase& rFilter)
+{
+    if (dynamic_cast<oox::ppt::PowerPointImport*>(&rFilter) == nullptr)
+        return false;
+    bool bFill = false;
+    const FillProperties& rFill = rShape.getFillProperties();
+    if (rFill.moFillType.has_value())
+        bFill = rFill.moFillType.value() != XML_noFill;
+    else if (const ShapeStyleRef* pRef = rShape.getShapeStyleRef(XML_fillRef))
+        bFill = pRef->mnThemedIdx > 0;
+    bool bLine = false;
+    const LineProperties& rLine = rShape.getLineProperties();
+    if (rLine.maLineFill.moFillType.has_value())
+        bLine = rLine.maLineFill.moFillType.value() != XML_noFill;
+    else if (const ShapeStyleRef* pRef = rShape.getShapeStyleRef(XML_lnRef))
+        bLine = pRef->mnThemedIdx > 0;
+    return bFill || bLine;
+}
+}
 
 // CT_TextBodyProperties
 TextBodyPropertiesContext::TextBodyPropertiesContext(ContextHandler2Helper const& rParent,
@@ -216,6 +244,15 @@ ContextHandlerRef TextBodyPropertiesContext::onCreateContext( sal_Int32 aElement
                 if( mpShapePtr )
                 {
                     const std::optional<OUString> sPrst = rAttribs.getString( XML_prst );
+                    if (sPrst.has_value() && sPrst.value() != "textNoShape"
+                        && lcl_keepShapeWithWarp(*mpShapePtr, getFilter()))
+                    {
+                        // zeta: keep fill and outline; the warp is only written back on export
+                        mrTextBodyProp.msKeptWarp = sPrst.value();
+                        mrTextBodyProp.maKeptWarpGuides.clear();
+                        mbInKeptWarp = true;
+                        return this;
+                    }
                     if( sPrst.has_value() )
                     {
                         mrTextBodyProp.msPrst = sPrst.value();
@@ -224,6 +261,16 @@ ContextHandlerRef TextBodyPropertiesContext::onCreateContext( sal_Int32 aElement
                                                            *( mpShapePtr->getCustomShapeProperties() ) );
                     }
                 }
+                break;
+
+            case A_TOKEN( avLst ):
+                if (mbInKeptWarp)
+                    return this;
+                break;
+            case A_TOKEN( gd ):
+                if (mbInKeptWarp)
+                    mrTextBodyProp.maKeptWarpGuides.emplace_back(
+                        rAttribs.getStringDefaulted(XML_name), rAttribs.getStringDefaulted(XML_fmla));
                 break;
 
             case A_TOKEN( prot ):           // CT_TextProtectionProperty

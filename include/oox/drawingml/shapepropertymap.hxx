@@ -28,6 +28,7 @@
 #include <tools/color.hxx>
 
 namespace oox { class ModelObjectHelper; }
+namespace com::sun::star::drawing { struct Hatch; }
 
 namespace oox::drawingml {
 
@@ -130,6 +131,10 @@ public:
     {
         return setAnyProperty(ePropId, css::uno::Any(rValue));
     }
+
+    /** zeta: sets a fill hatch named after the OOXML pattern preset ('pct75 1'),
+        so that the export can write the same prst again. */
+    bool                setFillHatchPreset( const css::drawing::Hatch& rHatch, const OUString& rPreset );
 
     using PropertyMap::setAnyProperty;
     using PropertyMap::setProperty;

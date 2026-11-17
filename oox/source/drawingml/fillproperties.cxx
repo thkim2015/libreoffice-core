@@ -47,6 +47,7 @@
 #include <oox/token/namespaces.hxx>
 #include <oox/token/properties.hxx>
 #include <oox/token/tokens.hxx>
+#include <oox/token/tokenmap.hxx>
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
 
@@ -759,7 +760,9 @@ void FillProperties::pushToPropMap(ShapePropertyMap& rPropMap, const GraphicHelp
                 if( aColor.isUsed() && maPatternProps.moPattPreset.has_value() )
                 {
                     eFillStyle = FillStyle_HATCH;
-                    rPropMap.setProperty( ShapeProperty::FillHatch, createHatch( maPatternProps.moPattPreset.value(), aColor.getColor( rGraphicHelper, nPhClr ) ) );
+                    // zeta: keep the preset name in the hatch name ('pct75 1') - the export writes it as prst again
+                    rPropMap.setFillHatchPreset( createHatch( maPatternProps.moPattPreset.value(), aColor.getColor( rGraphicHelper, nPhClr ) ),
+                                                 TokenMap::getUnicodeTokenName( maPatternProps.moPattPreset.value() ) );
                     if( aColor.hasTransparency() )
                         rPropMap.setProperty( ShapeProperty::FillTransparency, aColor.getTransparency() );
 

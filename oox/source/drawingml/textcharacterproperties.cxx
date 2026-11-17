@@ -176,7 +176,10 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
             case css::i18n::ScriptType::LATIN:
                 rPropMap.setProperty( PROP_CharLocale, aLocale);break;
             case css::i18n::ScriptType::ASIAN:
-                rPropMap.setProperty( PROP_CharLocaleAsian, aLocale);break;
+                rPropMap.setProperty( PROP_CharLocaleAsian, aLocale);
+                if (mbLangWestern)
+                    rPropMap.setProperty( PROP_CharLocale, aLocale);
+                break;
             case css::i18n::ScriptType::COMPLEX:
                 rPropMap.setProperty( PROP_CharLocaleComplex, aLocale);break;
         }

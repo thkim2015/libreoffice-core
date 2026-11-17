@@ -32,6 +32,7 @@
 #include <oox/helper/helper.hxx>
 #include <oox/helper/propertyset.hxx>
 #include <oox/core/xmlfilterbase.hxx>
+#include <oox/ppt/pptimport.hxx>
 #include <oox/token/properties.hxx>
 #include <oox/token/tokens.hxx>
 #include <comphelper/diagnose_ex.hxx>
@@ -78,6 +79,21 @@ sal_Int32 TextRun::insertAt(
             aTextCharacterProps.maFillProperties.moFillType = XML_solidFill;
 
         aTextCharacterProps.assignUsed(maTextCharacterProperties);
+        // zeta: a run of non East Asian text marked with an East Asian lang (e.g. a space
+        // with lang="ko-KR" between English runs) would otherwise merge with its neighbours.
+        if (maTextCharacterProperties.moLang.has_value() && !getText().isEmpty()
+            && dynamic_cast<const oox::ppt::PowerPointImport*>(&rFilterBase) != nullptr)
+        {
+            bool bAsianChar = false;
+            for (sal_Int32 i = 0; i < getText().getLength() && !bAsianChar; ++i)
+            {
+                sal_Unicode c = getText()[i];
+                bAsianChar = (c >= 0x1100 && c <= 0x11FF) || (c >= 0x2E80 && c <= 0xD7FF)
+                             || (c >= 0xF900 && c <= 0xFAFF) || (c >= 0xFE30 && c <= 0xFE4F)
+                             || (c >= 0xFF00 && c <= 0xFFEF) || (c >= 0xD800 && c <= 0xDFFF);
+            }
+            aTextCharacterProps.mbLangWestern = !bAsianChar;
+        }
         if ( aTextCharacterProps.moHeight.has_value() )
             nCharHeight = aTextCharacterProps.moHeight.value();
         else

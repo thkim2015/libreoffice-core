@@ -62,6 +62,20 @@ struct Effect
     css::beans::PropertyValue getEffect();
 };
 
+/** zeta: LibreOffice cannot draw the preset shadows (a:prstShdw): they are approximated by a
+    hard shadow with an offset, a size and an alignment (the perspective presets lose their
+    slant). Distances in 1/100 mm, sizes in 1/1000 %, alignment as model::RectangleAlignment. */
+struct PresetShadowApprox
+{
+    sal_Int32 nXDist = 0;
+    sal_Int32 nYDist = 0;
+    sal_Int32 nSizeX = 100000;
+    sal_Int32 nSizeY = 100000;
+    sal_Int32 nAlignment = 8; // model::RectangleAlignment::Bottom
+};
+PresetShadowApprox approximatePresetShadow(std::u16string_view rPrst, sal_Int64 nDistEmu,
+                                           sal_Int64 nDir);
+
 struct EffectProperties
 {
     EffectShadowProperties maShadow;

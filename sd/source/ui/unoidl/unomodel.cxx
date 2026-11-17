@@ -68,6 +68,7 @@
 #include <comphelper/dispatchcommand.hxx>
 #include <comphelper/indexedpropertyvalues.hxx>
 #include <comphelper/lok.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/propertysequence.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/sequence.hxx>
@@ -1803,6 +1804,7 @@ const sal_uInt16 WID_MODEL_THEME = 15;
 const sal_uInt16 WID_MODEL_ALLOWLINKUPDATE    = 16;
 const sal_uInt16 WID_MODEL_SLIDESECTIONS      = 17;
 const sal_uInt16 WID_MODEL_ANIMATIONSOUNDLINK = 18;
+const sal_uInt16 WID_MODEL_ZETAFIRSTSLIDENUM  = 19; // zeta: internal, not in the IDL
 
 static const SvxItemPropertySet* ImplGetDrawModelPropertySet()
 {
@@ -1826,6 +1828,7 @@ static const SvxItemPropertySet* ImplGetDrawModelPropertySet()
         { sUNO_Prop_InteropGrabBag,       WID_MODEL_INTEROPGRABBAG,     cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(),       0, 0},
         { u"SlideSections"_ustr,          WID_MODEL_SLIDESECTIONS,      cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(),       0, 0},
         { u"HasExternalAnimationSoundLink"_ustr, WID_MODEL_ANIMATIONSOUNDLINK, cppu::UnoType<bool>::get(),       0, 0},
+        { u"ZetaFirstSlideNum"_ustr,      WID_MODEL_ZETAFIRSTSLIDENUM,  cppu::UnoType<sal_Int32>::get(),       0, 0},
         { sUNO_Prop_Theme,                WID_MODEL_THEME,              cppu::UnoType<util::XTheme>::get(),       0, 0},
     };
     static SvxItemPropertySet aDrawModelPropertySet_Impl( aDrawModelPropertyMap_Impl, SdrObject::GetGlobalDrawObjectItemPool() );
@@ -2974,6 +2977,24 @@ void SAL_CALL SdXImpressDocument::setPropertyValue( const OUString& aPropertyNam
         case WID_MODEL_INTEROPGRABBAG:
             setGrabBagItem(aValue);
             break;
+        case WID_MODEL_ZETAFIRSTSLIDENUM:
+        {
+            // zeta: first slide number (pptx firstSlideNum) for the slide number fields, kept in
+            // the grab bag like the import does (a script cannot write back the whole grab bag:
+            // it holds a theme object of a type the WASM build does not register)
+            sal_Int32 nFirst = 1;
+            if (!(aValue >>= nFirst))
+                throw lang::IllegalArgumentException();
+            uno::Any aBag;
+            getGrabBagItem(aBag);
+            comphelper::SequenceAsHashMap aGrabBag(aBag);
+            if (nFirst == 1)
+                aGrabBag.erase(u"ZetaFirstSlideNum"_ustr);
+            else
+                aGrabBag[u"ZetaFirstSlideNum"_ustr] <<= nFirst;
+            setGrabBagItem(uno::Any(aGrabBag.getAsConstPropertyValueList()));
+            break;
+        }
         case WID_MODEL_SLIDESECTIONS:
         {
             uno::Sequence<beans::PropertyValue> aSections;
@@ -3117,6 +3138,16 @@ uno::Any SAL_CALL SdXImpressDocument::getPropertyValue( const OUString& Property
         case WID_MODEL_INTEROPGRABBAG:
             getGrabBagItem(aAny);
             break;
+        case WID_MODEL_ZETAFIRSTSLIDENUM:
+        {
+            uno::Any aBag;
+            getGrabBagItem(aBag);
+            comphelper::SequenceAsHashMap aGrabBag(aBag);
+            aAny = aGrabBag.getValue(u"ZetaFirstSlideNum"_ustr);
+            if (!aAny.hasValue())
+                aAny <<= sal_Int32(1);
+            break;
+        }
         case WID_MODEL_SLIDESECTIONS:
             aAny <<= mpDoc->GetSectionManager().GetSectionsAsPropertyValues();
             break;

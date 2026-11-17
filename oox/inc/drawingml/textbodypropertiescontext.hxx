@@ -42,6 +42,7 @@ public:
 private:
     TextBodyProperties& mrTextBodyProp;
     ShapePtr mpShapePtr;
+    bool mbInKeptWarp = false;
 };
 
 }

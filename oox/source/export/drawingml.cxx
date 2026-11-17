@@ -29,6 +29,7 @@
 #include <oox/helper/propertyset.hxx>
 #include <oox/drawingml/color.hxx>
 #include <drawingml/fillproperties.hxx>
+#include <drawingml/effectproperties.hxx>
 #include <drawingml/fontworkhelpers.hxx>
 #include <drawingml/textparagraph.hxx>
 #include <oox/token/namespaces.hxx>
@@ -110,6 +111,7 @@
 #include <com/sun/star/drawing/RectanglePoint.hpp>
 
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/random.hxx>
 #include <comphelper/seqstream.hxx>
 #include <comphelper/storagehelper.hxx>
@@ -151,6 +153,7 @@
 #include <docmodel/uno/UnoGradientTools.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/diagram/DiagramHelper_svx.hxx>
+#include <cstdlib>
 
 using namespace ::css;
 using namespace ::css::beans;
@@ -1841,6 +1844,19 @@ void DrawingML::WriteXGraphicBlip(uno::Reference<beans::XPropertySet> const & rX
             }
             if (!aData.hasElements() || aEffects.isEmpty())
                 break;
+            // ZETA: brightness/contrast kept from the file; once changed in the editor the
+            // baked picture plus the new values is written instead
+            if (aEffects.indexOf("<a:lum ") >= 0)
+            {
+                sal_Int16 nNowBright = 0;
+                sal_Int32 nNowContrast = 0;
+                if (GetProperty(rXPropSet, u"AdjustLuminance"_ustr))
+                    mAny >>= nNowBright;
+                if (GetProperty(rXPropSet, u"AdjustContrast"_ustr))
+                    mAny >>= nNowContrast;
+                if (nNowBright || nNowContrast)
+                    break;
+            }
             SvMemoryStream aStream(const_cast<sal_Int8*>(aData.getConstArray()), aData.getLength(), StreamMode::READ);
             Graphic aOriginal;
             if (GraphicFilter::GetGraphicFilter().ImportGraphic(aOriginal, u"", aStream) == ERRCODE_NONE
@@ -2014,7 +2030,10 @@ void DrawingML::WritePattFill(const Reference<XPropertySet>& rXPropSet, const cs
         {
             OUString aName;
             mAny >>= aName;
-            const OString aAscii = OUStringToOString(aName, RTL_TEXTENCODING_ASCII_US);
+            OString aAscii = OUStringToOString(aName, RTL_TEXTENCODING_ASCII_US);
+            // zeta: the import names hatches '<prst> <n>' (several colors of one preset)
+            if (sal_Int32 nSpace = aAscii.indexOf(' '); nSpace > 0)
+                aAscii = aAscii.copy(0, nSpace);
             for (std::string_view aItem : aPresets)
                 if (aAscii == aItem)
                     aPreset = aAscii;
@@ -2260,9 +2279,22 @@ void DrawingML::WriteXGraphicTile(uno::Reference<beans::XPropertySet> const& rXP
     if (GetProperty(rXPropSet, u"FillBitmapRectanglePoint"_ustr))
         sRectanglePoint = lclConvertRectanglePointToToken(*o3tl::doAccess<RectanglePoint>(mAny));
 
+    // zeta: tile flip kept from the import (InteropGrabBag FillTileFlip)
+    OUString sFlip;
+    if (rXPropSet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr)
+        && GetProperty(rXPropSet, u"InteropGrabBag"_ustr))
+    {
+        Sequence<PropertyValue> aBag;
+        mAny >>= aBag;
+        for (const auto& rProp : aBag)
+            if (rProp.Name == "FillTileFlip")
+                rProp.Value >>= sFlip;
+    }
+
     mpFS->singleElementNS(XML_a, XML_tile, XML_tx, OUString::number(nOffsetX), XML_ty,
                           OUString::number(nOffsetY), XML_sx, OUString::number(nSizeX), XML_sy,
-                          OUString::number(nSizeY), XML_algn, sRectanglePoint);
+                          OUString::number(nSizeY), XML_flip, sax_fastparser::UseIf(sFlip, !sFlip.isEmpty()),
+                          XML_algn, sRectanglePoint);
 }
 
 void DrawingML::WriteXGraphicCustomPosition(uno::Reference<beans::XPropertySet> const& rXPropSet,
@@ -4704,6 +4736,35 @@ void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >
             mpFS->singleElementNS(XML_a, XML_prstTxWarp, XML_prst, sPresetWarp);
         }
     }
+    else if (GetDocumentType() == DOCUMENT_PPTX && rXPropSet.is()
+             && rXPropSet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+    {
+        // zeta: text transform of a shape kept as a normal shape on import
+        uno::Sequence<beans::PropertyValue> aGrabBag;
+        rXPropSet->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+        for (const auto& rItem : aGrabBag)
+        {
+            if (rItem.Name != "zetaTxWarp")
+                continue;
+            comphelper::SequenceAsHashMap aWarp(rItem.Value);
+            OUString sPrst = aWarp.getUnpackedValueOrDefault(u"Prst"_ustr, OUString());
+            uno::Sequence<beans::PropertyValue> aGuides
+                = aWarp.getUnpackedValueOrDefault(u"Guides"_ustr, uno::Sequence<beans::PropertyValue>());
+            if (sPrst.isEmpty())
+                break;
+            mpFS->startElementNS(XML_a, XML_prstTxWarp, XML_prst, sPrst);
+            mpFS->startElementNS(XML_a, XML_avLst);
+            for (const auto& rGuide : aGuides)
+            {
+                OUString sFmla;
+                rGuide.Value >>= sFmla;
+                mpFS->singleElementNS(XML_a, XML_gd, XML_name, rGuide.Name, XML_fmla, sFmla);
+            }
+            mpFS->endElementNS(XML_a, XML_avLst);
+            mpFS->endElementNS(XML_a, XML_prstTxWarp);
+            break;
+        }
+    }
     else if (GetDocumentType() == DOCUMENT_DOCX)
     {
         // interim solution for fdo#80897, roundtrip DOCX > LO > DOCX
@@ -6441,6 +6502,11 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
         nEffectToken = FSNS( XML_a, XML_glow );
         bContainsColor = true;
     }
+    else if( sName == u"prstShdw" ) // zeta
+    {
+        nEffectToken = FSNS( XML_a, XML_prstShdw );
+        bContainsColor = true;
+    }
     else if( sName == u"softEdge" )
         nEffectToken = FSNS( XML_a, XML_softEdge );
     else if( sName == u"reflection" )
@@ -6467,6 +6533,12 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
                     OUString sVal;
                     rOuterShdwProp.Value >>= sVal;
                     aOuterShdwAttrList->add( XML_algn, sVal );
+                }
+                else if( rOuterShdwProp.Name == "prst" ) // zeta: prstShdw
+                {
+                    OUString sVal;
+                    rOuterShdwProp.Value >>= sVal;
+                    aOuterShdwAttrList->add( XML_prst, sVal );
                 }
                 else if( rOuterShdwProp.Name == "blurRad" )
                 {
@@ -6732,7 +6804,57 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
         bool bShadowProp = false;
         if (bHasShadowProp)
             rXPropSet->getPropertyValue(u"Shadow"_ustr) >>= bShadowProp;
-        const bool bPropShadow = bShadowProp && !aOuterShdwProps.hasElements();
+        bool bPropShadow = bShadowProp && !aOuterShdwProps.hasElements();
+        // zeta: an imported preset shadow is drawn from approximated shadow properties (see
+        // EffectProperties::pushToPropMap). While they are unchanged the prstShdw is written
+        // again instead of them; a shadow turned off drops it, a changed shadow replaces it.
+        bool bKeepPrstShdw = false;
+        if (!aOuterShdwProps.hasElements())
+        {
+            for (const auto& rEffect : aEffects)
+            {
+                if (rEffect.Name != "prstShdw")
+                    continue;
+                if (!bShadowProp)
+                    break;
+                Sequence<PropertyValue> aEffectProps, aAttribs;
+                rEffect.Value >>= aEffectProps;
+                for (const auto& rProp : aEffectProps)
+                    if (rProp.Name == "Attribs")
+                        rProp.Value >>= aAttribs;
+                OUString sPrst;
+                sal_Int32 nDist = 0, nDir = 0;
+                for (const auto& rAttrib : aAttribs)
+                {
+                    if (rAttrib.Name == "prst")
+                        rAttrib.Value >>= sPrst;
+                    else if (rAttrib.Name == "dist")
+                        rAttrib.Value >>= nDist;
+                    else if (rAttrib.Name == "dir")
+                        rAttrib.Value >>= nDir;
+                }
+                const oox::drawingml::PresetShadowApprox aShadow
+                    = oox::drawingml::approximatePresetShadow(sPrst, nDist, nDir);
+                sal_Int32 nX = 0, nY = 0, nSx = 100000, nSy = 100000, nAlign = 0, nBlur = 0;
+                rXPropSet->getPropertyValue(u"ShadowXDistance"_ustr) >>= nX;
+                rXPropSet->getPropertyValue(u"ShadowYDistance"_ustr) >>= nY;
+                rXPropSet->getPropertyValue(u"ShadowBlur"_ustr) >>= nBlur;
+                if (GetProperty(rXPropSet, u"ShadowSizeX"_ustr))
+                    mAny >>= nSx;
+                if (GetProperty(rXPropSet, u"ShadowSizeY"_ustr))
+                    mAny >>= nSy;
+                if (GetProperty(rXPropSet, u"ShadowAlignment"_ustr))
+                    mAny >>= nAlign;
+                const bool bFullSize = aShadow.nSizeX == 100000 && aShadow.nSizeY == 100000;
+                bKeepPrstShdw = std::abs(nX - aShadow.nXDist) <= 2
+                                && std::abs(nY - aShadow.nYDist) <= 2 && nSx == aShadow.nSizeX
+                                && nSy == aShadow.nSizeY
+                                && (bFullSize || nAlign == aShadow.nAlignment) && nBlur == 0;
+                if (bKeepPrstShdw)
+                    bPropShadow = false;
+                break;
+            }
+        }
         bool bPropShadowWritten = false;
         auto WritePropShadow = [&]()
         {
@@ -6777,6 +6899,10 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
             {
                 if (!bHasShadowProp || bShadowProp)
                     WriteShapeEffect( rEffect.Name, aOuterShdwProps );
+            }
+            else if (rEffect.Name == "prstShdw" && bHasShadowProp && !bKeepPrstShdw)
+            {
+                // zeta: turned off, or replaced by the shadow written from the properties
             }
             else
             {
