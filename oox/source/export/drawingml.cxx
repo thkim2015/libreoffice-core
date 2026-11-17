@@ -29,6 +29,7 @@
 #include <oox/helper/propertyset.hxx>
 #include <oox/drawingml/color.hxx>
 #include <drawingml/fillproperties.hxx>
+#include <drawingml/effectproperties.hxx>
 #include <drawingml/fontworkhelpers.hxx>
 #include <drawingml/textparagraph.hxx>
 #include <oox/token/namespaces.hxx>
@@ -152,6 +153,7 @@
 #include <docmodel/uno/UnoGradientTools.hxx>
 #include <svx/svdpage.hxx>
 #include <svx/diagram/DiagramHelper_svx.hxx>
+#include <cstdlib>
 
 using namespace ::css;
 using namespace ::css::beans;
@@ -6802,7 +6804,57 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
         bool bShadowProp = false;
         if (bHasShadowProp)
             rXPropSet->getPropertyValue(u"Shadow"_ustr) >>= bShadowProp;
-        const bool bPropShadow = bShadowProp && !aOuterShdwProps.hasElements();
+        bool bPropShadow = bShadowProp && !aOuterShdwProps.hasElements();
+        // zeta: an imported preset shadow is drawn from approximated shadow properties (see
+        // EffectProperties::pushToPropMap). While they are unchanged the prstShdw is written
+        // again instead of them; a shadow turned off drops it, a changed shadow replaces it.
+        bool bKeepPrstShdw = false;
+        if (!aOuterShdwProps.hasElements())
+        {
+            for (const auto& rEffect : aEffects)
+            {
+                if (rEffect.Name != "prstShdw")
+                    continue;
+                if (!bShadowProp)
+                    break;
+                Sequence<PropertyValue> aEffectProps, aAttribs;
+                rEffect.Value >>= aEffectProps;
+                for (const auto& rProp : aEffectProps)
+                    if (rProp.Name == "Attribs")
+                        rProp.Value >>= aAttribs;
+                OUString sPrst;
+                sal_Int32 nDist = 0, nDir = 0;
+                for (const auto& rAttrib : aAttribs)
+                {
+                    if (rAttrib.Name == "prst")
+                        rAttrib.Value >>= sPrst;
+                    else if (rAttrib.Name == "dist")
+                        rAttrib.Value >>= nDist;
+                    else if (rAttrib.Name == "dir")
+                        rAttrib.Value >>= nDir;
+                }
+                const oox::drawingml::PresetShadowApprox aShadow
+                    = oox::drawingml::approximatePresetShadow(sPrst, nDist, nDir);
+                sal_Int32 nX = 0, nY = 0, nSx = 100000, nSy = 100000, nAlign = 0, nBlur = 0;
+                rXPropSet->getPropertyValue(u"ShadowXDistance"_ustr) >>= nX;
+                rXPropSet->getPropertyValue(u"ShadowYDistance"_ustr) >>= nY;
+                rXPropSet->getPropertyValue(u"ShadowBlur"_ustr) >>= nBlur;
+                if (GetProperty(rXPropSet, u"ShadowSizeX"_ustr))
+                    mAny >>= nSx;
+                if (GetProperty(rXPropSet, u"ShadowSizeY"_ustr))
+                    mAny >>= nSy;
+                if (GetProperty(rXPropSet, u"ShadowAlignment"_ustr))
+                    mAny >>= nAlign;
+                const bool bFullSize = aShadow.nSizeX == 100000 && aShadow.nSizeY == 100000;
+                bKeepPrstShdw = std::abs(nX - aShadow.nXDist) <= 2
+                                && std::abs(nY - aShadow.nYDist) <= 2 && nSx == aShadow.nSizeX
+                                && nSy == aShadow.nSizeY
+                                && (bFullSize || nAlign == aShadow.nAlignment) && nBlur == 0;
+                if (bKeepPrstShdw)
+                    bPropShadow = false;
+                break;
+            }
+        }
         bool bPropShadowWritten = false;
         auto WritePropShadow = [&]()
         {
@@ -6847,6 +6899,10 @@ void DrawingML::WriteShapeEffects( const Reference< XPropertySet >& rXPropSet )
             {
                 if (!bHasShadowProp || bShadowProp)
                     WriteShapeEffect( rEffect.Name, aOuterShdwProps );
+            }
+            else if (rEffect.Name == "prstShdw" && bHasShadowProp && !bKeepPrstShdw)
+            {
+                // zeta: turned off, or replaced by the shadow written from the properties
             }
             else
             {

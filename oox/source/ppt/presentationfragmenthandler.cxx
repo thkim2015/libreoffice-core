@@ -874,6 +874,22 @@ void PresentationFragmentHandler::finalizeImport()
     {
     case PPT_TOKEN( presentation ):
         mbEmbedTrueTypeFonts = rAttribs.getBool(XML_embedTrueTypeFonts, false);
+        // zeta: first slide number (Slide Size > Number slides from): Impress has no such
+        // setting - keep it in the document grab bag, the slide number fields read it there
+        if (sal_Int32 nFirst = rAttribs.getInteger(XML_firstSlideNum, 1); nFirst != 1)
+        {
+            try
+            {
+                uno::Reference<beans::XPropertySet> xDocProps(getFilter().getModel(), uno::UNO_QUERY_THROW);
+                comphelper::SequenceAsHashMap aGrabBag(xDocProps->getPropertyValue(u"InteropGrabBag"_ustr));
+                aGrabBag[u"ZetaFirstSlideNum"_ustr] <<= nFirst;
+                xDocProps->setPropertyValue(u"InteropGrabBag"_ustr, uno::Any(aGrabBag.getAsConstPropertyValueList()));
+            }
+            catch (const uno::Exception&)
+            {
+                SAL_WARN("oox", "PresentationFragmentHandler: cannot keep firstSlideNum");
+            }
+        }
         return this;
     case PPT_TOKEN( sldMasterIdLst ):
     case PPT_TOKEN( notesMasterIdLst ):
