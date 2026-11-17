@@ -1143,6 +1143,13 @@ void VLegend::changePosition(
         {
             // auto position: relative to remaining space
             aRelativePosition = lcl_getDefaultPosition( ePos, rOutAvailableSpace, rPageSize );
+            // Excel pivot charts: a left/right legend is centred in the space left by the title
+            // and the field buttons, not on the page (Excel 2021 PDF export,
+            // tests/fixtures/pivot-legend-slicers.office.xlsx)
+            if ((ePos == LegendPosition_LINE_END || ePos == LegendPosition_LINE_START) && rPageSize.Height > 0
+                && dynamic_cast<chart2api::AbstractPivotTableDataProvider*>(mrModel.getDataProvider().get()))
+                aRelativePosition.Secondary = (rOutAvailableSpace.Y + rOutAvailableSpace.Height / 2.0)
+                                              / static_cast<double>(rPageSize.Height);
             // chartex legends may sit at the start or end of their side instead of the centre
             sal_Int16 nAlign = 0;
             m_xLegend->getPropertyValue( u"SideAlignment"_ustr ) >>= nAlign;
