@@ -221,6 +221,12 @@ void TblStylePrHandler::lcl_sprm(Sprm & rSprm)
         }
         break;
         default:
+            // Band sizes decide which rows/columns get the band1/band2 conditional
+            // formatting; DomainMapperTableHandler needs them, not only the grab bag.
+            if (rSprm.getId() == NS_ooxml::LN_CT_TblPrBase_tblStyleRowBandSize && rSprm.getValue())
+                m_nRowBandSize = rSprm.getValue()->getInt();
+            else if (rSprm.getId() == NS_ooxml::LN_CT_TblPrBase_tblStyleColBandSize && rSprm.getValue())
+                m_nColBandSize = rSprm.getValue()->getInt();
             // Tables specific properties have to handled here
             m_pTablePropsHandler->SetProperties( m_pProperties );
             m_pTablePropsHandler->SetInteropGrabBag(m_aInteropGrabBag);

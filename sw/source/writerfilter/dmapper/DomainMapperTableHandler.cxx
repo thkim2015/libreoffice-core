@@ -775,6 +775,29 @@ CellPropertyValuesSeq_t DomainMapperTableHandler::endTableGetCellProperties(Tabl
     PropertyMapVector2::const_iterator aRowOfCellsIteratorEnd = m_aCellProperties.end();
     PropertyMapVector2::const_iterator aLastRowIterator = m_aCellProperties.end() - 1;
     sal_Int32 nRow = 0;
+    // w:tblStyleRowBandSize / w:tblStyleColBandSize of the table style or the nearest base style
+    sal_Int32 nRowBandSize = 0;
+    sal_Int32 nColBandSize = 0;
+    {
+        StyleSheetEntry* pStyle = rInfo.pTableStyle;
+        for (int nDepth = 0; pStyle && nDepth < 16 && (!nRowBandSize || !nColBandSize); ++nDepth)
+        {
+            if (auto pTableStyle = dynamic_cast<TableStyleSheetEntry*>(pStyle))
+            {
+                if (!nRowBandSize)
+                    nRowBandSize = pTableStyle->m_nRowBandSize;
+                if (!nColBandSize)
+                    nColBandSize = pTableStyle->m_nColBandSize;
+            }
+            if (pStyle->m_sBaseStyleIdentifier.isEmpty())
+                break;
+            pStyle = m_rDMapper_Impl.GetStyleSheetTable()->FindStyleSheetByISTD(pStyle->m_sBaseStyleIdentifier).get();
+        }
+    }
+    if (nRowBandSize <= 0)
+        nRowBandSize = 1;
+    if (nColBandSize <= 0)
+        nColBandSize = 1;
 
     css::uno::Sequence<css::beans::PropertyValues>* pCellProperties = aCellProperties.getArray();
     PropertyMapVector1::const_iterator aRowIter = m_aRowProperties.begin();
@@ -803,11 +826,11 @@ CellPropertyValuesSeq_t DomainMapperTableHandler::endTableGetCellProperties(Tabl
         {
             // banding used only if not first and or last row style used
             if(!(rInfo.nTblLook&0x200))
-            {   // hbanding used
-                int n = nRow + 1;
-                if(rInfo.nTblLook&0x20)
-                    n++;
-                if(n & 1)
+            {   // hbanding used: bands of w:tblStyleRowBandSize rows, counted after the first row
+                int n = nRow - ((rInfo.nTblLook&0x20) ? 1 : 0);
+                if (n < 0)
+                    n = 0;
+                if(((n / nRowBandSize) & 1) == 0)
                     nRowStyleMask = CNF_ODD_HBAND;
                 else
                     nRowStyleMask = CNF_EVEN_HBAND;
@@ -852,11 +875,11 @@ CellPropertyValuesSeq_t DomainMapperTableHandler::endTableGetCellProperties(Tabl
                 if(!nCellStyleMask)                 // if no cell style is used yet
                 {
                     if(!(rInfo.nTblLook&0x400))
-                    {   // vbanding used
-                        int n = nCell + 1;
-                        if(rInfo.nTblLook&0x80)
-                            n++;
-                        if(n & 1)
+                    {   // vbanding used: bands of w:tblStyleColBandSize columns, counted after the first column
+                        int n = nCell - ((rInfo.nTblLook&0x80) ? 1 : 0);
+                        if (n < 0)
+                            n = 0;
+                        if(((n / nColBandSize) & 1) == 0)
                             nCellStyleMask = CNF_ODD_VBAND;
                         else
                             nCellStyleMask = CNF_EVEN_VBAND;

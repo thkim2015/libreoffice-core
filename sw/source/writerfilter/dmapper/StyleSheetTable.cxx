@@ -648,6 +648,10 @@ void StyleSheetTable::lcl_sprm(Sprm & rSprm)
 
                 if (nSprmId == NS_ooxml::LN_CT_Style_tblPr)
                 {
+                    if (pTableEntry != nullptr && pTblStylePrHandler->getRowBandSize() > 0)
+                        pTableEntry->m_nRowBandSize = pTblStylePrHandler->getRowBandSize();
+                    if (pTableEntry != nullptr && pTblStylePrHandler->getColBandSize() > 0)
+                        pTableEntry->m_nColBandSize = pTblStylePrHandler->getColBandSize();
                     if (pTableEntry != nullptr)
                         pTableEntry->AppendInteropGrabBag(pTblStylePrHandler->getInteropGrabBag(u"tblPr"_ustr));
                 }
