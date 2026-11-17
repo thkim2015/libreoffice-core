@@ -3305,6 +3305,16 @@ OUString DrawingML::GetFieldValue( const css::uno::Reference< css::text::XTextRa
                 {
                     aFieldValue = "author";
                 }
+                else if (aFieldKind == "Custom")
+                {
+                    // zeta: a PowerPoint date/time type kept by the import (or the app) as a
+                    // custom field named after it - write the type back
+                    OUString aName;
+                    if (GetProperty(rXPropSet, u"Name"_ustr))
+                        mAny >>= aName;
+                    if (aName.startsWith("datetime"))
+                        aFieldValue = aName;
+                }
             }
         }
     }

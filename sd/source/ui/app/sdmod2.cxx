@@ -389,7 +389,11 @@ IMPL_LINK(SdModule, CalcFieldValueHdl, EditFieldInfo*, pInfo, void)
         try
         {
             SfxObjectShell* pObjSh = SfxObjectShell::Current();
-            if (pObjSh && pObjSh->IsLoadingFinished())
+            // zeta: a PowerPoint date/time field kept as a custom field (oox textfield.cxx)
+            // shows its text, it names no document property
+            if (pCustomPropertyField->GetName().startsWith("datetime"))
+                pInfo->SetRepresentation(pCustomPropertyField->GetCurrentPresentation());
+            else if (pObjSh && pObjSh->IsLoadingFinished())
             {
                 auto pNonConstCustomPropertyField = const_cast<editeng::CustomPropertyField*>(pCustomPropertyField);
                 OUString sCurrent = pNonConstCustomPropertyField->GetFormatted(pObjSh->getDocProperties());
