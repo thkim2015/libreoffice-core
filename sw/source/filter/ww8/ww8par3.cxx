@@ -90,6 +90,22 @@ eF_ResT SwWW8ImplReader::Read_F_OCX( WW8FieldDesc*, OUString& )
     return eF_ResT::TEXT;
 }
 
+namespace
+{
+// FFData help text, disabled and calculate-on-exit flags as the field parameters that the DOC and
+// DOCX exports write back (the same names as the DOCX import uses)
+void lcl_SetFormFieldFlags(sw::mark::Fieldmark::parameter_map_t& rParams,
+                           const WW8FormulaControl& rFormula)
+{
+    if (rFormula.mbHelp && !rFormula.msHelp.isEmpty())
+        rParams[u"Help"_ustr] <<= rFormula.msHelp;
+    if (rFormula.mbProt)
+        rParams[u"Enabled"_ustr] <<= false;
+    if (rFormula.mbRecalc)
+        rParams[u"CalcOnExit"_ustr] <<= true;
+}
+}
+
 eF_ResT SwWW8ImplReader::Read_F_FormTextBox( WW8FieldDesc* pF, OUString& rStr )
 {
     WW8FormulaEditBox aFormula(*this);
@@ -164,6 +180,7 @@ eF_ResT SwWW8ImplReader::Read_F_FormTextBox( WW8FieldDesc* pF, OUString& rStr )
             if ( aFormula.msToolTip.getLength() < 139 )
                 m_aFieldStack.back().getParameters()[u"Description"_ustr] <<= aFormula.msToolTip;
             m_aFieldStack.back().getParameters()[u"Name"_ustr] <<= aFormula.msTitle;
+            lcl_SetFormFieldFlags(m_aFieldStack.back().getParameters(), aFormula);
             if (aFormula.mnMaxLen && aFormula.mnMaxLen < 32768 )
                 m_aFieldStack.back().getParameters()[u"MaxLength"_ustr] <<= aFormula.mnMaxLen;
 
@@ -230,6 +247,12 @@ eF_ResT SwWW8ImplReader::Read_F_FormCheckBox( WW8FieldDesc* pF, OUString& rStr )
             Fieldmark::parameter_map_t* const pParameters = pFieldmark->GetParameters();
             CheckboxFieldmark* pCheckboxFm = dynamic_cast<CheckboxFieldmark*>(pFieldmark);
             (*pParameters)[ODF_FORMCHECKBOX_HELPTEXT] <<= aFormula.msToolTip;
+            lcl_SetFormFieldFlags(*pParameters, aFormula);
+            if (aFormula.mfToolTip && !aFormula.msToolTip.isEmpty())
+                (*pParameters)[u"Description"_ustr] <<= aFormula.msToolTip;
+            (*pParameters)[u"CheckboxDefault"_ustr] <<= (aFormula.mnDefault != 0);
+            if (aFormula.mbExactSize && aFormula.mnHps)
+                (*pParameters)[u"CheckboxSize"_ustr] <<= sal_Int32(aFormula.mnHps);
 
             if(pCheckboxFm)
                 pCheckboxFm->SetChecked(aFormula.mnChecked != 0);
@@ -304,7 +327,12 @@ eF_ResT SwWW8ImplReader::Read_F_FormListBox( WW8FieldDesc* pF, OUString& rStr)
                 sal_Int32 nIndex = aFormula.mfDropdownIndex  < aFormula.maListEntries.size() ? aFormula.mfDropdownIndex : -1;
                 if (nIndex >= 0)
                     (*pFieldmark->GetParameters())[ODF_FORMDROPDOWN_RESULT] <<= nIndex;
-                // set field data here...
+                lcl_SetFormFieldFlags(*pFieldmark->GetParameters(), aFormula);
+                if (aFormula.mfToolTip && !aFormula.msToolTip.isEmpty())
+                    (*pFieldmark->GetParameters())[u"Description"_ustr] <<= aFormula.msToolTip;
+                if (aFormula.mnDefault < aFormula.maListEntries.size())
+                    (*pFieldmark->GetParameters())[u"DropdownDefault"_ustr]
+                        <<= sal_Int32(aFormula.mnDefault);
             }
         }
 
@@ -2181,6 +2209,10 @@ void WW8FormulaControl::FormulaRead(SwWw8ControlType nWhich,
 
     sal_uInt16 hps = 0;
     pDataStream->ReadUInt16( hps );
+    mnHps = hps;
+    mbProt = bits2 & 0x02; // fProt
+    mbExactSize = bits2 & 0x04; // iSize
+    mbRecalc = bits2 & 0x40; // fRecalc
 
     // xstzName
     msTitle = read_uInt16_BeltAndBracesString(*pDataStream);
@@ -2196,6 +2228,7 @@ void WW8FormulaControl::FormulaRead(SwWw8ControlType nWhich,
         // CheckBox or ComboBox
         sal_uInt16 wDef = 0;
         pDataStream->ReadUInt16( wDef );
+        mnDefault = wDef;
         mnChecked = wDef; // default
         if (nWhich == WW8_CT_CHECKBOX)
         {

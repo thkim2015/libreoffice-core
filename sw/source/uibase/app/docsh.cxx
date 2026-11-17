@@ -610,7 +610,22 @@ bool SwDocShell::ConvertTo( SfxMedium& rMedium )
 
     ErrCode nVBWarning = ERRCODE_NONE;
 
-    if (m_xDoc->ContainsMSVBasic())
+    bool bHasMSVBasic = m_xDoc->ContainsMSVBasic();
+    // DOCX/DOCM import keeps vbaProject.bin as the _MS_VBA_Macros storage but
+    // does not set ContainsMSVBasic: still write it as the .doc Macros storage.
+    if (!bHasMSVBasic && pFlt->GetUserData() == "CWW8")
+    {
+        try
+        {
+            uno::Reference<embed::XStorage> xRoot(GetStorage());
+            bHasMSVBasic = xRoot.is() && xRoot->hasByName(u"_MS_VBA_Macros"_ustr);
+        }
+        catch (const uno::Exception&)
+        {
+        }
+    }
+
+    if (bHasMSVBasic)
     {
         bool bSave = pFlt->GetUserData() == "CWW8"
                      && officecfg::Office::Writer::Filter::Import::VBA::Save::get();
@@ -622,6 +637,10 @@ bool SwDocShell::ConvertTo( SfxMedium& rMedium )
             if ( !xStg->GetError() )
             {
                 nVBWarning = SaveOrDelMSVBAStorage( static_cast<SfxObjectShell&>(*this), *xStg, bSave, u"Macros"_ustr );
+#ifdef EMSCRIPTEN
+                // no "modified VBA code is not saved" warning box in WASM
+                nVBWarning = ERRCODE_NONE;
+#endif
                 xStg->Commit();
                 m_xDoc->SetContainsMSVBasic( true );
             }

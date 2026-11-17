@@ -4449,6 +4449,41 @@ void WW8Export::WriteFormData( const ::sw::mark::Fieldmark& rFieldmark )
         ffexitmcr = aExitMacro.copy (0, nLen);
     }
 
+    // fProt (not enabled), fRecalc (calculate on exit) and wDef (default checkbox state or dropdown
+    // entry) were always written as 0, and the checkbox size as automatic
+    const ::sw::mark::Fieldmark::parameter_map_t* const pParams = rFieldmark.GetParameters();
+    auto lcl_param = [pParams](const OUString& rName) -> const uno::Any*
+    {
+        auto it = pParams->find(rName);
+        return it == pParams->end() ? nullptr : &it->second;
+    };
+    bool bEnabled = true;
+    if (const uno::Any* pAny = lcl_param(u"Enabled"_ustr))
+        *pAny >>= bEnabled;
+    if (!bEnabled)
+        aFieldHeader.bits |= 0x1<<9;
+    bool bCalcOnExit = false;
+    if (const uno::Any* pAny = lcl_param(u"CalcOnExit"_ustr))
+        *pAny >>= bCalcOnExit;
+    if (bCalcOnExit)
+        aFieldHeader.bits |= 0x1<<14;
+    sal_uInt16 nDefault = 0;
+    if (type == 1)
+    {
+        bool bDefault = false;
+        if (const uno::Any* pAny = lcl_param(u"CheckboxDefault"_ustr))
+            *pAny >>= bDefault;
+        nDefault = bDefault ? 1 : 0;
+        sal_Int32 nSize = 0;
+        if (const uno::Any* pAny = lcl_param(u"CheckboxSize"_ustr))
+            *pAny >>= nSize;
+        if (nSize > 0 && nSize < 0x10000)
+        {
+            aFieldHeader.bits |= 0x1<<10; // iSize: exact
+            aFieldHeader.hps = sal_uInt16(nSize);
+        }
+    }
+
     std::vector< OUString > aListItems;
     if (type==2)
     {
@@ -4462,6 +4497,11 @@ void WW8Export::WriteFormData( const ::sw::mark::Fieldmark& rFieldmark )
             aListItems.reserve(vListEntries.getLength());
             copy(std::cbegin(vListEntries), std::cend(vListEntries), back_inserter(aListItems));
         }
+        sal_Int32 nDropdownDefault = 0;
+        if (const uno::Any* pAny = lcl_param(u"DropdownDefault"_ustr))
+            *pAny >>= nDropdownDefault;
+        if (0 <= nDropdownDefault && o3tl::make_unsigned(nDropdownDefault) < aListItems.size())
+            nDefault = sal_uInt16(nDropdownDefault);
     }
 
     const sal_uInt8 aFieldData[] =
@@ -4509,7 +4549,7 @@ void WW8Export::WriteFormData( const ::sw::mark::Fieldmark& rFieldmark )
     if ( !type )
         SwWW8Writer::WriteString_xstz( *m_pDataStrm, ffdeftext, true );
     if ( type )
-        m_pDataStrm->WriteUInt16( 0 );
+        m_pDataStrm->WriteUInt16( nDefault );
 
     SwWW8Writer::WriteString_xstz( *m_pDataStrm, ffformat, true );
     SwWW8Writer::WriteString_xstz( *m_pDataStrm, ffhelptext, true );

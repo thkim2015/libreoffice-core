@@ -1949,6 +1949,15 @@ void DocxAttributeOutput::StartRun( const SwRedlineData* pRedlineData, sal_Int32
     m_pSerializer->mark(Tag_StartRun_3); // let's call it "postponed text"
 }
 
+namespace
+{
+// HYPERLINK field written by StartURL() for a link with both URL and mark (no SwField behind it)
+bool IsUrlField(const FieldInfos& rInfos)
+{
+    return !rInfos.pField && rInfos.eType == ww::eHYPERLINK;
+}
+}
+
 void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_Int32 nLen, bool /*bLastRun*/)
 {
     int nFieldsInPrevHyperlink = m_nFieldsInHyperlink;
@@ -2002,6 +2011,23 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
         m_bEndCharSdt = false;
     }
 
+    bool bUrlEndedBeforeRun = false;
+    if (m_closeHyperlinkInPreviousRun && m_nHyperLinkCount.back() == 0)
+    {
+        // the HYPERLINK field of a URL + mark link that started in an earlier run ends before this run
+        for (auto it = m_Fields.begin(); it != m_Fields.end(); )
+        {
+            if (IsUrlField(*it) && !it->bOpen)
+            {
+                EndField_Impl(pNode, nPos, *it);
+                it = m_Fields.erase(it);
+                bUrlEndedBeforeRun = true;
+            }
+            else
+                ++it;
+        }
+    }
+
     if ( m_closeHyperlinkInPreviousRun )
     {
         if (m_nHyperLinkCount.back() > 0)
@@ -2045,6 +2071,9 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
             StartRedline(m_pRedlineData.back());
             StartField_Impl( pNode, nPos, *pIt, true );
             EndRedline(m_pRedlineData.back());
+            // a link written as HYPERLINK field (URL + mark) may span several runs: start it once
+            if (IsUrlField(*pIt))
+                pIt->bOpen = false;
 
             if (m_nHyperLinkCount.back() > 0)
                 ++m_nFieldsInHyperlink;
@@ -2069,6 +2098,8 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
                 m_sFieldBkm.clear();
             }
             CmdEndField_Impl(pNode, nPos, true);
+            if (IsUrlField(*pIt))
+                pIt->bSep = false;
             // Remove the field if no end needs to be written
             if (!pIt->bClose)
             {
@@ -2268,6 +2299,9 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
         m_pRedlineData.back() = nullptr;
     }
 
+    // EndURL() was called for this run: the HYPERLINK field of a URL + mark link ends here
+    // (unless that link already ended before this run - then a link starting here may go on)
+    const bool bUrlEndsInThisRun = m_closeHyperlinkInThisRun && !bUrlEndedBeforeRun;
     if ( m_closeHyperlinkInThisRun )
     {
         if (m_nHyperLinkCount.back() > 0)
@@ -2316,10 +2350,16 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
 
     if (!newStartedHyperlink)
     {
-        while ( m_Fields.begin() != m_Fields.end() )
+        for (auto it = m_Fields.begin(); it != m_Fields.end(); )
         {
-            EndField_Impl( pNode, nPos, m_Fields.front( ) );
-            m_Fields.erase( m_Fields.begin( ) );
+            // the link text continues in the next run
+            if (!bUrlEndsInThisRun && IsUrlField(*it))
+            {
+                ++it;
+                continue;
+            }
+            EndField_Impl( pNode, nPos, *it );
+            it = m_Fields.erase(it);
         }
         m_nFieldsInHyperlink = 0;
     }
@@ -2327,7 +2367,8 @@ void DocxAttributeOutput::EndRun(const SwTextNode* pNode, sal_Int32 nPos, sal_In
     // end ToX fields
     for (auto it = m_Fields.rbegin(); it != m_Fields.rend(); )
     {
-        if (it->bClose && !it->pField)
+        // (not the HYPERLINK field of a URL + mark link whose text continues in the next run)
+        if (it->bClose && !it->pField && (bUrlEndsInThisRun || !IsUrlField(*it)))
         {
             EndField_Impl( pNode, nPos, *it );
             it = decltype(m_Fields)::reverse_iterator(m_Fields.erase(it.base() - 1));
@@ -4420,6 +4461,8 @@ bool DocxAttributeOutput::StartURL(const OUString& rUrl, const OUString& rTarget
 
     if (!sMark.isEmpty() && !bBookmarkOnly && rTarget.isEmpty())
     {
+        if (!rName.isEmpty())
+            sUrl += " \\o \"" + rName.replaceAll("\"", "\\\"") + "\"";
         m_rExport.OutputField( nullptr, ww::eHYPERLINK, sUrl );
     }
     else
@@ -4481,7 +4524,8 @@ bool DocxAttributeOutput::StartURL(const OUString& rUrl, const OUString& rTarget
         {
             m_pHyperlinkAttrList->add(FSNS(XML_w, XML_tgtFrame), rTarget);
         }
-        else if (!rName.isEmpty())
+        // Word keeps the ScreenTip of a link that also opens in a target frame
+        if (!rName.isEmpty())
         {
             m_pHyperlinkAttrList->add(FSNS(XML_w, XML_tooltip), rName);
         }
@@ -10247,18 +10291,21 @@ void DocxAttributeOutput::ParaTabStop( const SvxTabStopItem& rTabStop )
 void DocxAttributeOutput::ParaHyphenZone( const SvxHyphenZoneItem& rHyphenZone )
 {
     // automatic hyphenation off in the imported Word document: keep Word's default "allowed",
-    // only the explicit "do not hyphenate" kept by the import gets w:suppressAutoHyphens
+    // only the explicit "do not hyphenate" or "allow" kept by the import gets w:suppressAutoHyphens
     if (!rHyphenZone.IsHyphen() && m_rExport.IsWordAutoHyphenationOff())
     {
         bool bSuppress = false;
+        bool bExplicit = false;
         if (auto pBag = static_cast<const SfxGrabBagItem*>(m_rExport.HasItem(RES_PARATR_GRABBAG)))
         {
             auto it = pBag->GetGrabBag().find(u"ParaSuppressAutoHyphens"_ustr);
             if (it != pBag->GetGrabBag().end())
-                it->second >>= bSuppress;
+                bExplicit = (it->second >>= bSuppress);
         }
         if (bSuppress)
             m_pSerializer->singleElementNS(XML_w, XML_suppressAutoHyphens);
+        else if (bExplicit)
+            m_pSerializer->singleElementNS(XML_w, XML_suppressAutoHyphens, FSNS(XML_w, XML_val), "false");
         return;
     }
     m_pSerializer->singleElementNS( XML_w, XML_suppressAutoHyphens,

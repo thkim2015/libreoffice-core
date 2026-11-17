@@ -74,6 +74,9 @@ bool DocxExportFilter::exportDocument()
     rMediaDescriptor[utl::MediaDescriptor::PROP_FILTERNAME] >>= aFilterName;
     bool bDocm = aFilterName.endsWith("VBA");
 
+    // WASM: the web app asks like Word before saving a macro document macro-free;
+    // this VCL box never returns OK there and the export used to abort
+#ifndef EMSCRIPTEN
     if (!bDocm)
     {
         // Check whether application is in headless mode
@@ -94,6 +97,7 @@ bool DocxExportFilter::exportDocument()
             }
         }
     }
+#endif
 
     // get SwPaM*
     // FIXME so far we get SwPaM for the entire document; probably we should

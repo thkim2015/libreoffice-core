@@ -40,10 +40,12 @@
 #include <com/sun/star/geometry/IntegerRectangle2D.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/text/XText.hpp>
+#include <com/sun/star/text/XTextColumns.hpp>
 #include <com/sun/star/text/XTextCursor.hpp>
 #include <com/sun/star/text/WritingMode.hpp>
 #include <com/sun/star/text/WritingMode2.hpp>
 
+#include <algorithm>
 #include <optional>
 
 using namespace com::sun::star;
@@ -809,6 +811,38 @@ oox::core::ContextHandlerRef WpsContext::onCreateContext(sal_Int32 nElementToken
                 }
                 else
                     SAL_WARN("oox", "Property: TextWordWrap not supported");
+
+                // wasm-word: numCol/spcCol of a Word text box -> columns of the attached
+                // Writer text frame (the text is laid out by the frame, not by the shape).
+                if (const sal_Int32 nCols = rAttribs.getInteger(XML_numCol, 1);
+                    nCols > 1 && xPropertySetInfo
+                    && xPropertySetInfo->hasPropertyByName(u"TextBoxContent"_ustr))
+                {
+                    try
+                    {
+                        uno::Reference<beans::XPropertySet> xFrame(
+                            xPropertySet->getPropertyValue(u"TextBoxContent"_ustr),
+                            uno::UNO_QUERY);
+                        uno::Reference<text::XTextColumns> xCols;
+                        if (xFrame)
+                            xFrame->getPropertyValue(u"TextColumns"_ustr) >>= xCols;
+                        if (xCols)
+                        {
+                            xCols->setColumnCount(static_cast<sal_Int16>(std::min<sal_Int32>(nCols, 16)));
+                            uno::Reference<beans::XPropertySet> xColProps(xCols, uno::UNO_QUERY);
+                            if (xColProps)
+                                xColProps->setPropertyValue(
+                                    u"AutomaticDistance"_ustr,
+                                    uno::Any(static_cast<sal_Int32>(oox::drawingml::GetCoordinate(
+                                        rAttribs.getInteger(XML_spcCol, 0)))));
+                            xFrame->setPropertyValue(u"TextColumns"_ustr, uno::Any(xCols));
+                        }
+                    }
+                    catch (const uno::Exception&)
+                    {
+                        SAL_WARN("oox", "WpsContext: cannot set text box columns");
+                    }
+                }
 
                 return this;
             }

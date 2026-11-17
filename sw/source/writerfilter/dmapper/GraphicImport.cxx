@@ -32,6 +32,8 @@
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/table/BorderLine2.hpp>
+#include <com/sun/star/table/BorderLineStyle.hpp>
+#include <com/sun/star/drawing/LineDash.hpp>
 #include <com/sun/star/text/HoriOrientation.hpp>
 #include <com/sun/star/text/RelOrientation.hpp>
 #include <com/sun/star/text/TextContentAnchorType.hpp>
@@ -1764,6 +1766,23 @@ rtl::Reference<SwXTextGraphicObject> GraphicImport::createGraphicObject(uno::Ref
                 // border.
                 aBorderLine.Color = xShapeProps->getPropertyValue(u"LineColor"_ustr).get<sal_Int32>();
                 aBorderLine.LineWidth = xShapeProps->getPropertyValue(u"LineWidth"_ustr).get<sal_Int32>();
+                // a:prstDash: the picture border was drawn and saved as a solid line
+                if (xShapeProps->getPropertyValue(u"LineStyle"_ustr).get<drawing::LineStyle>()
+                    == drawing::LineStyle_DASH)
+                {
+                    drawing::LineDash aDash;
+                    if (xShapeProps->getPropertyValue(u"LineDash"_ustr) >>= aDash)
+                    {
+                        if (aDash.Dashes >= 2)
+                            aBorderLine.LineStyle = table::BorderLineStyle::DASH_DOT_DOT;
+                        else if (aDash.Dashes == 1)
+                            aBorderLine.LineStyle = table::BorderLineStyle::DASH_DOT;
+                        else if (aDash.DotLen <= aDash.Distance)
+                            aBorderLine.LineStyle = table::BorderLineStyle::DOTTED;
+                        else
+                            aBorderLine.LineStyle = table::BorderLineStyle::DASHED;
+                    }
+                }
             }
             else
             {

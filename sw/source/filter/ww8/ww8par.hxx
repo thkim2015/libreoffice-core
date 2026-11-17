@@ -665,7 +665,8 @@ public:
         : mrRdr(rRdr), mfUnknown(0), mfDropdownIndex(0),
         mfToolTip(0), mfNoMark(0), mfType(0),
         mfUnused(0), mhpsCheckBox(20), mnChecked(0), mnMaxLen(0),
-        mbHelp(false), msName(std::move( aN ))
+        mbHelp(false), mbProt(false), mbRecalc(false), mbExactSize(false), mnDefault(0), mnHps(0),
+        msName(std::move( aN ))
     {
     }
     sal_uInt8 mfUnknown:2;
@@ -684,6 +685,14 @@ public:
     OUString msDefault;
     OUString msFormatting;
     bool mbHelp;
+    /// FFData.bits fProt (disabled), fRecalc (calculate on exit), iSize (exact checkbox size)
+    bool mbProt;
+    bool mbRecalc;
+    bool mbExactSize;
+    /// FFData.wDef: default checkbox state or default dropdown entry
+    sal_uInt16 mnDefault;
+    /// FFData.hps: checkbox size in half points
+    sal_uInt16 mnHps;
     OUString msHelp;
     OUString msToolTip;
     OUString msEntryMcr;
