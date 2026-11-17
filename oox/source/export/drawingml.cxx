@@ -110,6 +110,7 @@
 #include <com/sun/star/drawing/RectanglePoint.hpp>
 
 #include <comphelper/propertyvalue.hxx>
+#include <comphelper/sequenceashashmap.hxx>
 #include <comphelper/random.hxx>
 #include <comphelper/seqstream.hxx>
 #include <comphelper/storagehelper.hxx>
@@ -1841,6 +1842,19 @@ void DrawingML::WriteXGraphicBlip(uno::Reference<beans::XPropertySet> const & rX
             }
             if (!aData.hasElements() || aEffects.isEmpty())
                 break;
+            // ZETA: brightness/contrast kept from the file; once changed in the editor the
+            // baked picture plus the new values is written instead
+            if (aEffects.indexOf("<a:lum ") >= 0)
+            {
+                sal_Int16 nNowBright = 0;
+                sal_Int32 nNowContrast = 0;
+                if (GetProperty(rXPropSet, u"AdjustLuminance"_ustr))
+                    mAny >>= nNowBright;
+                if (GetProperty(rXPropSet, u"AdjustContrast"_ustr))
+                    mAny >>= nNowContrast;
+                if (nNowBright || nNowContrast)
+                    break;
+            }
             SvMemoryStream aStream(const_cast<sal_Int8*>(aData.getConstArray()), aData.getLength(), StreamMode::READ);
             Graphic aOriginal;
             if (GraphicFilter::GetGraphicFilter().ImportGraphic(aOriginal, u"", aStream) == ERRCODE_NONE
@@ -4718,6 +4732,35 @@ void DrawingML::WriteBodyProps(const css::uno::Reference< css::uno::XInterface >
         else
         {
             mpFS->singleElementNS(XML_a, XML_prstTxWarp, XML_prst, sPresetWarp);
+        }
+    }
+    else if (GetDocumentType() == DOCUMENT_PPTX && rXPropSet.is()
+             && rXPropSet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr))
+    {
+        // zeta: text transform of a shape kept as a normal shape on import
+        uno::Sequence<beans::PropertyValue> aGrabBag;
+        rXPropSet->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag;
+        for (const auto& rItem : aGrabBag)
+        {
+            if (rItem.Name != "zetaTxWarp")
+                continue;
+            comphelper::SequenceAsHashMap aWarp(rItem.Value);
+            OUString sPrst = aWarp.getUnpackedValueOrDefault(u"Prst"_ustr, OUString());
+            uno::Sequence<beans::PropertyValue> aGuides
+                = aWarp.getUnpackedValueOrDefault(u"Guides"_ustr, uno::Sequence<beans::PropertyValue>());
+            if (sPrst.isEmpty())
+                break;
+            mpFS->startElementNS(XML_a, XML_prstTxWarp, XML_prst, sPrst);
+            mpFS->startElementNS(XML_a, XML_avLst);
+            for (const auto& rGuide : aGuides)
+            {
+                OUString sFmla;
+                rGuide.Value >>= sFmla;
+                mpFS->singleElementNS(XML_a, XML_gd, XML_name, rGuide.Name, XML_fmla, sFmla);
+            }
+            mpFS->endElementNS(XML_a, XML_avLst);
+            mpFS->endElementNS(XML_a, XML_prstTxWarp);
+            break;
         }
     }
     else if (GetDocumentType() == DOCUMENT_DOCX)

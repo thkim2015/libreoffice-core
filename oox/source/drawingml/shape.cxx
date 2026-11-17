@@ -23,6 +23,7 @@
 #include <cmath>
 
 #include <oox/drawingml/shape.hxx>
+#include <oox/drawingml/drawingmltypes.hxx>
 #include <drawingml/customshapeproperties.hxx>
 #include <oox/drawingml/theme.hxx>
 #include <drawingml/fillproperties.hxx>
@@ -961,6 +962,22 @@ OUString lcl_recolorXml(const BlipFillProperties& rBlip, const GraphicHelper& rG
         aBuf.append(lcl_recolorColorXml(rBlip.maDuotoneColors[0], rGraphicHelper));
         aBuf.append(lcl_recolorColorXml(rBlip.maDuotoneColors[1], rGraphicHelper));
         aBuf.append(u"</a:duotone>");
+    }
+    // ZETA: brightness together with contrast is baked into the picture on import (see
+    // GraphicProperties::pushToPropMap); keep the original values for export, like a recolor
+    const sal_Int32 nBright = rBlip.moBrightness.value_or(0);
+    const sal_Int32 nContrast = rBlip.moContrast.value_or(0);
+    if (nBright / PER_PERCENT != 0 && nContrast / PER_PERCENT != 0)
+    {
+        const sal_Int32 nEffect = rBlip.moColorEffect.value_or(XML_TOKEN_INVALID);
+        const bool bMode = nEffect == XML_grayscl
+                           || (nEffect == XML_biLevel && rBlip.moBiLevelThreshold.value_or(50000) == 50000);
+        const bool bWashout = !bMode && nBright / PER_PERCENT == 70 && nContrast / PER_PERCENT == -70;
+        if (!bWashout)
+        {
+            aBuf.append(u"<a:lum bright=\"" + OUString::number(nBright) + u"\" contrast=\""
+                        + OUString::number(nContrast) + u"\"/>");
+        }
     }
     return aBuf.makeStringAndClear();
 }
@@ -2526,6 +2543,20 @@ Reference< XShape > const & Shape::createAndInsert(
                 FontworkHelpers::putCustomShapeIntoTextPathMode(
                     mxShape, mpCustomShapePropertiesPtr, mpTextBody->getTextProperties().msPrst,
                     bFromWordArt);
+            }
+            else if (mpTextBody && !mpTextBody->getTextProperties().msKeptWarp.isEmpty())
+            {
+                // zeta: shape with fill/outline and a text transform stays a normal shape;
+                // keep the transform for export (see TextBodyPropertiesContext)
+                const auto& rGuides = mpTextBody->getTextProperties().maKeptWarpGuides;
+                uno::Sequence<beans::PropertyValue> aGuides(rGuides.size());
+                auto pGuides = aGuides.getArray();
+                for (size_t i = 0; i < rGuides.size(); ++i)
+                    pGuides[i] = comphelper::makePropertyValue(rGuides[i].first, rGuides[i].second);
+                putPropertyToGrabBag(u"zetaTxWarp"_ustr,
+                                     uno::Any(comphelper::InitPropertySequence(
+                                         { { "Prst", uno::Any(mpTextBody->getTextProperties().msKeptWarp) },
+                                           { "Guides", uno::Any(aGuides) } })));
             }
         }
         else if( getTextBody() )

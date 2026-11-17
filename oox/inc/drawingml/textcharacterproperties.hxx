@@ -47,6 +47,9 @@ struct TextCharacterProperties
     model::ComplexColor maUnderlineColor;
     model::ComplexColor maHighlightColor;
     std::optional< OUString > moLang;
+    /// zeta: run text has no East Asian characters but an East Asian lang: also set the
+    /// Western locale, so the run stays separate and exports its own lang (pptx).
+    bool mbLangWestern = false;
     std::optional< sal_Int32 > moHeight;
     /// If a font scale has to be applied manually to moHeight.
     std::optional< double > moFontScale;
