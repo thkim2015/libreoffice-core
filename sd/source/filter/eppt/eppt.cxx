@@ -30,6 +30,7 @@
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/XDrawPage.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/office/XAnnotation.hpp>
 #include <com/sun/star/office/XAnnotationAccess.hpp>
@@ -156,12 +157,54 @@ void PPTWriter::exportPPTPost( )
     mbStatus = true;
 };
 
+// zeta: the web app keeps PowerPoint layouts as master pages, so imported slides usually have the
+// blank LibreOffice layout (AUTOLAYOUT_NONE) while still holding title/subtitle/outline presentation
+// objects. A blank layout cannot take placeholders in the binary format and they were written as text
+// boxes; pick the layout from the presentation objects instead.
+static sal_Int32 lcl_LayoutFromPresObjs(const Reference<drawing::XDrawPage>& xPage)
+{
+    sal_Int32 nTitle = 0, nSubtitle = 0, nOutliner = 0;
+    if (!xPage.is())
+        return 20;
+    for (sal_Int32 i = 0, n = xPage->getCount(); i < n; ++i)
+    {
+        Reference<drawing::XShape> xShape(xPage->getByIndex(i), UNO_QUERY);
+        Reference<XPropertySet> xProps(xShape, UNO_QUERY);
+        if (!xShape.is() || !xProps.is()
+            || !xProps->getPropertySetInfo()->hasPropertyByName(u"IsPresentationObject"_ustr))
+            continue;
+        bool bPresObj = false;
+        xProps->getPropertyValue(u"IsPresentationObject"_ustr) >>= bPresObj;
+        if (!bPresObj)
+            continue;
+        const OUString aType = xShape->getShapeType();
+        if (aType == "com.sun.star.presentation.TitleTextShape")
+            ++nTitle;
+        else if (aType == "com.sun.star.presentation.SubtitleShape")
+            ++nSubtitle;
+        else if (aType == "com.sun.star.presentation.OutlinerShape")
+            ++nOutliner;
+    }
+    if (!nTitle)
+        return 20;
+    if (nSubtitle)
+        return 0; // AUTOLAYOUT_TITLE
+    if (nOutliner >= 2)
+        return 3; // AUTOLAYOUT_TITLE_2CONTENT
+    if (nOutliner == 1)
+        return 1; // AUTOLAYOUT_TITLE_CONTENT
+    return 19; // AUTOLAYOUT_TITLE_ONLY
+}
+
 void PPTWriter::ImplWriteSlide( sal_uInt32 nPageNum, sal_uInt32 nMasterNum, sal_uInt16 nMode,
                                 bool bHasBackground, Reference< XPropertySet > const & aXBackgroundPropSet )
 {
     Any aAny;
 
-    const PHLayout& rLayout = GetLayout( mXPagePropSet );
+    sal_Int32 nLayoutOffset = GetLayoutOffsetFixed( mXPagePropSet );
+    if ( nLayoutOffset == 20 )
+        nLayoutOffset = lcl_LayoutFromPresObjs( mXDrawPage );
+    const PHLayout& rLayout = GetLayout( nLayoutOffset );
     mpPptEscherEx->PtReplaceOrInsert( EPP_Persist_Slide | nPageNum, mpStrm->Tell() );
     mpPptEscherEx->OpenContainer( EPP_Slide );
     mpPptEscherEx->AddAtom( 24, EPP_SlideAtom, 2 );
