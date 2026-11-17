@@ -1634,8 +1634,15 @@ void ImplSdPPTImport::ImportPageEffect( SdPage* pPage, const bool bNewAnimations
                                     {
                                         if ( nBuildFlags )
                                         {
+                                            // PowerPoint writes direction 2 for "no transition";
+                                            // direction 0 is the plain cut, 1 the cut through black
                                             if ( nDirection == 0 )
-                                                pPage->SetFadeEffect( css::presentation::FadeEffect_NONE );                // direct
+                                            {
+                                                pPage->setTransitionType( animations::TransitionType::BARWIPE );
+                                                pPage->setTransitionSubtype( animations::TransitionSubType::FADEOVERCOLOR );
+                                                pPage->setTransitionFadeColor( 0 );
+                                                pPage->setTransitionDirection( false );
+                                            }
                                             else if ( nDirection == 1 )
                                             {
                                                 pPage->setTransitionType( animations::TransitionType::BARWIPE );
