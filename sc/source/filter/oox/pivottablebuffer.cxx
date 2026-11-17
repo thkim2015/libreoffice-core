@@ -64,7 +64,6 @@
 #include <dpdimsave.hxx>
 #include <document.hxx>
 #include <documentimport.hxx>
-#include <hints.hxx>
 #include <workbooksettings.hxx>
 #include <PivotTableFormat.hxx>
 #include <stylesbuffer.hxx>
@@ -1562,18 +1561,6 @@ void PivotTable::finalizeImport()
         rDoc.SetImportingXML(true);
         xDPTables->insertNewByName( maDefModel.maName, aPos, mxDPDescriptor );
         rDoc.SetImportingXML(false);
-
-        /*  ZetaOffice: the pivot charts of this table were imported with the
-            cell ranges of the table body, which cannot hold nested row items
-            (the outer item shares its row with the subtotal). With two or
-            more row fields let them take the pivot data now, which gives the
-            two-level category axis of Excel. */
-        sal_Int32 nRowFields = 0;
-        for( sal_Int32 nField : maRowFields )
-            if( nField != OOX_PT_DATALAYOUTFIELD )
-                ++nRowFields;
-        if( nRowFields >= 2 )
-            rDoc.BroadcastUno( ScDataPilotModifiedHint( maDefModel.maName ) );
     }
     catch( Exception& )
     {
