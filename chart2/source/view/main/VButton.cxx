@@ -18,6 +18,8 @@
 
 #include <CommonConverters.hxx>
 #include <editeng/unoprnms.hxx>
+#include <vcl/font.hxx>
+#include <vcl/virdev.hxx>
 
 namespace chart
 {
@@ -139,28 +141,29 @@ void VButton::createShapes(const uno::Reference<beans::XPropertySet>& xTextProp)
 
 sal_Int32 VButton::measureLabel(const uno::Reference<beans::XPropertySet>& xTextProp) const
 {
-    if (!m_xTarget.is() || m_sLabel.isEmpty())
+    // the auto-growing text shape of a fresh page group does not report its
+    // grown size here, so measure with the chart text font on a virtual device
+    if (m_sLabel.isEmpty())
         return 0;
-    tNameSequence aPropNames;
-    tAnySequence aPropValues;
-    PropertyMapper::getTextLabelMultiPropertyLists(xTextProp, aPropNames, aPropValues);
-    tPropertyNameValueMap aTextValueMap;
-    aTextValueMap[u"CharHeight"_ustr] <<= 10.0f;
-    aTextValueMap[u"CharHeightAsian"_ustr] <<= 10.0f;
-    aTextValueMap[u"CharHeightComplex"_ustr] <<= 10.0f;
-    aTextValueMap[u"TextWordWrap"_ustr] <<= false;
-    // an auto-growing text wraps at its maximum frame width (0 = every letter)
-    aTextValueMap[u"TextMaximumFrameWidth"_ustr] <<= sal_Int32(100000);
-    aTextValueMap[u"TextLeftDistance"_ustr] <<= sal_Int32(0);
-    aTextValueMap[u"TextRightDistance"_ustr] <<= sal_Int32(0);
-    PropertyMapper::getMultiPropertyListsFromValueMap(aPropNames, aPropValues, aTextValueMap);
-    rtl::Reference<SvxShapeText> xText
-        = ShapeFactory::createText(m_xTarget, m_sLabel, aPropNames, aPropValues, uno::Any());
-    if (!xText.is())
-        return 0;
-    const sal_Int32 nWidth = xText->getSize().Width;
-    m_xTarget->remove(xText);
-    return nWidth;
+    bool bAsian = false;
+    for (sal_Int32 i = 0; i < m_sLabel.getLength(); ++i)
+        if (m_sLabel[i] >= 0x1100)
+            bAsian = true;
+    OUString aFontName;
+    try
+    {
+        if (xTextProp.is())
+            xTextProp->getPropertyValue(bAsian ? u"CharFontNameAsian"_ustr : u"CharFontName"_ustr)
+                >>= aFontName;
+    }
+    catch (const uno::Exception&)
+    {
+    }
+    ScopedVclPtrInstance<VirtualDevice> pDev;
+    pDev->SetMapMode(MapMode(MapUnit::Map100thMM));
+    vcl::Font aFont(aFontName, Size(0, 353)); // 10pt
+    pDev->SetFont(aFont);
+    return pDev->GetTextWidth(m_sLabel);
 }
 
 } //namespace chart
