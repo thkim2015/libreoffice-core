@@ -3125,10 +3125,16 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                                    [](sal_Unicode c) { return '0' <= c && c <= '9'; }))
                     sStr += "\\r " + sFormula + " ";
                 // the name alone (no "+1"), maybe in another spelling of the sequence name
-                else if (!sFormula.isEmpty() && sFormula.indexOf('+') < 0)
+                bool bRepeat = false;
+                if (!sFormula.isEmpty() && sFormula.indexOf('+') < 0 && sStr.indexOf("\\r ") < 0)
+                {
                     sStr += "\\c ";
+                    bRepeat = true;
+                }
                 const SwSetExpFieldType* pSeqType = static_cast<const SwSetExpFieldType*>(pField->GetTyp());
-                if (pSeqType->IsWordRestartOnly() && pSeqType->GetOutlineLvl() < MAXLEVEL)
+                // the chapter restart level belongs to the sequence type in Writer, but in Word \s is a switch
+                // of each field: SEQ \c repeats the previous number, so it gets no \s from another field
+                if (!bRepeat && pSeqType->IsWordRestartOnly() && pSeqType->GetOutlineLvl() < MAXLEVEL)
                     sStr += "\\s " + OUString::number(pSeqType->GetOutlineLvl() + 1) + " ";
                 if (bHiddenSeq)
                     sStr += "\\h ";
