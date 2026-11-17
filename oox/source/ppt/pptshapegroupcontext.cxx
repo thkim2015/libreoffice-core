@@ -78,6 +78,11 @@ ContextHandlerRef PPTShapeGroupContext::onCreateContext( sal_Int32 aElementToken
             mpGroupShapePtr->setId(rAttribs.getStringDefaulted(XML_id));
         if (mpGroupShapePtr->getName().isEmpty())
             mpGroupShapePtr->setName( rAttribs.getStringDefaulted( XML_name ) );
+        // zeta: group alt text
+        if (rAttribs.hasAttribute(XML_descr))
+            mpGroupShapePtr->setDescription( rAttribs.getStringDefaulted( XML_descr ) );
+        if (rAttribs.hasAttribute(XML_title))
+            mpGroupShapePtr->setTitle( rAttribs.getStringDefaulted( XML_title ) );
         break;
     }
     case PPT_TOKEN( ph ):

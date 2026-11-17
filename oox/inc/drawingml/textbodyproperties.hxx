@@ -26,6 +26,8 @@
 #include <oox/helper/propertymap.hxx>
 #include <optional>
 #include <array>
+#include <utility>
+#include <vector>
 
 class Size;
 
@@ -48,6 +50,11 @@ struct TextBodyProperties
     std::optional< sal_Int32 >                    moTextOffRight;
     css::drawing::TextVerticalAdjust                meVA;
     OUString                                        msPrst;
+    /// zeta: prstTxWarp of a shape with visible fill or line. LibreOffice cannot draw both
+    /// the shape and warped text, so such a shape stays a normal shape and the warp is only
+    /// kept for export (shape InteropGrabBag "zetaTxWarp").
+    OUString                                        msKeptWarp;
+    std::vector<std::pair<OUString, OUString>>      maKeptWarpGuides;
     /// Normal autofit: font scale (default: 100%).
     sal_Int32 mnFontScale = 100000;
     sal_Int32 mnSpacingScale = 100000;

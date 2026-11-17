@@ -511,9 +511,17 @@ ShapeExport& ShapeExport::WriteGroupShape(const uno::Reference<drawing::XShape>&
         if( GetProperty(xShapeProps, u"Visible"_ustr))
             mAny >>= isVisible;
 
+        // zeta: group alt text (descr/title) like the other shapes
+        OUString sDescr, sTitle;
+        if (GetProperty(xShapeProps, u"Description"_ustr))
+            mAny >>= sDescr;
+        if (GetProperty(xShapeProps, u"Title"_ustr))
+            mAny >>= sTitle;
         pFS->startElementNS(mnXmlNamespace, XML_nvGrpSpPr);
         pFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id,
                             OString::number(GetNewShapeID(xShape)), XML_name, GetShapeName(xShape),
+                            XML_descr, sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()),
+                            XML_title, sax_fastparser::UseIf(sTitle, !sTitle.isEmpty()),
                             XML_hidden, sax_fastparser::UseIf("1", !isVisible));
         AddExtLst(pFS, xShapeProps);
         pFS->endElementNS(mnXmlNamespace, XML_cNvPr);

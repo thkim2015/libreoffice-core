@@ -110,6 +110,8 @@ public:
     OUString     insertTransGrandient( const css::awt::Gradient& rGradient );
 
     OUString     insertFillHatch( const css::drawing::Hatch& rHatch );
+    /** zeta: inserts a fill hatch named '<rBaseName> <n>' (keeps the OOXML pattern preset). */
+    OUString     insertFillHatch( const css::drawing::Hatch& rHatch, const OUString& rBaseName );
 
     /** Inserts a new named fill graphic, returns the bitmap name, based on
         an internal constant name with a new unused index appended. */

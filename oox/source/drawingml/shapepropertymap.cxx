@@ -196,6 +196,21 @@ bool ShapePropertyMap::setFillHatch( sal_Int32 nPropId, const Any& rValue )
     return false;
 }
 
+bool ShapePropertyMap::setFillHatchPreset( const drawing::Hatch& rHatch, const OUString& rPreset )
+{
+    sal_Int32 nPropId = maShapePropInfo[ ShapeProperty::FillHatch ];
+    if( nPropId < 0 )
+        return false;
+    if( rPreset.isEmpty() )
+        return setFillHatch( nPropId, Any( rHatch ) );
+    OUString aHatchName = mrModelObjHelper.insertFillHatch( rHatch, rPreset );
+    if( aHatchName.isEmpty() )
+        return setFillHatch( nPropId, Any( rHatch ) );
+    if( maShapePropInfo.mbNamedFillHatch )
+        return setProperty( nPropId, aHatchName );
+    return setProperty( PROP_FillHatchName, aHatchName );
+}
+
 bool ShapePropertyMap::setGradientTrans( sal_Int32 nPropId, const Any& rValue )
 {
     // create named gradient and push its name
