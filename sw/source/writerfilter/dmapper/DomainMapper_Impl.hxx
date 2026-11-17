@@ -732,6 +732,8 @@ public:
     css::uno::Reference<css::text::XTextRange> m_xAltChunkStartingRange;
     std::deque<sal_Int32> m_aFootnoteIds;
     std::deque<sal_Int32> m_aEndnoteIds;
+    /// resolving the paragraph mark run properties (w:pPr/w:rPr)
+    bool m_bInParaMarkRPr = false;
 
 private:
     bool m_bIsNewDoc;
