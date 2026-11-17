@@ -2346,6 +2346,14 @@ Reference< XShape > const & Shape::createAndInsert(
                 putPropertyToGrabBag(u"EffectProperties"_ustr, uno::Any(comphelper::containerToSequence(aEffects)));
             }
 
+            // zeta: tiled picture fill flip (a:tile flip) - LibreOffice bitmap fills cannot mirror tiles
+            if (aFillProperties.maBlipProps.moTileFlip.has_value()
+                && *aFillProperties.maBlipProps.moTileFlip != XML_none)
+            {
+                const sal_Int32 nFlip = *aFillProperties.maBlipProps.moTileFlip;
+                putPropertyToGrabBag(u"FillTileFlip"_ustr, uno::Any(OUString(nFlip == XML_x ? u"x" : nFlip == XML_y ? u"y" : u"xy")));
+            }
+
             // add 3D effects if any to GrabBag. They are still used in export.
             if (bHas3DProps)
             {

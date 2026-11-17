@@ -38,6 +38,8 @@ void EffectPropertiesContext::saveUnsupportedAttribs( Effect& rEffect, const Att
 {
     if( rAttribs.hasAttribute( XML_algn ) )
         rEffect.maAttribs[u"algn"_ustr] <<= rAttribs.getStringDefaulted( XML_algn);
+    if( rAttribs.hasAttribute( XML_prst ) ) // zeta: prstShdw
+        rEffect.maAttribs[u"prst"_ustr] <<= rAttribs.getStringDefaulted( XML_prst);
     if( rAttribs.hasAttribute( XML_blurRad ) )
         rEffect.maAttribs[u"blurRad"_ustr] <<= rAttribs.getInteger( XML_blurRad, 0 );
     if( rAttribs.hasAttribute( XML_dir ) )
@@ -127,6 +129,14 @@ ContextHandlerRef EffectPropertiesContext::onCreateContext( sal_Int32 nElement, 
                 pColor = &rEffect.maColor;
             }
             return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, pColor);
+        }
+        break;
+        case A_TOKEN( prstShdw ):
+        {
+            // zeta: LibreOffice cannot draw preset shadows - keep them in the grab bag for export
+            mrEffectProperties.m_Effects[nPos]->msName = "prstShdw";
+            saveUnsupportedAttribs(*mrEffectProperties.m_Effects[nPos], rAttribs);
+            return new ColorContext(*this, &mrEffectProperties.m_Effects[nPos]->moColor, nullptr);
         }
         break;
         case A_TOKEN( glow ):

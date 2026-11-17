@@ -2014,7 +2014,10 @@ void DrawingML::WritePattFill(const Reference<XPropertySet>& rXPropSet, const cs
         {
             OUString aName;
             mAny >>= aName;
-            const OString aAscii = OUStringToOString(aName, RTL_TEXTENCODING_ASCII_US);
+            OString aAscii = OUStringToOString(aName, RTL_TEXTENCODING_ASCII_US);
+            // zeta: the import names hatches '<prst> <n>' (several colors of one preset)
+            if (sal_Int32 nSpace = aAscii.indexOf(' '); nSpace > 0)
+                aAscii = aAscii.copy(0, nSpace);
             for (std::string_view aItem : aPresets)
                 if (aAscii == aItem)
                     aPreset = aAscii;
@@ -2260,9 +2263,22 @@ void DrawingML::WriteXGraphicTile(uno::Reference<beans::XPropertySet> const& rXP
     if (GetProperty(rXPropSet, u"FillBitmapRectanglePoint"_ustr))
         sRectanglePoint = lclConvertRectanglePointToToken(*o3tl::doAccess<RectanglePoint>(mAny));
 
+    // zeta: tile flip kept from the import (InteropGrabBag FillTileFlip)
+    OUString sFlip;
+    if (rXPropSet->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr)
+        && GetProperty(rXPropSet, u"InteropGrabBag"_ustr))
+    {
+        Sequence<PropertyValue> aBag;
+        mAny >>= aBag;
+        for (const auto& rProp : aBag)
+            if (rProp.Name == "FillTileFlip")
+                rProp.Value >>= sFlip;
+    }
+
     mpFS->singleElementNS(XML_a, XML_tile, XML_tx, OUString::number(nOffsetX), XML_ty,
                           OUString::number(nOffsetY), XML_sx, OUString::number(nSizeX), XML_sy,
-                          OUString::number(nSizeY), XML_algn, sRectanglePoint);
+                          OUString::number(nSizeY), XML_flip, sax_fastparser::UseIf(sFlip, !sFlip.isEmpty()),
+                          XML_algn, sRectanglePoint);
 }
 
 void DrawingML::WriteXGraphicCustomPosition(uno::Reference<beans::XPropertySet> const& rXPropSet,
@@ -6441,6 +6457,11 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
         nEffectToken = FSNS( XML_a, XML_glow );
         bContainsColor = true;
     }
+    else if( sName == u"prstShdw" ) // zeta
+    {
+        nEffectToken = FSNS( XML_a, XML_prstShdw );
+        bContainsColor = true;
+    }
     else if( sName == u"softEdge" )
         nEffectToken = FSNS( XML_a, XML_softEdge );
     else if( sName == u"reflection" )
@@ -6467,6 +6488,12 @@ void DrawingML::WriteShapeEffect( std::u16string_view sName, const Sequence< Pro
                     OUString sVal;
                     rOuterShdwProp.Value >>= sVal;
                     aOuterShdwAttrList->add( XML_algn, sVal );
+                }
+                else if( rOuterShdwProp.Name == "prst" ) // zeta: prstShdw
+                {
+                    OUString sVal;
+                    rOuterShdwProp.Value >>= sVal;
+                    aOuterShdwAttrList->add( XML_prst, sVal );
                 }
                 else if( rOuterShdwProp.Name == "blurRad" )
                 {

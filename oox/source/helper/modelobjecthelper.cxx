@@ -156,6 +156,11 @@ OUString ModelObjectHelper::insertFillHatch(const drawing::Hatch& rHatch)
     return maHatchContainer.insertObject( gaHatchNameBase, Any( rHatch ), true );
 }
 
+OUString ModelObjectHelper::insertFillHatch(const drawing::Hatch& rHatch, const OUString& rBaseName)
+{
+    return maHatchContainer.insertObject( rBaseName + " ", Any( rHatch ), true );
+}
+
 uno::Reference<awt::XBitmap> ModelObjectHelper::getFillBitmap(OUString const & rGraphicName)
 {
     uno::Reference<awt::XBitmap> xBitmap;
