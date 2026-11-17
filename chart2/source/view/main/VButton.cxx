@@ -149,6 +149,8 @@ sal_Int32 VButton::measureLabel(const uno::Reference<beans::XPropertySet>& xText
     aTextValueMap[u"CharHeightAsian"_ustr] <<= 10.0f;
     aTextValueMap[u"CharHeightComplex"_ustr] <<= 10.0f;
     aTextValueMap[u"TextWordWrap"_ustr] <<= false;
+    // an auto-growing text wraps at its maximum frame width (0 = every letter)
+    aTextValueMap[u"TextMaximumFrameWidth"_ustr] <<= sal_Int32(100000);
     aTextValueMap[u"TextLeftDistance"_ustr] <<= sal_Int32(0);
     aTextValueMap[u"TextRightDistance"_ustr] <<= sal_Int32(0);
     PropertyMapper::getMultiPropertyListsFromValueMap(aPropNames, aPropValues, aTextValueMap);
