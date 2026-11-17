@@ -13,6 +13,7 @@
 #include <oox/core/contexthandler2.hxx>
 #include <oox/drawingml/shapecontext.hxx>
 #include <oox/drawingml/drawingmltypes.hxx>
+#include <drawingml/shape3dproperties.hxx>
 
 namespace com::sun::star::drawing
 {
@@ -38,6 +39,9 @@ public:
 private:
     css::uno::Reference<css::drawing::XShape> mxShape;
     bool m_bHasWPGParent;
+    /// weboffice: a:scene3d / a:sp3d of wps:bodyPr (WordArt bevel and 3-D rotation of the text)
+    oox::drawingml::Text3DProperties m_aText3D;
+    bool m_bHasText3D = false;
 };
 }
 
