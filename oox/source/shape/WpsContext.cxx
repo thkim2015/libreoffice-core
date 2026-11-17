@@ -12,6 +12,7 @@
 #include "WordprocessingCanvasContext.hxx"
 #include <basegfx/matrix/b2dhommatrix.hxx>
 #include <basegfx/tuple/b2dtuple.hxx>
+#include <comphelper/propertysequence.hxx>
 #include <comphelper/propertyvalue.hxx>
 #include <comphelper/sequence.hxx>
 #include <comphelper/sequenceashashmap.hxx>
@@ -20,6 +21,7 @@
 #include <drawingml/fontworkhelpers.hxx>
 #include <drawingml/textbody.hxx>
 #include <drawingml/textbodyproperties.hxx>
+#include <drawingml/scene3dcontext.hxx>
 #include <oox/drawingml/color.hxx>
 #include <oox/drawingml/connectorshapecontext.hxx>
 #include <oox/drawingml/drawingmltypes.hxx>
@@ -881,6 +883,27 @@ oox::core::ContextHandlerRef WpsContext::onCreateContext(sal_Int32 nElementToken
                 mpShapePtr->setTextBody(pTextBody);
             }
             break;
+        case XML_scene3d:
+        case XML_sp3d:
+        {
+            // weboffice: 3-D of the text (WordArt bevel, 3-D rotation) - kept in the shape grab bag
+            // "Text3DEffectProperties" (see onEndElement), which DOCX export writes back into bodyPr
+            if (!mxShape.is())
+                break;
+            m_bHasText3D = true;
+            if (getBaseToken(nElementToken) == XML_sp3d)
+            {
+                if (rAttribs.hasAttribute(XML_extrusionH))
+                    m_aText3D.mnExtrusionH = rAttribs.getInteger(XML_extrusionH, 0);
+                if (rAttribs.hasAttribute(XML_contourW))
+                    m_aText3D.mnContourW = rAttribs.getInteger(XML_contourW, 0);
+                if (rAttribs.hasAttribute(XML_z))
+                    m_aText3D.mnShapeZ = rAttribs.getInteger(XML_z, 0);
+                if (rAttribs.hasAttribute(XML_prstMaterial))
+                    m_aText3D.mnMaterial = rAttribs.getToken(XML_prstMaterial, XML_none);
+            }
+            return new oox::drawingml::SceneText3DPropertiesContext(*this, m_aText3D);
+        }
         case XML_noAutofit:
         case XML_spAutoFit:
         {
@@ -980,6 +1003,27 @@ void WpsContext::onEndElement()
 
     if (getBaseToken(getCurrentElement()) != XML_bodyPr)
         return;
+
+    if (m_bHasText3D && mxShape.is())
+    {
+        m_bHasText3D = false;
+        uno::Reference<beans::XPropertySet> xProps(mxShape, uno::UNO_QUERY);
+        uno::Sequence<beans::PropertyValue> aCamera = m_aText3D.getCameraAttributes();
+        uno::Sequence<beans::PropertyValue> aLightRig = m_aText3D.getLightRigAttributes();
+        uno::Sequence<beans::PropertyValue> aShape3D
+            = m_aText3D.getShape3DAttributes(getFilter().getGraphicHelper(), API_RGB_TRANSPARENT);
+        if (xProps.is() && xProps->getPropertySetInfo()->hasPropertyByName(u"InteropGrabBag"_ustr)
+            && (aCamera.hasElements() || aLightRig.hasElements() || aShape3D.hasElements()))
+        {
+            comphelper::SequenceAsHashMap aGrabBag(xProps->getPropertyValue(u"InteropGrabBag"_ustr));
+            aGrabBag[u"Text3DEffectProperties"_ustr] <<= comphelper::InitPropertySequence(
+                { { "Camera", uno::Any(aCamera) },
+                  { "LightRig", uno::Any(aLightRig) },
+                  { "Shape3D", uno::Any(aShape3D) } });
+            xProps->setPropertyValue(u"InteropGrabBag"_ustr,
+                                     uno::Any(aGrabBag.getAsConstPropertyValueList()));
+        }
+    }
 
     // Make sure all needed parts are available
     auto* pCustomShape
