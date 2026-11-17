@@ -57,6 +57,8 @@ private:
     TblStyleType                m_nType;
     PropertyMapPtr              m_pProperties;
     std::vector<css::beans::PropertyValue> m_aInteropGrabBag;
+    sal_Int32                   m_nRowBandSize = 0; ///< w:tblStyleRowBandSize (0: not set)
+    sal_Int32                   m_nColBandSize = 0; ///< w:tblStyleColBandSize (0: not set)
 
     // Properties
     virtual void lcl_attribute(Id Name, const Value & val) override;
@@ -68,6 +70,8 @@ public:
 
     const PropertyMapPtr&       getProperties() const { return m_pProperties; };
     TblStyleType         getType() const { return m_nType; };
+    sal_Int32 getRowBandSize() const { return m_nRowBandSize; }
+    sal_Int32 getColBandSize() const { return m_nColBandSize; }
     OUString getTypeString() const;
     void appendInteropGrabBag(const OUString& aKey, const OUString& aValue);
     css::beans::PropertyValue getInteropGrabBag(const OUString& aName);

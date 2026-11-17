@@ -186,6 +186,10 @@ public:
     TableStyleSheetEntry( StyleSheetEntry const & aEntry );
     virtual ~TableStyleSheetEntry( ) override;
 
+    /// w:tblStyleRowBandSize / w:tblStyleColBandSize of this style (0: not set, inherit or 1)
+    sal_Int32 m_nRowBandSize = 0;
+    sal_Int32 m_nColBandSize = 0;
+
 private:
     typedef std::map<TblStyleType, PropertyMapPtr> TblStylePrs;
     TblStylePrs m_aStyles;
