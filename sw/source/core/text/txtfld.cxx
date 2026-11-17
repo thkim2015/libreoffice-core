@@ -96,6 +96,31 @@ SwExpandPortion *SwTextFormatter::NewFieldPortion( SwTextFormatInfo &rInf,
 
     SwViewShell *pSh = rInf.GetVsh();
 
+    // weboffice: a locked field (bookmark "_ZetaLock..." at it) shows the result it had when locked
+    if (!bName)
+    {
+        switch (pField->GetTyp()->Which())
+        {
+            case SwFieldIds::DateTime:
+            case SwFieldIds::DocInfo:
+            case SwFieldIds::ExtUser:
+            case SwFieldIds::Author:
+            case SwFieldIds::Filename:
+            case SwFieldIds::TemplateName:
+            case SwFieldIds::DocStat:
+            case SwFieldIds::PageNumber:
+            case SwFieldIds::SetExp:
+            {
+                SwTextField const* const pTextField = static_txtattr_cast<SwTextField const*>(pHint);
+                if (!pTextField->GetExpandCache().isEmpty() && pTextField->IsZetaLocked())
+                    return new SwFieldPortion(pTextField->GetExpandCache());
+                break;
+            }
+            default:
+                break;
+        }
+    }
+
     switch (pField->GetTyp()->Which())
     {
         case SwFieldIds::Script:

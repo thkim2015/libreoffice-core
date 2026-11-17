@@ -64,6 +64,11 @@ public:
 
     bool IsFieldInDoc() const;
 
+    /// weboffice: the field is locked (Word w:fldLock) when a bookmark named "_ZetaLock..."
+    /// starts right at it; locked fields keep their result on automatic and F9 updates.
+    bool IsZetaLocked() const;
+    const OUString& GetExpandCache() const { return m_aExpand; }
+
     // enable notification that field content has changed and needs reformatting
     virtual void NotifyContentChange( SwFormatField& rFormatField );
 

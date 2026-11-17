@@ -38,6 +38,7 @@
 #include <hints.hxx>
 #include <IDocumentFieldsAccess.hxx>
 #include <IDocumentMarkAccess.hxx>
+#include <IMark.hxx>
 #include <IDocumentLayoutAccess.hxx>
 #include <fieldhint.hxx>
 #include <sal/log.hxx>
@@ -629,9 +630,30 @@ bool SwTextField::IsFieldInDoc() const
            && GetpTextNode()->GetNodes().IsDocNodes();
 }
 
+bool SwTextField::IsZetaLocked() const
+{
+    if (!m_pTextNode)
+        return false;
+    IDocumentMarkAccess const& rIDMA = *m_pTextNode->GetDoc().getIDocumentMarkAccess();
+    for (auto it = rIDMA.getBookmarksBegin(); it != rIDMA.getBookmarksEnd(); ++it)
+    {
+        sw::mark::MarkBase const* const pMark = *it;
+        if (!pMark->GetName().toString().startsWith("_ZetaLock"))
+            continue;
+        SwPosition const& rPos = pMark->GetMarkStart();
+        if (&rPos.GetNode() == m_pTextNode && rPos.GetContentIndex() == GetStart())
+            return true;
+    }
+    return false;
+}
+
 void SwTextField::ExpandTextField(const bool bForceNotify) const
 {
     OSL_ENSURE( m_pTextNode, "SwTextField: where is my TextNode?" );
+
+    // weboffice: a locked field keeps the result it already shows
+    if (!m_aExpand.isEmpty() && IsZetaLocked())
+        return;
 
     const SwField* pField = GetFormatField().GetField();
     const OUString aNewExpand( pField->ExpandField(m_pTextNode->GetDoc().IsClipBoard(),
