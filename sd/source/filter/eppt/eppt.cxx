@@ -26,6 +26,8 @@
 #include <tools/stream.hxx>
 #include <svx/svdobj.hxx>
 #include <svx/svdoole2.hxx>
+#include <com/sun/star/animations/TransitionSubType.hpp>
+#include <com/sun/star/animations/TransitionType.hpp>
 #include <com/sun/star/container/XIndexContainer.hpp>
 #include <com/sun/star/document/XDocumentPropertiesSupplier.hpp>
 #include <com/sun/star/drawing/FillStyle.hpp>
@@ -271,10 +273,27 @@ void PPTWriter::ImplWriteSlide( sal_uInt32 nPageNum, sal_uInt32 nMasterNum, sal_
     if ( GetPropertyValue( aAny, mXPagePropSet, u"LoopSound"_ustr ) )
         aAny >>= bLoopSound;
 
+    // cut (BARWIPE + FADEOVERCOLOR) has no FadeEffect: transition type 0 with
+    // direction 0 (plain) or 1 (through black); "no transition" is direction 2
+    bool bCut = false;
+    bool bCutThroughBlack = true;
+    {
+        sal_Int16 nCutType = 0, nCutSubtype = 0;
+        if ( GetPropertyValue( aAny, mXPagePropSet, u"TransitionType"_ustr ) )
+            aAny >>= nCutType;
+        if ( GetPropertyValue( aAny, mXPagePropSet, u"TransitionSubtype"_ustr ) )
+            aAny >>= nCutSubtype;
+        bCut = nCutType == css::animations::TransitionType::BARWIPE
+               && nCutSubtype == css::animations::TransitionSubType::FADEOVERCOLOR;
+        if ( bCut && GetPropertyValue( aAny, mXPagePropSet, u"TransitionDirection"_ustr ) )
+            aAny >>= bCutThroughBlack;
+    }
+
     bool bNeedsSSSlideInfoAtom = !bVisible
                                 || ( mnDiaMode == 2 )
                                 || bIsSound
                                 || bStopSound
+                                || bCut
                                 || ( eFe != css::presentation::FadeEffect_NONE );
     if ( bNeedsSSSlideInfoAtom )
     {
@@ -322,6 +341,11 @@ void PPTWriter::ImplWriteSlide( sal_uInt32 nPageNum, sal_uInt32 nMasterNum, sal_
         }
         if ( !nTransitionType )
             nTransitionType = GetTransition( eFe, nDirection );
+        if ( bCut )
+        {
+            nTransitionType = 0;
+            nDirection = bCutThroughBlack ? 1 : 0;
+        }
         if ( mnDiaMode == 2 )                                   // automatic ?
             nBuildFlags |= 0x400;
         if ( !bVisible )
