@@ -18,6 +18,8 @@
 
 #include <CommonConverters.hxx>
 #include <editeng/unoprnms.hxx>
+#include <svx/svdotext.hxx>
+#include <svx/unoshape.hxx>
 #include <vcl/font.hxx>
 #include <vcl/virdev.hxx>
 
@@ -144,10 +146,45 @@ void VButton::createShapes(const uno::Reference<beans::XPropertySet>& xTextProp)
 
 sal_Int32 VButton::measureLabel(const uno::Reference<beans::XPropertySet>& xTextProp) const
 {
-    // the auto-growing text shape of a fresh page group does not report its
-    // grown size here, so measure with the chart text font on a virtual device
     if (m_sLabel.isEmpty())
         return 0;
+    // Measure with the draw outliner of a text shape carrying the same text
+    // properties as the drawn label, so font fallback, the script of weak
+    // letters (spaces, colon) and the reference device are the drawn ones.
+    // The shape of a fresh page group does not grow by itself here, so ask
+    // the text object for its auto-grown width explicitly.
+    if (m_xTarget.is())
+    {
+        tNameSequence aPropNames;
+        tAnySequence aPropValues;
+        PropertyMapper::getTextLabelMultiPropertyLists(xTextProp, aPropNames, aPropValues);
+        tPropertyNameValueMap aTextValueMap;
+        aTextValueMap[u"CharHeight"_ustr] <<= 10.0f;
+        aTextValueMap[u"CharHeightAsian"_ustr] <<= 10.0f;
+        aTextValueMap[u"CharHeightComplex"_ustr] <<= 10.0f;
+        aTextValueMap[u"TextAutoGrowWidth"_ustr] <<= true;
+        aTextValueMap[u"TextAutoGrowHeight"_ustr] <<= true;
+        aTextValueMap[u"TextMaximumFrameWidth"_ustr] <<= sal_Int32(100000);
+        aTextValueMap[u"TextLeftDistance"_ustr] <<= sal_Int32(0);
+        aTextValueMap[u"TextRightDistance"_ustr] <<= sal_Int32(0);
+        PropertyMapper::getMultiPropertyListsFromValueMap(aPropNames, aPropValues, aTextValueMap);
+        rtl::Reference<SvxShapeText> xText
+            = ShapeFactory::createText(m_xTarget, m_sLabel, aPropNames, aPropValues, uno::Any());
+        if (xText.is())
+        {
+            sal_Int32 nWidth = 0;
+            if (const SdrTextObj* pTextObj = DynCastSdrTextObj(xText->GetSdrObject()))
+            {
+                tools::Rectangle aRect(Point(0, 0), Size(2, 2));
+                if (pTextObj->AdjustTextFrameWidthAndHeight(aRect, false, true))
+                    nWidth = aRect.GetWidth();
+            }
+            m_xTarget->remove(xText);
+            if (nWidth > 0)
+                return nWidth;
+        }
+    }
+    // fallback: the chart text fonts on a virtual device
     // Asian letters use the Asian font, the rest (spaces, colon, Latin) the
     // Western one, like the drawn label - measure each run with its own font
     OUString aWestern, aAsian;

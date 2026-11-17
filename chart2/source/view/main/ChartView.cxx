@@ -1234,7 +1234,7 @@ sal_Int32 lcl_getPivotFieldButtons(ChartModel& rModel)
 // the drop-down arrow (13pt) - Excel 2021 tests/tmp/pvdrill/01-make.ps1: value
 // button "Sum : Sales" 46.5pt, axis buttons with two CJK letters 33pt.
 constexpr sal_Int32 nFieldButtonLeft = 40;
-constexpr sal_Int32 nFieldButtonArrow = 460;
+constexpr sal_Int32 nFieldButtonArrow = 400; // the arrow (280) ends 100 from the right
 constexpr sal_Int32 nFieldButtonRight = 40;
 
 sal_Int32 lcl_fieldButtonWidth(VButton& rButton, const uno::Reference<beans::XPropertySet>& xTextProp,
@@ -1243,7 +1243,7 @@ sal_Int32 lcl_fieldButtonWidth(VButton& rButton, const uno::Reference<beans::XPr
     const sal_Int32 nRight = bArrow ? nFieldButtonArrow : nFieldButtonRight;
     rButton.setMargins(nFieldButtonLeft, nRight);
     // slack so rounding in the text layout never wraps the label
-    return std::max<sal_Int32>(rButton.measureLabel(xTextProp) + nFieldButtonLeft + nRight + 80, 500);
+    return std::max<sal_Int32>(rButton.measureLabel(xTextProp) + nFieldButtonLeft + nRight + 40, 500);
 }
 
 /*  Excel pivot chart field buttons: report filter and value field buttons in a
