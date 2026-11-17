@@ -67,6 +67,7 @@
 #include <officecfg/Office/Draw.hxx>
 #include <officecfg/Office/Impress.hxx>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/frame/XModel3.hpp>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <algorithm>
 
