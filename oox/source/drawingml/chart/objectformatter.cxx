@@ -952,7 +952,24 @@ void TextFormatter::convertFormatting( PropertySet& rPropSet, const TextCharacte
     if( mxAutoText )
         aTextProps.assignUsed( *mxAutoText );
     if( pTextProps )
+    {
         aTextProps.assignUsed( *pTextProps );
+        // Excel strokes a text outline (a:ln) on the glyph edges. Without an own fill the
+        // stroke covers small chart text almost entirely (Excel 2021: a red 1.5pt outline on the
+        // title reads as red text), but the automatic text color would win here - use the
+        // outline color as the text color instead
+        if( !pTextProps->maFillProperties.moFillType.has_value()
+            && pTextProps->moTextOutlineProperties.has_value() )
+        {
+            const LineProperties& rLine = *pTextProps->moTextOutlineProperties;
+            if( rLine.maLineFill.moFillType.has_value()
+                && *rLine.maLineFill.moFillType == XML_solidFill )
+            {
+                aTextProps.maFillProperties.moFillType = XML_solidFill;
+                aTextProps.maFillProperties.maFillColor = rLine.maLineFill.getBestSolidColor();
+            }
+        }
+    }
     aTextProps.pushToPropSet( rPropSet, mrData.mrFilter );
 }
 
