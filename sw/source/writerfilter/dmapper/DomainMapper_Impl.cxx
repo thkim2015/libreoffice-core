@@ -9134,6 +9134,21 @@ void DomainMapper_Impl::CloseFieldCommand()
                     {
                         xTC->setPropertyValue(u"IsMainEntry"_ustr, uno::Any(true));
                     }
+                    // XE \i: italic page number, XE \t "text": text instead of the page number
+                    // (internal index mark properties, see doctxm UpdatePageNum_)
+                    OUString sSwitch;
+                    if (sUserIndex.isEmpty()
+                        && lcl_FindInCommand(pContext->GetCommand(), 'i', sSwitch))
+                    {
+                        xTC->setPropertyValue(u"IsItalicPageNumber"_ustr, uno::Any(true));
+                    }
+                    if (sUserIndex.isEmpty()
+                        && lcl_FindInCommand(pContext->GetCommand(), 't', sSwitch))
+                    {
+                        sSwitch = lcl_trim(sSwitch);
+                        if (!sSwitch.isEmpty())
+                            xTC->setPropertyValue(u"PageNumberText"_ustr, uno::Any(sSwitch));
+                    }
                     uno::Reference< text::XTextContent > xToInsert( xTC, uno::UNO_QUERY );
                     uno::Reference< text::XTextAppend >  xTextAppend = m_aTextAppendStack.top().xTextAppend;
                     if (xTextAppend.is())

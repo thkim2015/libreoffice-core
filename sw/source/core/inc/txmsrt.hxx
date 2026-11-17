@@ -51,6 +51,8 @@ struct SwTOXSource
     const SwContentNode* pNd;
     sal_Int32 nPos;
     bool bMainEntry;
+    bool bItalicPageNumber = false; // Word XE \i
+    OUString aPageNumberText;       // Word XE \t: shown instead of the page number
 
     SwTOXSource( const SwContentNode* pNode, sal_Int32 n, bool bMain )
         : pNd(pNode), nPos(n), bMainEntry(bMain)

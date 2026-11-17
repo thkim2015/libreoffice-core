@@ -152,6 +152,11 @@ SwTOXSortTabBase::SwTOXSortTabBase( TOXSortType nTyp, const SwContentNode* pNd,
     if( pTextMark )
         n = pTextMark->GetStart();
     SwTOXSource aTmp( pNd, n, pTextMark && pTextMark->GetTOXMark().IsMainEntry() );
+    if (pTextMark)
+    {
+        aTmp.bItalicPageNumber = pTextMark->GetTOXMark().IsItalicPageNumber();
+        aTmp.aPageNumberText = pTextMark->GetTOXMark().GetPageNumberText();
+    }
     aTOXSources.push_back(aTmp);
 
     nPos = pNd->GetIndex();

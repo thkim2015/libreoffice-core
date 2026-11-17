@@ -933,6 +933,8 @@ std::span<const SfxItemPropertyMapEntry> SwUnoPropertyMapProvider::GetIndexMarkP
         { UNO_NAME_PRIMARY_KEY_READING, WID_PRIMARY_KEY_READING, cppu::UnoType<OUString>::get(), PROPERTY_NONE,     0},
         { UNO_NAME_SECONDARY_KEY_READING, WID_SECONDARY_KEY_READING, cppu::UnoType<OUString>::get(), PROPERTY_NONE,     0},
         { UNO_NAME_IS_MAIN_ENTRY, WID_MAIN_ENTRY,     cppu::UnoType<bool>::get()  ,       PROPERTY_NONE,     0},
+        { UNO_NAME_IS_ITALIC_PAGE_NUMBER, WID_ITALIC_PAGE_NUMBER, cppu::UnoType<bool>::get(), PROPERTY_NONE, 0},
+        { UNO_NAME_PAGE_NUMBER_TEXT, WID_PAGE_NUMBER_TEXT, cppu::UnoType<OUString>::get(), PROPERTY_NONE, 0},
         COMMON_TEXT_CONTENT_PROPERTIES
     };
 

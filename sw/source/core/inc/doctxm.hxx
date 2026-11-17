@@ -66,7 +66,9 @@ class SwTOXBaseSection final : public SwTOXBase, public SwSection
                          const std::vector<sal_uInt16>& rNums,
                          const std::vector<SwPageDesc*>& rDescs,
                          const std::vector<sal_uInt16>* pMainEntryNums,
-                         const SwTOXInternational& rIntl );
+                         const SwTOXInternational& rIntl,
+                         const std::vector<sal_uInt16>* pItalicNums = nullptr,
+                         const std::vector<std::pair<OUString, sal_uInt8>>* pPageTexts = nullptr );
 
     // get section for entering keywords
     Range GetKeyRange( const OUString& rStr, const OUString& rStrReading,
