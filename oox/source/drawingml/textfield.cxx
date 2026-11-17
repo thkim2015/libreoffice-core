@@ -28,6 +28,7 @@
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <com/sun/star/lang/XServiceInfo.hpp>
 #include <com/sun/star/text/XTextField.hpp>
 
 #include <o3tl/string_view.hxx>
@@ -61,7 +62,8 @@ namespace {
  * @param sType the OpenXML field type.
  */
 void lclCreateTextFields( std::vector< Reference< XTextField > > & aFields,
-                                                            const Reference< XModel > & xModel, std::u16string_view sType )
+                                                            const Reference< XModel > & xModel, std::u16string_view sType,
+                                                            const OUString& rText )
 {
     Reference< XInterface > xIface;
     Reference< XMultiServiceFactory > xFactory( xModel, UNO_QUERY_THROW );
@@ -75,6 +77,26 @@ void lclCreateTextFields( std::vector< Reference< XTextField > > & aFields,
                 xIface = xFactory->createInstance( u"com.sun.star.text.TextField.Custom"_ustr );
                 aFields.emplace_back( xIface, UNO_QUERY );
                 return;
+            }
+
+            // zeta: PowerPoint date/time types LibreOffice has no single format for (datetime4,
+            // 6, 7: no exact date format; 8, 9: date and time in one field) would come back as a
+            // different type on export. In a presentation keep them as a custom field named after
+            // the type that shows the text PowerPoint wrote; the export writes the name back.
+            sal_Int32 nNum = o3tl::toInt32(p);
+            Reference< css::lang::XServiceInfo > xInfo( xModel, UNO_QUERY );
+            if ((nNum == 4 || nNum == 6 || nNum == 7 || nNum == 8 || nNum == 9)
+                && xInfo.is() && xInfo->supportsService(u"com.sun.star.presentation.PresentationDocument"_ustr))
+            {
+                xIface = xFactory->createInstance( u"com.sun.star.text.TextField.DocInfo.Custom"_ustr );
+                Reference< XPropertySet > xProps( xIface, UNO_QUERY );
+                if (xProps.is())
+                {
+                    xProps->setPropertyValue(u"Name"_ustr, Any(OUString(sType)));
+                    xProps->setPropertyValue(u"CurrentPresentation"_ustr, Any(rText));
+                    aFields.emplace_back( xIface, UNO_QUERY );
+                    return;
+                }
             }
 
             SvxDateFormat eDateFormat = TextField::getLODateFormat(sType);
@@ -174,7 +196,7 @@ sal_Int32 TextField::insertAt(
         aTextCharacterProps.pushToPropSet( aPropSet, rFilterBase );
 
         std::vector< Reference< XTextField > > fields;
-        lclCreateTextFields( fields, rFilterBase.getModel(), msType );
+        lclCreateTextFields( fields, rFilterBase.getModel(), msType, getText() );
         if( !fields.empty() )
         {
             bool bFirst = true;
