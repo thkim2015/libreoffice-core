@@ -272,15 +272,15 @@ awt::Size lcl_placeLegendEntries(
     const rtl::Reference<SvxShapeGroupAnyD> & xTarget,
     const awt::Size& rRemainingSpace,
     sal_Int32 nYStartPosition,
-    const awt::Size& rPageSize,
-    bool bIsPivotChart,
+    const awt::Size& /*rPageSize*/,
+    sal_Int32 nMinWidth,
     awt::Size& rDefaultLegendSize)
 {
     bool bIsCustomSize = (eExpansion == css::chart::ChartLegendExpansion_CUSTOM);
-    awt::Size aResultingLegendSize(0,0);
-    // For Pivot charts set the *minimum* legend size as a function of page size.
-    if ( bIsPivotChart )
-        aResultingLegendSize = awt::Size((rPageSize.Width * 13) / 80, (rPageSize.Height * 31) / 90);
+    // Pivot charts: the legend is as wide as its field buttons need and otherwise as small as
+    // its entries, so the column field button sits right above them like Excel (no minimum
+    // size from the page size).
+    awt::Size aResultingLegendSize(nMinWidth, 0);
     if( bIsCustomSize )
         aResultingLegendSize = awt::Size(rRemainingSpace.Width, rRemainingSpace.Height + nYStartPosition);
 
@@ -864,7 +864,8 @@ bool lcl_shouldSymbolsBePlacedOnTheLeftSide( const Reference< beans::XPropertySe
 
 std::vector<std::shared_ptr<VButton>> lcl_createButtons(
                        rtl::Reference<SvxShapeGroupAnyD> const & xLegendContainer,
-                       ChartModel& rModel, bool bPlaceButtonsVertically, tools::Long & nUsedHeight)
+                       ChartModel& rModel, bool bPlaceButtonsVertically, tools::Long & nUsedHeight,
+                       sal_Int32 & rMinWidth)
 {
     std::vector<std::shared_ptr<VButton>> aButtons;
 
@@ -890,7 +891,9 @@ std::vector<std::shared_ptr<VButton>> lcl_createButtons(
     if (!(nButtons & 32))
         return aButtons;
 
-    awt::Size aSize(2000, 700);
+    // one-line white button as wide as its label (Excel 2021 PDF export,
+    // tests/fixtures/pivot-legend-slicers.office.xlsx), like the other field buttons
+    const sal_Int32 nHeight = 500;
     int x = 100;
     int y = 100;
 
@@ -903,27 +906,34 @@ std::vector<std::shared_ptr<VButton>> lcl_createButtons(
         aButtons.push_back(pButton);
         pButton->init(xLegendContainer);
         awt::Point aNewPosition(x, y);
+        const bool bArrow = sColumnFieldEntry.Name != "Data";
+        sal_Int32 nWidth = 100 + (bArrow ? 600 : 100) + 150;
+        for (char16_t c : sColumnFieldEntry.Name)
+            nWidth += c >= 0x1100 ? 370 : (c == ' ' ? 110 : 200);
+        awt::Size aSize(std::max<sal_Int32>(nWidth, 800), nHeight);
+        rMinWidth = bPlaceButtonsVertically ? std::max<sal_Int32>(rMinWidth, aSize.Width + 200)
+                                            : x + aSize.Width + 100;
         pButton->setLabel(sColumnFieldEntry.Name);
         pButton->setCID("FieldButton.Column." + OUString::number(sColumnFieldEntry.DimensionIndex));
         pButton->setPosition(aNewPosition);
         pButton->setSize(aSize);
-        if (sColumnFieldEntry.Name == "Data")
-        {
+        pButton->setBGColor(Color(0x00FFFFFF));
+        if (!bArrow)
             pButton->showArrow(false);
-            pButton->setBGColor(Color(0x00F6F6F6));
-        }
         if (sColumnFieldEntry.HasHiddenMembers)
             pButton->setArrowColor(Color(0x0000FF));
 
         if (bPlaceButtonsVertically)
-            y += aSize.Height + 100;
+            y += aSize.Height;
         else
             x += aSize.Width + 100;
     }
+    if (aButtons.empty())
+        return aButtons;
     if (bPlaceButtonsVertically)
-        nUsedHeight += y + 100;
+        nUsedHeight += y;
     else
-        nUsedHeight += aSize.Height + 100;
+        nUsedHeight += nHeight + 100;
 
     return aButtons;
 }
@@ -1058,11 +1068,12 @@ void VLegend::createShapes(
             {
                 // create buttons
                 tools::Long nUsedButtonHeight = 0;
+                sal_Int32 nMinLegendWidth = 0;
                 bool bPlaceButtonsVertically = (eLegendPosition != LegendPosition_PAGE_START &&
                                                 eLegendPosition != LegendPosition_PAGE_END &&
                                                 eExpansion != css::chart::ChartLegendExpansion_WIDE);
 
-                std::vector<std::shared_ptr<VButton>> aButtons = lcl_createButtons(xLegendContainer, mrModel, bPlaceButtonsVertically, nUsedButtonHeight);
+                std::vector<std::shared_ptr<VButton>> aButtons = lcl_createButtons(xLegendContainer, mrModel, bPlaceButtonsVertically, nUsedButtonHeight, nMinLegendWidth);
 
                 // A custom size includes the size we used for buttons already, so we need to
                 // subtract that from the size that is available for the legend
@@ -1072,7 +1083,7 @@ void VLegend::createShapes(
                 // place the legend entries
                 aLegendSize = lcl_placeLegendEntries(aViewEntries, eExpansion, bSymbolsLeftSide, fViewFontSize,
                                                      aMaxSymbolExtent, aTextProperties, xLegendContainer,
-                                                     aLegendSize, nUsedButtonHeight, rPageSize, bIsPivotChart, rDefaultLegendSize);
+                                                     aLegendSize, nUsedButtonHeight, rPageSize, nMinLegendWidth, rDefaultLegendSize);
 
                 uno::Reference<beans::XPropertySet> xModelPage(mrModel.getPageBackground());
 
