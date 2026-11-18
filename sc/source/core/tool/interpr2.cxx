@@ -1758,11 +1758,14 @@ void ScInterpreter::ScMIRR()
             if ( nIterError != FormulaError::NONE )
                 SetError( nIterError );
         }
-        if ( !( bHasPosValue && bHasNegValue ) )
-            SetError( FormulaError::IllegalArgument );
+        // weboffice: like Excel, no negative value is #DIV/0! and no positive value is -1
+        if ( nGlobalError == FormulaError::NONE && ( !bHasNegValue || nCount < 2 ) )
+            SetError( FormulaError::DivisionByZero );
 
         if ( nGlobalError != FormulaError::NONE )
             PushError( nGlobalError );
+        else if ( !bHasPosValue )
+            PushDouble( -1.0 );
         else
         {
             double fResult = -o3tl::div_allow_zero(fNPV_reinvest.get(), fNPV_invest.get());

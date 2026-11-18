@@ -3529,13 +3529,19 @@ void ScInterpreter::ScModalValue()
     ScModalValue_MS( true );
 }
 
+namespace { thread_local bool gbModeArgs = false; } // weboffice: MODE argument rules
+
 void ScInterpreter::ScModalValue_MS( bool bSingle )
 {
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCountMin( nParamCount, 1 ) )
         return;
     std::vector<double> aArray;
+    // weboffice: like Excel, MODE ignores text given directly (MODE(1;"1";2) is #N/A) and a
+    // reference to a single empty cell is #VALUE!
+    gbModeArgs = true;
     GetNumberSequenceArray( nParamCount, aArray, false );
+    gbModeArgs = false;
     std::vector< double > aSortArray( aArray );
     QuickSort( aSortArray, nullptr );
     SCSIZE nSize = aSortArray.size();
@@ -3970,6 +3976,8 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
                     ;   // nothing
                 else if (aCell.hasNumeric())
                     rArray.push_back(GetCellValue(aAdr, aCell));
+                else if (gbModeArgs && aCell.isEmpty())
+                    SetError( FormulaError::NoValue );
             }
             break;
             case svDoubleRef :
@@ -4119,7 +4127,10 @@ void ScInterpreter::GetNumberSequenceArray( sal_uInt8 nParamCount, std::vector<d
             case svString :
             {
                 // weboffice: like Excel, a text argument given directly (not via a reference) is converted to a number
-                const double fVal = ConvertStringToValue( PopString().getString() );
+                const OUString aStr = PopString().getString();
+                if ( gbModeArgs )
+                    break;
+                const double fVal = ConvertStringToValue( aStr );
                 if ( nGlobalError == FormulaError::NONE )
                     rArray.push_back( fVal );
             }

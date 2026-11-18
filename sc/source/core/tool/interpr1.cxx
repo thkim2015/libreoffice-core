@@ -1306,8 +1306,15 @@ void ScInterpreter::ScAnd()
                     bRes &= ( PopDouble() != 0.0 );
                 break;
                 case svString :
-                    Pop();
-                    SetError( FormulaError::NoValue );
+                {
+                    // weboffice: like Excel, text "TRUE"/"FALSE" (any case) counts, other text is ignored
+                    const OUString aStr = PopString().getString();
+                    if (aStr.equalsIgnoreAsciiCase(u"TRUE") || aStr.equalsIgnoreAsciiCase(u"FALSE"))
+                    {
+                        bHaveValue = true;
+                        bRes &= aStr.equalsIgnoreAsciiCase(u"TRUE");
+                    }
+                }
                 break;
                 case svSingleRef :
                 {
@@ -1404,8 +1411,15 @@ void ScInterpreter::ScOr()
                     bRes |= ( PopDouble() != 0.0 );
                 break;
                 case svString :
-                    Pop();
-                    SetError( FormulaError::NoValue );
+                {
+                    // weboffice: like Excel, text "TRUE"/"FALSE" (any case) counts, other text is ignored
+                    const OUString aStr = PopString().getString();
+                    if (aStr.equalsIgnoreAsciiCase(u"TRUE") || aStr.equalsIgnoreAsciiCase(u"FALSE"))
+                    {
+                        bHaveValue = true;
+                        bRes |= aStr.equalsIgnoreAsciiCase(u"TRUE");
+                    }
+                }
                 break;
                 case svSingleRef :
                 {
@@ -1504,8 +1518,15 @@ void ScInterpreter::ScXor()
                     bRes ^= ( PopDouble() != 0.0 );
                 break;
                 case svString :
-                    Pop();
-                    SetError( FormulaError::NoValue );
+                {
+                    // weboffice: like Excel, text "TRUE"/"FALSE" (any case) counts, other text is ignored
+                    const OUString aStr = PopString().getString();
+                    if (aStr.equalsIgnoreAsciiCase(u"TRUE") || aStr.equalsIgnoreAsciiCase(u"FALSE"))
+                    {
+                        bHaveValue = true;
+                        bRes ^= aStr.equalsIgnoreAsciiCase(u"TRUE");
+                    }
+                }
                 break;
                 case svSingleRef :
                 {
@@ -3628,7 +3649,19 @@ void ScInterpreter::ScT()
         case svSingleRef :
         {
             ScAddress aAdr;
-            if ( !PopDoubleRefOrSingleRef( aAdr ) )
+            if ( GetStackType() == svDoubleRef && !bMatrixFormula && !pJumpMatrix )
+            {
+                // weboffice: like Excel, T(range) is T of the range's first cell
+                ScRange aRange;
+                PopDoubleRef( aRange );
+                if ( nGlobalError != FormulaError::NONE )
+                {
+                    PushError( nGlobalError );
+                    return;
+                }
+                aAdr = aRange.aStart;
+            }
+            else if ( !PopDoubleRefOrSingleRef( aAdr ) )
             {
                 PushInt(0);
                 return ;
@@ -8933,7 +8966,43 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     // Optional 4th argument to declare whether or not the range is sorted.
     bool bSorted = true;
     if (nParamCount == 4)
-        bSorted = GetBool();
+    {
+        // weboffice: like Excel, text "TRUE"/"FALSE" (any case, also in a cell) is the logical
+        // value and other text (also "1") is #VALUE!
+        OUString aBoolText;
+        bool bText = false;
+        if (GetStackType() == svString)
+        {
+            aBoolText = PopString().getString();
+            bText = true;
+        }
+        else if (GetStackType() == svSingleRef)
+        {
+            ScAddress aBoolAdr;
+            PopSingleRef( aBoolAdr );
+            ScRefCellValue aBoolCell(mrDoc, aBoolAdr);
+            if (nGlobalError == FormulaError::NONE && aBoolCell.hasString())
+            {
+                svl::SharedString aSS;
+                GetCellString(aSS, aBoolCell);
+                aBoolText = aSS.getString();
+                bText = true;
+            }
+            else if (nGlobalError == FormulaError::NONE)
+                bSorted = GetCellValue(aBoolAdr, aBoolCell) != 0.0;
+        }
+        else
+            bSorted = GetBool();
+        if (bText)
+        {
+            if (aBoolText.equalsIgnoreAsciiCase(u"TRUE"))
+                bSorted = true;
+            else if (aBoolText.equalsIgnoreAsciiCase(u"FALSE"))
+                bSorted = false;
+            else
+                SetError(FormulaError::NoValue);
+        }
+    }
 
     // Index of column to search.
     double fIndex = ::rtl::math::approxFloor( GetDouble() ) - 1.0;

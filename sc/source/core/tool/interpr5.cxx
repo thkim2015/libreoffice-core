@@ -2445,21 +2445,25 @@ void ScInterpreter::CalculateSumX2MY2SumX2DY2(bool _bSumX2DY2)
     // weboffice: like Excel only pairs of two numbers count (TRUE/FALSE, text and empty are
     // skipped), and no pair at all is #DIV/0!. A different shape with the same number of
     // values pairs them in order.
+    // Excel goes through both ranges row by row.
     (void)i; (void)j;
     const SCSIZE nCount = nC1 * nR1;
     SCSIZE nPairs = 0;
     for (SCSIZE k = 0; k < nCount; ++k)
-        if (pMat1->IsValue(k) && !pMat1->IsBoolean(k) && pMat2->IsValue(k) && !pMat2->IsBoolean(k))
+    {
+        const SCSIZE c1 = k % nC1, r1 = k / nC1, c2 = k % nC2, r2 = k / nC2;
+        if (pMat1->IsValue(c1, r1) && !pMat1->IsBoolean(c1, r1) && pMat2->IsValue(c2, r2) && !pMat2->IsBoolean(c2, r2))
         {
             ++nPairs;
-            fVal = pMat1->GetDouble(k);
+            fVal = pMat1->GetDouble(c1, r1);
             fSum += fVal * fVal;
-            fVal = pMat2->GetDouble(k);
+            fVal = pMat2->GetDouble(c2, r2);
             if ( _bSumX2DY2 )
                 fSum += fVal * fVal;
             else
                 fSum -= fVal * fVal;
         }
+    }
     if (!nPairs)
         PushError(FormulaError::DivisionByZero);
     else
@@ -2487,23 +2491,27 @@ void ScInterpreter::ScSumXMY2()
     SCSIZE nR1, nR2;
     pMat2->GetDimensions(nC2, nR2);
     pMat1->GetDimensions(nC1, nR1);
-    if (nC1 != nC2 || nR1 != nR2)
+    if (nC1 * nR1 != nC2 * nR2)
     {
         PushNA(); // weboffice: #N/A like Excel
         return;
-    } // if (nC1 != nC2 || nR1 != nR2)
+    }
     // weboffice: like Excel only pairs of two numbers count (TRUE/FALSE, text and empty are
-    // skipped), and no pair at all is #DIV/0!.
+    // skipped), and no pair at all is #DIV/0!. Values pair row by row, also for other shapes
+    // with the same number of values.
     KahanSum fSum = 0.0;
     SCSIZE nPairs = 0;
     const SCSIZE nCount = nC1 * nR1;
     for (SCSIZE k = 0; k < nCount; ++k)
-        if (pMat1->IsValue(k) && !pMat1->IsBoolean(k) && pMat2->IsValue(k) && !pMat2->IsBoolean(k))
+    {
+        const SCSIZE c1 = k % nC1, r1 = k / nC1, c2 = k % nC2, r2 = k / nC2;
+        if (pMat1->IsValue(c1, r1) && !pMat1->IsBoolean(c1, r1) && pMat2->IsValue(c2, r2) && !pMat2->IsBoolean(c2, r2))
         {
             ++nPairs;
-            const double fDiff = pMat1->GetDouble(k) - pMat2->GetDouble(k);
+            const double fDiff = pMat1->GetDouble(c1, r1) - pMat2->GetDouble(c2, r2);
             fSum += fDiff * fDiff;
         }
+    }
     if (!nPairs)
         PushError(FormulaError::DivisionByZero);
     else

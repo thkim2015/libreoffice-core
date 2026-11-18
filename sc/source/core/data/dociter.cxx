@@ -233,10 +233,14 @@ bool ScValueIterator::GetThis(double& rValue, FormulaError& rErr)
                     break;
                 }
 
-                if (rCell.GetErrorOrValue(rErr, rValue))
+                // weboffice: read into a local first, a skipped TRUE/FALSE cell must not change
+                // the caller's last value (MAX(-2;-1;TRUE()) was 0 because ScMax checks nVal)
+                double fFormulaValue = 0.0;
+                if (rCell.GetErrorOrValue(rErr, fFormulaValue))
                 {
                     if ( rErr != FormulaError::NONE && ( mnSubTotalFlags & SubtotalFlags::IgnoreErrVal ) )
                     {
+                        rErr = FormulaError::NONE;
                         IncPos();
                         break;
                     }
@@ -246,6 +250,7 @@ bool ScValueIterator::GetThis(double& rValue, FormulaError& rErr)
                         IncPos();
                         break;
                     }
+                    rValue = fFormulaValue;
                     bNumValid = false;
                     return true; // Found it!
                 }
