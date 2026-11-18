@@ -45,6 +45,7 @@
 #include <basegfx/utils/bgradient.hxx>
 #include <o3tl/string_view.hxx>
 #include <algorithm>
+#include <cmath>
 
 // anonymous Outline/EditEngine decompose helpers
 namespace
@@ -623,6 +624,42 @@ bool zetaParseTextGradient(std::u16string_view aSpec,
     }
     if (aStops.size() < 2)
         return false;
+    // PowerPoint는 멈춤점 사이를 선형 빛(감마를 푼 RGB)에서 섞는다(실측: 빨강→파랑 가운데 184,0,188 — sRGB 직선 섞기는 128,0,128).
+    // LibreOffice 그라데이션은 멈춤점 사이를 sRGB 직선으로 섞으므로, 선형 빛으로 섞은 멈춤점을 촘촘히 넣는다
+    {
+        const auto toLinear = [](double c)
+        { return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); };
+        const auto toSrgb = [](double c)
+        {
+            c = std::clamp(c, 0.0, 1.0);
+            return c <= 0.0031308 ? c * 12.92 : 1.055 * std::pow(c, 1.0 / 2.4) - 0.055;
+        };
+        basegfx::BColorStops aDense;
+        constexpr int nSub = 16;
+        for (size_t i = 0; i < aStops.size(); ++i)
+        {
+            const basegfx::BColorStop& rA = aStops.getStop(i);
+            aDense.addStop(rA.getStopOffset(), rA.getStopColor());
+            if (i + 1 == aStops.size())
+                break;
+            const basegfx::BColorStop& rB = aStops.getStop(i + 1);
+            if (rB.getStopOffset() - rA.getStopOffset() <= 0.0 || rA.getStopColor() == rB.getStopColor())
+                continue;
+            const basegfx::BColor& cA = rA.getStopColor();
+            const basegfx::BColor& cB = rB.getStopColor();
+            for (int k = 1; k < nSub; ++k)
+            {
+                const double t = static_cast<double>(k) / nSub;
+                const basegfx::BColor aMix(
+                    toSrgb(toLinear(cA.getRed()) * (1.0 - t) + toLinear(cB.getRed()) * t),
+                    toSrgb(toLinear(cA.getGreen()) * (1.0 - t) + toLinear(cB.getGreen()) * t),
+                    toSrgb(toLinear(cA.getBlue()) * (1.0 - t) + toLinear(cB.getBlue()) * t));
+                aDense.addStop(rA.getStopOffset() + (rB.getStopOffset() - rA.getStopOffset()) * t,
+                               aMix);
+            }
+        }
+        aStops = aDense;
+    }
     rAttr = drawinglayer::attribute::FillGradientAttribute(eStyle, 0.0, fOfsX, fOfsY, fAngle,
                                                            aStops);
     return true;
