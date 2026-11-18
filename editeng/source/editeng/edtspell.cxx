@@ -495,6 +495,7 @@ EdtAutoCorrDoc::EdtAutoCorrDoc(
     mpEditEngine(pE),
     pCurNode(pN),
     nCursor(nCrsr),
+    mcInsChar(cIns),
     bAllowUndoAction(cIns != 0),
     bUndoAction(false) {}
 
@@ -655,6 +656,12 @@ bool EdtAutoCorrDoc::ChgAutoCorrWord( sal_Int32& rSttPos,
     if( aShort.isEmpty() ) {
         return bRet;
     }
+
+    // PowerPoint replaces a word of the replacement list only when a space follows it, not a
+    // period: typing "i. " keeps the lowercase "i" and starts a lowercase Roman numeral list
+    const sal_Unicode cNext = nEndPos < pCurNode->Len() ? pCurNode->GetChar(nEndPos) : mcInsChar;
+    if (cNext == '.' && !aShort.endsWith("."))
+        return bRet;
 
     LanguageTag aLanguageTag( mpEditEngine->GetLanguage( EditPaM( pCurNode, rSttPos+1 ) ).nLang );
     sal_Int32 sttPos = rSttPos;

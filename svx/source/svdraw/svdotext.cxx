@@ -1230,6 +1230,8 @@ void SdrTextObj::setupAutoFitText(SdrOutliner& rOutliner) const
 void SdrTextObj::setupAutoFitText(SdrOutliner& rOutliner, const Size& rTextBoxSize) const
 {
     rOutliner.setRoundFontSizeToPt(true); // We need to round the font size nearest integer pt size
+    // PowerPoint shrinks a title placeholder by one step only (90%)
+    rOutliner.setTitleAutoFit(GetObjIdentifier() == SdrObjKind::TitleText);
     rOutliner.SetMaxAutoPaperSize(rTextBoxSize);
     rOutliner.SetPaperSize(rTextBoxSize);
 

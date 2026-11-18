@@ -415,6 +415,7 @@ public:
     const ScalingParameters & getScalingParameters() const;
 
     SAL_DLLPRIVATE void setRoundFontSizeToPt(bool bRound);
+    SAL_DLLPRIVATE void setTitleAutoFit(bool bTitle);
 
     void            SetItemPool( SfxItemPool* pPool );
     SfxItemPool*    GetItemPool() const;

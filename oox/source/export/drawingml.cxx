@@ -2909,12 +2909,26 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
             bLang = GetProperty(rXPropSet, u"CharLocale"_ustr); break;
     }
 
+    bool bNoProof = false;
     if (bLang)
     {
         css::lang::Locale aLocale;
         mAny >>= aLocale;
         LanguageTag aLanguageTag( aLocale);
-        if (!aLanguageTag.isSystemLocale())
+        if (aLanguageTag.getLanguageType(false) == LANGUAGE_NONE)
+        {
+            // "Do not check spelling": PowerPoint writes noProof="1" and keeps the run language
+            bNoProof = true;
+            if (GetProperty(rXPropSet, u"CharInteropGrabBag"_ustr))
+            {
+                css::uno::Sequence<css::beans::PropertyValue> aGrabBag;
+                mAny >>= aGrabBag;
+                for (const auto& rProp : aGrabBag)
+                    if (rProp.Name == "ZetaNoProofLang")
+                        rProp.Value >>= usLanguage;
+            }
+        }
+        else if (!aLanguageTag.isSystemLocale())
             usLanguage = aLanguageTag.getBcp47MS();
     }
 
@@ -2971,7 +2985,8 @@ void DrawingML::WriteRunProperties(const Reference<XPropertySet>& rRun, sal_Int3
                           XML_spc, sax_fastparser::UseIf(OString::number(nCharKerning), nCharKerning != 0),
                           XML_strike, strikeout,
                           XML_baseline, sax_fastparser::UseIf(OString::number(nCharEscapement*1000), nCharEscapement != 0),
-                          XML_cap, cap );
+                          XML_cap, cap,
+                          XML_noProof, bNoProof ? "1" : nullptr );
 
     // Fontwork-shapes in LO have text outline and fill from shape stroke and shape fill
     // PowerPoint has this as run properties

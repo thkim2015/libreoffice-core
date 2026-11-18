@@ -311,6 +311,26 @@ void ImpEditEngine::ScaleContentToFitWindow(o3tl::sorted_vector<sal_Int32>& aRep
     tools::Long nHeight = FormatParagraphs(aRepaintParagraphList, true);
     bool bOverflow = nHeight > (maMaxAutoPaperSize.Height() * mnColumns);
 
+    // PowerPoint shrinks an overflowing title placeholder by one step only: the font to 90% and
+    // no line spacing reduction, even when the text still overflows (normAutofit fontScale="90000")
+    if (mbTitleAutoFit)
+    {
+        constexpr ScalingParameters aTitleLevel{ 0.9, 0.9, 1.0, 1.0 };
+        if (bOverflow && maScalingParameters.fFontY > aTitleLevel.fFontY)
+        {
+            aRepaintParagraphList.clear();
+            for (auto& pParaPortionToInvalidate : GetParaPortions())
+            {
+                pParaPortionToInvalidate->GetLines().Reset();
+                pParaPortionToInvalidate->MarkSelectionInvalid(0);
+                pParaPortionToInvalidate->SetMustRepaint(true);
+            }
+            maScalingParameters = aTitleLevel;
+            FormatParagraphs(aRepaintParagraphList, true);
+        }
+        return;
+    }
+
     size_t nCurrentScaleLevel = 0;
     while (bOverflow && nCurrentScaleLevel < constScaleLevels.size())
     {
@@ -4633,6 +4653,15 @@ void ImpEditEngine::SetFlatMode( bool bFlat )
     UpdateViews();
     if (mpActiveView)
         mpActiveView->ShowCursor();
+}
+
+void ImpEditEngine::setTitleAutoFit(bool bTitle)
+{
+    if (mbTitleAutoFit == bTitle)
+        return;
+    mbTitleAutoFit = bTitle;
+    if (maStatus.DoStretch())
+        FormatFullDoc();
 }
 
 void ImpEditEngine::setScalingParameters(ScalingParameters const& rScalingParameters)

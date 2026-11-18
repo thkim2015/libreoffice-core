@@ -104,6 +104,7 @@ class EdtAutoCorrDoc final : public SvxAutoCorrDoc
     EditEngine* mpEditEngine;
     ContentNode*    pCurNode;
     sal_Int32       nCursor;
+    sal_Unicode     mcInsChar;
 
     bool            bAllowUndoAction;
     bool            bUndoAction;

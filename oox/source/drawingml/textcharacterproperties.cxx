@@ -62,6 +62,7 @@ void TextCharacterProperties::assignUsed( const TextCharacterProperties& rSource
     maHighlightOOXColor.assignIfUsed( rSourceProps.maHighlightOOXColor );
     maUnderlineColor.assignIfUsed( rSourceProps.maUnderlineColor );
     assignIfUsed( moLang, rSourceProps.moLang );
+    assignIfUsed( moNoProof, rSourceProps.moNoProof );
     assignIfUsed( moHeight, rSourceProps.moHeight );
     assignIfUsed( moFontScale, rSourceProps.moFontScale);
     assignIfUsed( moSpacing, rSourceProps.moSpacing );
@@ -183,6 +184,16 @@ void TextCharacterProperties::pushToPropMap( PropertyMap& rPropMap, const XmlFil
             case css::i18n::ScriptType::COMPLEX:
                 rPropMap.setProperty( PROP_CharLocaleComplex, aLocale);break;
         }
+    }
+
+    // PowerPoint "Do not check spelling" (noProof="1"): LibreOffice skips spelling for the
+    // "[None]" language; the original lang is kept in the grab bag for the export
+    if (moNoProof.value_or(false))
+    {
+        const lang::Locale aNone(LanguageTag::convertToLocale(LANGUAGE_NONE));
+        rPropMap.setProperty(PROP_CharLocale, aNone);
+        rPropMap.setProperty(PROP_CharLocaleAsian, aNone);
+        rPropMap.setProperty(PROP_CharLocaleComplex, aNone);
     }
 
     if( moHeight.has_value() )
@@ -310,10 +321,15 @@ void TextCharacterProperties::pushToPropSet( PropertySet& rPropSet, const XmlFil
     bool bChanged = false;
     for (const PropertyValue& rProp : aGrabBag)
     {
-        if (rProp.Name == "ZetaTextGradient")
+        if (rProp.Name == "ZetaTextGradient" || rProp.Name == "ZetaNoProofLang")
             bChanged = true;
         else
             aNew.push_back(rProp);
+    }
+    if (moNoProof.value_or(false) && moLang.has_value() && !moLang.value().isEmpty())
+    {
+        aNew.push_back(comphelper::makePropertyValue(u"ZetaNoProofLang"_ustr, moLang.value()));
+        bChanged = true;
     }
     if (!aSpec.isEmpty())
     {

@@ -487,6 +487,11 @@ void Outliner::setRoundFontSizeToPt(bool bRound) const
     pEditEngine->setRoundFontSizeToPt(bRound);
 }
 
+void Outliner::setTitleAutoFit(bool bTitle) const
+{
+    pEditEngine->setTitleAutoFit(bTitle);
+}
+
 void Outliner::EraseVirtualDevice()
 {
     pEditEngine->EraseVirtualDevice();
