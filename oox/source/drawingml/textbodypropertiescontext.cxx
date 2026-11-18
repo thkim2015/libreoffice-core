@@ -232,7 +232,10 @@ TextBodyPropertiesContext::TextBodyPropertiesContext( ContextHandler2Helper cons
 
     // Push defaults
     mrTextBodyProp.maPropertyMap.setProperty( PROP_TextAutoGrowHeight, false);
-    mrTextBodyProp.maPropertyMap.setProperty( PROP_TextFitToSize, drawing::TextFitToSizeType_NONE);
+    // A placeholder whose bodyPr has no autofit element keeps the autofit it inherited from the
+    // layout or master placeholder (PowerPoint: a master title with normAutofit shrinks the slide title)
+    if (!mrTextBodyProp.maPropertyMap.hasProperty(PROP_TextFitToSize))
+        mrTextBodyProp.maPropertyMap.setProperty( PROP_TextFitToSize, drawing::TextFitToSizeType_NONE);
 }
 
 ContextHandlerRef TextBodyPropertiesContext::onCreateContext( sal_Int32 aElementToken, const AttributeList& rAttribs )
@@ -279,6 +282,7 @@ ContextHandlerRef TextBodyPropertiesContext::onCreateContext( sal_Int32 aElement
             // EG_TextAutofit
             case A_TOKEN( noAutofit ):
                 mrTextBodyProp.maPropertyMap.setProperty( PROP_TextAutoGrowHeight, false);   // CT_TextNoAutofit
+                mrTextBodyProp.maPropertyMap.setProperty( PROP_TextFitToSize, TextFitToSizeType_NONE);
                 break;
             case A_TOKEN( normAutofit ):    // CT_TextNormalAutofit
             {
@@ -292,6 +296,7 @@ ContextHandlerRef TextBodyPropertiesContext::onCreateContext( sal_Int32 aElement
             }
             case A_TOKEN( spAutoFit ):
                 {
+                    mrTextBodyProp.maPropertyMap.setProperty( PROP_TextFitToSize, TextFitToSizeType_NONE);
                     const sal_Int32 tVert = mrTextBodyProp.moVert.value_or( XML_horz );
                     if( tVert != XML_vert && tVert != XML_eaVert && tVert != XML_vert270 && tVert != XML_mongolianVert )
                         mrTextBodyProp.maPropertyMap.setProperty( PROP_TextAutoGrowHeight, true);
