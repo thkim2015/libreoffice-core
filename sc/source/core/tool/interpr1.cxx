@@ -160,7 +160,18 @@ void ScInterpreter::ScIfJump()
 
 void ScInterpreter::ScIfJumpNotMatrix( const short* pJump, short nJumpCount )
 {
-    const bool bCondition = GetBool();
+    bool bCondition = false;
+    if (GetStackType() == svString)
+    {
+        // weboffice: like Excel, a text condition "TRUE"/"FALSE" (any case) is logical, other text is #VALUE!
+        const OUString aStr = PopString().getString();
+        if (aStr.equalsIgnoreAsciiCase(u"TRUE"))
+            bCondition = true;
+        else if (!aStr.equalsIgnoreAsciiCase(u"FALSE"))
+            SetError(FormulaError::NoValue);
+    }
+    else
+        bCondition = GetBool();
     if (nGlobalError != FormulaError::NONE)
     {   // Propagate error, not THEN- or ELSE-path, jump behind.
         PushError(nGlobalError);
@@ -4739,8 +4750,8 @@ void ScInterpreter::GetStVarParams( bool bTextAsZero, double(*VarResult)( double
     else
     {
         ::std::vector<double>::size_type n = values.size();
-        if (!n)
-            SetError( FormulaError::DivisionByZero);
+        if (!n) // weboffice: Excel DEVSQ() of no numbers is #NUM!
+            SetError( pCur && pCur->GetOpCode() == ocDevSq ? FormulaError::IllegalFPOperation : FormulaError::DivisionByZero);
         double vSum = 0.0;
         if (nGlobalError == FormulaError::NONE)
         {

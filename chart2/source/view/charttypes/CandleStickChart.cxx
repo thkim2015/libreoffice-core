@@ -25,6 +25,10 @@
 #include <ObjectIdentifier.hxx>
 #include "BarPositionHelper.hxx"
 #include <DateHelper.hxx>
+#include <DataSeries.hxx>
+#include <DataSeriesHelper.hxx>
+#include <FormattedStringHelper.hxx>
+#include <com/sun/star/chart2/Symbol.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <comphelper/diagnose_ex.hxx>
 #include <osl/diagnose.h>
@@ -55,6 +59,89 @@ bool CandleStickChart::isSeparateStackingForDifferentSigns( sal_Int32 /* nDimens
 LegendSymbolStyle CandleStickChart::getLegendSymbolStyle()
 {
     return LegendSymbolStyle::Line;
+}
+
+namespace
+{
+// close marker imported from OOXML (Excel high-low-close: small dot), only without up/down bars
+bool lcl_getCloseSymbol( const uno::Reference< beans::XPropertySet >& xProp, chart2::Symbol& rSymbol )
+{
+    try
+    {
+        if( xProp.is() && ( xProp->getPropertyValue( u"Symbol"_ustr ) >>= rSymbol ) )
+            return rSymbol.Style == chart2::SymbolStyle_STANDARD;
+    }
+    catch( const uno::Exception& )
+    {
+    }
+    return false;
+}
+}
+
+std::vector< ViewLegendEntry > CandleStickChart::createLegendEntriesForSeries(
+            const awt::Size& rEntryKeyAspectRatio,
+            const VDataSeries& rSeries,
+            const uno::Reference< beans::XPropertySet >& xTextProperties,
+            const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
+            const uno::Reference< uno::XComponentContext >& xContext )
+{
+    std::vector< ViewLegendEntry > aResult;
+    const rtl::Reference< DataSeries >& xModel = rSeries.getModel();
+    if( !( xTarget.is() && xContext.is() && xModel.is() ) )
+        return aResult;
+
+    static constexpr OUString aRoles[] = { u"values-first"_ustr, u"values-max"_ustr, u"values-min"_ustr, u"values-last"_ustr };
+    std::vector< OUString > aPresent;
+    for( const OUString& rRole : aRoles )
+        if( DataSeriesHelper::getDataSequenceByRole( xModel.get(), rRole ).is() )
+            aPresent.push_back( rRole );
+    if( aPresent.size() < 2 )
+        return VSeriesPlotter::createLegendEntriesForSeries( rEntryKeyAspectRatio, rSeries, xTextProperties, xTarget, xContext );
+
+    bool bJapaneseStyle = true;
+    try
+    {
+        if( m_xChartTypeModel.is() )
+            m_xChartTypeModel->getPropertyValue( u"Japanese"_ustr ) >>= bJapaneseStyle;
+    }
+    catch( const uno::Exception& )
+    {
+    }
+    chart2::Symbol aCloseSymbol;
+    bool bCloseSymbol = false;
+    try
+    {
+        bCloseSymbol = !bJapaneseStyle && ( xModel->getPropertyValue( u"Symbol"_ustr ) >>= aCloseSymbol )
+                       && aCloseSymbol.Style == chart2::SymbolStyle_STANDARD;
+    }
+    catch( const uno::Exception& )
+    {
+    }
+
+    OUString aCID = ObjectIdentifier::createClassifiedIdentifierForParticles( rSeries.getSeriesParticle(),
+            ObjectIdentifier::createChildParticleWithIndex( OBJECTTYPE_LEGEND_ENTRY, 0 ) );
+    for( const OUString& rRole : aPresent )
+    {
+        ViewLegendEntry aEntry;
+        rtl::Reference< SvxShapeGroup > xSymbolGroup( ShapeFactory::createGroup2D( xTarget ) );
+        rtl::Reference< SvxShapeGroup > xKey( ShapeFactory::createGroup2D( xSymbolGroup ) );
+        rtl::Reference<SvxShapeGroupAnyD> xKeyAny = xKey;
+        ShapeFactory::createInvisibleRectangle( xKeyAny, rEntryKeyAspectRatio );
+        if( bCloseSymbol && rRole == u"values-last" )
+        {
+            sal_Int32 nSize = std::min( std::min( rEntryKeyAspectRatio.Width, rEntryKeyAspectRatio.Height ),
+                                        std::max< sal_Int32 >( aCloseSymbol.Size.Height, 1 ) );
+            ShapeFactory::createSymbol2D( xKeyAny,
+                drawing::Position3D( rEntryKeyAspectRatio.Width / 2.0, rEntryKeyAspectRatio.Height / 2.0, 0 ),
+                drawing::Direction3D( nSize, nSize, 0 ), aCloseSymbol.StandardSymbol,
+                aCloseSymbol.BorderColor, aCloseSymbol.FillColor );
+        }
+        ShapeFactory::setShapeName( xKey, aCID );
+        aEntry.xSymbol = std::move( xSymbolGroup );
+        aEntry.xLabel = FormattedStringHelper::createFormattedString( xModel->getLabelForRole( rRole ), xTextProperties );
+        aResult.push_back( aEntry );
+    }
+    return aResult;
 }
 
 drawing::Direction3D CandleStickChart::getPreferredDiagramAspectRatio() const
@@ -202,6 +289,8 @@ void CandleStickChart::createShapes()
                     rtl::Reference<SvxShapeGroupAnyD> xLossGainTarget(bBlack ? xLossTarget : xGainTarget);
 
                     uno::Reference< beans::XPropertySet > xPointProp( pSeries->getPropertiesOfPoint( nIndex ));
+                    chart2::Symbol aCloseSymbol;
+                    bool bCloseSymbol = !bJapaneseStyle && lcl_getCloseSymbol( xPointProp, aCloseSymbol );
                     rtl::Reference<SvxShapeGroupAnyD> xPointGroupShape_Shapes;
                     {
                         OUString aPointCID = ObjectIdentifier::createPointCID( pSeries->getPointCID_Stub(), nIndex );
@@ -243,6 +332,37 @@ void CandleStickChart::createShapes()
                             PropertyMapper::setMultiProperties( aBlackBox_Names, aBlackBox_Values, *xShape );
                         else
                             PropertyMapper::setMultiProperties( aWhiteBox_Names, aWhiteBox_Values, *xShape );
+                    }
+                    else if( bCloseSymbol )
+                    {
+                        // Excel: open as a left tick, close as the series marker (not a right tick);
+                        // use the original values, not the ones swapped for the box above
+                        double fOpen = pSeries->getY_First( nIndex );
+                        double fClose = pSeries->getY_Last( nIndex );
+                        if( bShowFirst && pPosHelper->isLogicVisible( fUnscaledX, fOpen, fLogicZ ) )
+                        {
+                            double fScaledOpen = fOpen;
+                            pPosHelper->doLogicScaling( nullptr, &fScaledOpen, nullptr );
+                            drawing::Position3D aLeft( pPosHelper->transformScaledLogicToScene( fScaledX-fHalfScaledWidth, fScaledOpen, 0, true ) );
+                            drawing::Position3D aMiddle( pPosHelper->transformScaledLogicToScene( fScaledX, fScaledOpen, 0, true ) );
+                            if( isValidPosition( aLeft ) && isValidPosition( aMiddle ) )
+                            {
+                                std::vector<std::vector<css::drawing::Position3D>> aPoly { { aLeft, aMiddle } };
+                                rtl::Reference<SvxShapePolyPolygon> xShape =
+                                    ShapeFactory::createLine2D( xPointGroupShape_Shapes, aPoly );
+                                PropertyMapper::setMappedProperties( *xShape, xPointProp, PropertyMapper::getPropertyNameMapForLineSeriesProperties() );
+                            }
+                        }
+                        if( pPosHelper->isLogicVisible( fUnscaledX, fClose, fLogicZ ) )
+                        {
+                            double fScaledClose = fClose;
+                            pPosHelper->doLogicScaling( nullptr, &fScaledClose, nullptr );
+                            drawing::Position3D aPos( pPosHelper->transformScaledLogicToScene( fScaledX, fScaledClose, 0, true ) );
+                            if( isValidPosition( aPos ) )
+                                ShapeFactory::createSymbol2D( xPointGroupShape_Shapes, aPos,
+                                    drawing::Direction3D( aCloseSymbol.Size.Width, aCloseSymbol.Size.Height, 0 ),
+                                    aCloseSymbol.StandardSymbol, aCloseSymbol.BorderColor, aCloseSymbol.FillColor );
+                        }
                     }
                     else
                     {

@@ -560,6 +560,44 @@ void TypeGroupConverter::convertFromModel( const Reference< XDiagram >& rxDiagra
 
                 // formatting of up/down bars
                 bool bUpDownBars = mrModel.mxUpDownBars.is();
+
+                /*  Excel draws the marker of the close series (high-low-close
+                    default: small dot) instead of a tick; keep it as the
+                    series symbol with its own (automatic) fill color. */
+                size_t nCloseIdx = (aSeries.size() == 3) ? 2 : 3;
+                if( !bUpDownBars && aSeries.size() >= 3 && nCloseIdx < aSeries.size() )
+                {
+                    const SeriesModel& rClose = aSeries[ nCloseIdx ]->getModel();
+                    sal_Int32 nOoxSymbol = rClose.mnMarkerSymbol;
+                    if( nOoxSymbol != XML_none && nOoxSymbol != XML_auto )
+                    {
+                        namespace cssc = css::chart2;
+                        cssc::Symbol aSymbol;
+                        aSymbol.Style = cssc::SymbolStyle_STANDARD;
+                        switch( nOoxSymbol )
+                        {
+                            case XML_square:    aSymbol.StandardSymbol = 0;     break;
+                            case XML_diamond:   aSymbol.StandardSymbol = 1;     break;
+                            case XML_triangle:  aSymbol.StandardSymbol = 3;     break;
+                            case XML_x:         aSymbol.StandardSymbol = 10;    break;
+                            case XML_star:      aSymbol.StandardSymbol = 12;    break;
+                            case XML_dash:      aSymbol.StandardSymbol = 13;    break;
+                            case XML_plus:      aSymbol.StandardSymbol = 11;    break;
+                            default:            aSymbol.StandardSymbol = 8;     break; // dot, circle
+                        }
+                        aSymbol.Size.Width = aSymbol.Size.Height = convertPointToMm100( rClose.mnMarkerSize );
+                        sal_Int32 nColor = 0;
+                        Reference< XPropertySet > xTmp( createInstance( u"com.sun.star.chart2.DataSeries"_ustr ), UNO_QUERY );
+                        if( xTmp.is() )
+                        {
+                            PropertySet aTmpProp( xTmp );
+                            getFormatter().convertFrameFormatting( aTmpProp, rClose.mxMarkerProp, OBJECTTYPE_FILLEDSERIES2D, rClose.mnIndex );
+                            aTmpProp.getProperty( nColor, PROP_Color );
+                        }
+                        aSymbol.FillColor = aSymbol.BorderColor = nColor;
+                        aSeriesProp.setProperty( PROP_Symbol, aSymbol );
+                    }
+                }
                 aTypeProp.setProperty( PROP_Japanese, bUpDownBars );
                 aTypeProp.setProperty( PROP_ShowFirst, bUpDownBars );
                 if( bUpDownBars )

@@ -67,6 +67,12 @@ static bool lcl_IsExcel1900(const Date& rNullDate)
 }
 
 // Calc serial -> Excel serial for a real date
+// weboffice: Excel YEAR/MONTH/DAY/WEEKDAY of a serial before 1900-01-00 or after 9999-12-31 is #NUM!
+static bool lcl_Excel1900Negative(const Date& rNullDate, sal_Int32 nSerial)
+{
+    return lcl_IsExcel1900(rNullDate) && (nSerial < 0 || nSerial > 2958465);
+}
+
 static double lcl_ToExcel1900(double fSerial)
 {
     return (fSerial >= 1.0 && fSerial <= 60.0) ? fSerial - 1.0 : fSerial;
@@ -177,6 +183,11 @@ void ScInterpreter::ScGetYear()
     Date aDate = mrContext.NFGetNullDate();
     const sal_Int32 nSerial = GetFloor32();
     sal_Int32 nY, nM, nD;
+    if (nGlobalError == FormulaError::NONE && lcl_Excel1900Negative(aDate, nSerial))
+    {
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
     if (lcl_FromExcel1900(aDate, nSerial, nY, nM, nD)) // weboffice: YEAR(0) is 1900
     {
         PushDouble(nY);
@@ -191,6 +202,11 @@ void ScInterpreter::ScGetMonth()
     Date aDate = mrContext.NFGetNullDate();
     const sal_Int32 nSerial = GetFloor32();
     sal_Int32 nY, nM, nD;
+    if (nGlobalError == FormulaError::NONE && lcl_Excel1900Negative(aDate, nSerial))
+    {
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
     if (lcl_FromExcel1900(aDate, nSerial, nY, nM, nD)) // weboffice: MONTH(0) is 1
     {
         PushDouble(nM);
@@ -205,6 +221,11 @@ void ScInterpreter::ScGetDay()
     Date aDate = mrContext.NFGetNullDate();
     const sal_Int32 nSerial = GetFloor32();
     sal_Int32 nY, nM, nD;
+    if (nGlobalError == FormulaError::NONE && lcl_Excel1900Negative(aDate, nSerial))
+    {
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
     if (nGlobalError == FormulaError::NONE && lcl_FromExcel1900(aDate, nSerial, nY, nM, nD)) // weboffice: DAY(0) is 0
     {
         PushDouble(nD);
@@ -279,7 +300,13 @@ void ScInterpreter::ScGetDayOfWeek()
         nFlag = 1;
 
     Date aDate = mrContext.NFGetNullDate();
-    aDate.AddDays( GetFloor32());
+    const sal_Int32 nSerial = GetFloor32();
+    if (nGlobalError == FormulaError::NONE && lcl_Excel1900Negative(aDate, nSerial))
+    {
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
+    aDate.AddDays( nSerial );
     int nVal = static_cast<int>(aDate.GetDayOfWeek());  // MONDAY = 0
     switch (nFlag)
     {
