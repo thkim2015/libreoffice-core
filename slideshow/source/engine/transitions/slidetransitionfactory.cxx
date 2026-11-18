@@ -31,6 +31,7 @@
 #include <transitionfactory.hxx>
 #include "transitionfactorytab.hxx"
 #include "parametricpolypolygonfactory.hxx"
+#include "waterfallwipe.hxx"
 #include "clippingfunctor.hxx"
 #include "combtransition.hxx"
 #include <tools.hxx>
@@ -953,6 +954,16 @@ NumberAnimationSharedPtr TransitionFactory::createSlideTransition(
                 ParametricPolyPolygonSharedPtr pPoly(
                     ParametricPolyPolygonFactory::createClipPolyPolygon(
                         nTransitionType, nTransitionSubType ) );
+
+                // weboffice: <p:strips> is imported as a waterfall wipe. PowerPoint
+                // (2010+, Wipe with a diagonal option) plays it with a straight
+                // diagonal edge, so use steps finer than a pixel instead of the
+                // 11 visible stairs of the shape-animation waterfall.
+                if (nTransitionType == animations::TransitionType::WATERFALLWIPE)
+                    pPoly = std::make_shared<WaterfallWipe>(
+                        1024 * 1024,
+                        nTransitionSubType == animations::TransitionSubType::VERTICALRIGHT
+                            || nTransitionSubType == animations::TransitionSubType::HORIZONTALLEFT);
 
                 // create a clip transition from that
                 return std::make_shared<ClippedSlideChange>( pEnteringSlide,
