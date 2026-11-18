@@ -74,6 +74,7 @@
 #include <editeng/crossedoutitem.hxx>
 #include <editeng/cmapitem.hxx>
 #include <editeng/udlnitem.hxx>
+#include <editeng/wrlmitem.hxx>
 #include <editeng/langitem.hxx>
 #include <editeng/lspcitem.hxx>
 #include <editeng/escapementitem.hxx>
@@ -9019,7 +9020,16 @@ void DocxAttributeOutput::CharUnderline( const SvxUnderlineItem& rUnderline )
 
     switch ( rUnderline.GetLineStyle() )
     {
-        case LINESTYLE_SINGLE:         pUnderlineValue = "single";          break;
+        case LINESTYLE_SINGLE:
+        {
+            // words-only underline is single underline + word line mode
+            bool bWord = false;
+            if (const SfxPoolItem* pItem = GetExport().HasItem(RES_CHRATR_WORDLINEMODE))
+                if (const auto* pWordline = pItem->DynamicWhichCast(RES_CHRATR_WORDLINEMODE))
+                    bWord = pWordline->GetValue();
+            pUnderlineValue = bWord ? "words" : "single";
+            break;
+        }
         case LINESTYLE_BOLD:           pUnderlineValue = "thick";           break;
         case LINESTYLE_DOUBLE:         pUnderlineValue = "double";          break;
         case LINESTYLE_DOTTED:         pUnderlineValue = "dotted";          break;
@@ -9029,7 +9039,7 @@ void DocxAttributeOutput::CharUnderline( const SvxUnderlineItem& rUnderline )
         case LINESTYLE_WAVE:           pUnderlineValue = "wave";            break;
         case LINESTYLE_BOLDDOTTED:     pUnderlineValue = "dottedHeavy";     break;
         case LINESTYLE_BOLDDASH:       pUnderlineValue = "dashedHeavy";     break;
-        case LINESTYLE_LONGDASH:       pUnderlineValue = "dashLongHeavy";   break;
+        case LINESTYLE_LONGDASH:       pUnderlineValue = "dashLong";        break;
         case LINESTYLE_BOLDLONGDASH:   pUnderlineValue = "dashLongHeavy";   break;
         case LINESTYLE_BOLDDASHDOT:    pUnderlineValue = "dashDotHeavy";    break;
         case LINESTYLE_BOLDDASHDOTDOT: pUnderlineValue = "dashDotDotHeavy"; break;
