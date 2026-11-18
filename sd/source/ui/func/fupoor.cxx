@@ -1134,6 +1134,44 @@ std::optional<bool> lcl_ZetaAspectLock(const SdrObject& rObj)
     }
     return std::nullopt;
 }
+
+// weboffice: 그룹 자신의 비율 고정(a:grpSpLocks noChangeAspect). 그룹은 UserDefinedAttributes가 없어 앱이 첫 자식을 따라
+// 내려간 첫 낱 도형 'zetaNvPr'의 grp 칸(그룹 속 그룹이면 내려간 단계 수 — grp2·grp3 …)에 { "locks": … }로 둔다
+bool lcl_ZetaGroupAspectLock(const SdrObject& rGroup)
+{
+    const SdrObject* pLeaf = &rGroup;
+    int nDepth = 0;
+    while (pLeaf->GetSubList())
+    {
+        if (pLeaf->GetSubList()->GetObjCount() == 0)
+            return false;
+        pLeaf = pLeaf->GetSubList()->GetObj(0);
+        ++nDepth;
+    }
+    if (!nDepth)
+        return false;
+    const std::string aKey(nDepth == 1 ? std::string("grp") : "grp" + std::to_string(nDepth));
+    const SvXMLAttrContainerItem& rAttrs
+        = static_cast<const SvXMLAttrContainerItem&>(pLeaf->GetMergedItem(SDRATTR_XMLATTRIBUTES));
+    for (sal_uInt16 i = 0; i < rAttrs.GetAttrCount(); ++i)
+    {
+        if (rAttrs.GetAttrLName(i) != "zetaNvPr")
+            continue;
+        try
+        {
+            std::stringstream aStream(rAttrs.GetAttrValue(i).toUtf8().getStr());
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+            if (auto oGrp = aTree.get_child_optional(aKey))
+                return oGrp->get<std::string>("locks.noChangeAspect", std::string()) == "1";
+        }
+        catch (...)
+        {
+        }
+        return false;
+    }
+    return false;
+}
 }
 #endif
 
@@ -1153,12 +1191,14 @@ bool FuPoor::doConstructOrthogonal() const
                                aObjIdentifier == SdrObjKind::Media ||
                                aObjIdentifier == SdrObjKind::OLE2;
 #ifdef EMSCRIPTEN
-            // weboffice: 도형마다의 PowerPoint 가로 세로 비율 고정을 따른다(그룹은 자식 값이 섞여 보지 않는다)
+            // weboffice: 도형마다의 PowerPoint 가로 세로 비율 고정을 따른다(그룹은 그룹 자신의 grp 값)
             if (aObjIdentifier != SdrObjKind::Group)
             {
                 if (std::optional<bool> oLock = lcl_ZetaAspectLock(*rMarkList.GetMark(0)->GetMarkedSdrObj()))
                     bResizeKeepRatio = *oLock;
             }
+            else
+                bResizeKeepRatio = lcl_ZetaGroupAspectLock(*rMarkList.GetMark(0)->GetMarkedSdrObj());
 #endif
         }
     }
