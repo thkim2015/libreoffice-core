@@ -953,6 +953,15 @@ SwTwips SwAnchoredObjectPosition::CalcRelPosX(
     sal_Int16 eRelOrient = _rHoriOrient.GetRelationOrient();
     // toggle orientation and relative alignment
     ToggleHoriOrientAndAlign( bToggle, eHoriOrient, eRelOrient );
+    // Word inside/outside margin (DOCX import, see writerfilter PositionHandler): only the
+    // margin area is swapped on even pages, the alignment and the offset are kept.
+    const IDocumentSettingAccess& rIDSA = mpFrameFormat->getIDocumentSettingAccess();
+    const bool bMsoMarginToggle = bToggle
+        && (eRelOrient == text::RelOrientation::PAGE_LEFT
+            || eRelOrient == text::RelOrientation::PAGE_RIGHT)
+        && rIDSA.get(DocumentSettingId::DO_NOT_MIRROR_RTL_DRAW_OBJS);
+    if (bMsoMarginToggle)
+        eHoriOrient = _rHoriOrient.GetHoriOrient();
 
     // determine alignment parameter
     // <nWidth>:  'width' of alignment area
@@ -971,7 +980,6 @@ SwTwips SwAnchoredObjectPosition::CalcRelPosX(
     if ( _rHoriOrient.GetHoriOrient() == text::HoriOrientation::NONE )
     {
         // 'manual' horizontal position
-        const IDocumentSettingAccess& rIDSA = mpFrameFormat->getIDocumentSettingAccess();
         // If compat flag is active, then disable automatic mirroring for RTL.
         bool bMirrorRtlDrawObjs = !rIDSA.get(DocumentSettingId::DO_NOT_MIRROR_RTL_DRAW_OBJS);
         const bool bR2L = rAnchorFrame.IsRightToLeft() && bMirrorRtlDrawObjs;
@@ -982,7 +990,7 @@ SwTwips SwAnchoredObjectPosition::CalcRelPosX(
             else
                 nRelPosX += _rHoriOrient.GetPos();
         }
-        else if ( bToggle || ( !_rHoriOrient.IsPosToggle() && bR2L ) )
+        else if ( ( bToggle && !bMsoMarginToggle ) || ( !_rHoriOrient.IsPosToggle() && bR2L ) )
         {
             // Correction: consider <nOffset> also for
             // toggling from left to right.
