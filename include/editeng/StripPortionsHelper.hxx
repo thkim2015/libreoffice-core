@@ -135,8 +135,13 @@ class EDITENG_DLLPUBLIC TextHierarchyBreakup : public StripPortionsHelper
         size_t mnEnd;
         OUString maSpec;
         basegfx::B2DRange maVertical;
+        // 회전·기울인 글 상자: 회전 전(maNewTransformB 없이) 좌표의 글꼴 위아래 범위와 글자 범위
+        basegfx::B2DRange maLocalVertical;
+        basegfx::B2DRange maLocalInk;
     };
     std::vector<ZetaGradientPortion> maZetaGradientPortions;
+    // 회전·기울인 글 상자에서 이 줄 글 조각 모두의 회전 전 글자 범위(비면 회전 없음 — 최종 좌표로 잰다)
+    basegfx::B2DRange maZetaLocalLineInk;
     void zetaApplyTextGradients();
 
 protected:

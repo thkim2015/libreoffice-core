@@ -37,6 +37,7 @@
 #include <drawinglayer/primitive2d/modifiedcolorprimitive2d.hxx>
 #include <drawinglayer/primitive2d/PolyPolygonColorPrimitive2D.hxx>
 #include <drawinglayer/primitive2d/transparenceprimitive2d.hxx>
+#include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 #include <basegfx/color/bcolormodifier.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -660,6 +661,59 @@ void TextHierarchyBreakup::zetaApplyTextGradients()
         maZetaGradientPortions.clear();
         return;
     }
+    if (!maZetaLocalLineInk.isEmpty())
+    {
+        // 회전·기울인 글 상자: PowerPoint는 그라데이션을 회전 전 줄 상자에 잡고 글과 함께 돌린다 — 회전 전 좌표로
+        // 범위를 재어 그라데이션을 그 좌표에 칠한 뒤 maNewTransformB로 돌린다(최종 좌표의 둘러싼 상자로 재면 범위가 커진다)
+        basegfx::B2DRange aLocalVertical;
+        for (const auto& rGrad : maZetaGradientPortions)
+            aLocalVertical.expand(rGrad.maLocalVertical);
+        const basegfx::B2DRange aLocalDefinition(
+            maZetaLocalLineInk.getMinX(),
+            aLocalVertical.isEmpty() ? maZetaLocalLineInk.getMinY() : aLocalVertical.getMinY(),
+            maZetaLocalLineInk.getMaxX(),
+            aLocalVertical.isEmpty() ? maZetaLocalLineInk.getMaxY() : aLocalVertical.getMaxY());
+        for (const auto& rGrad : maZetaGradientPortions)
+        {
+            drawinglayer::attribute::FillGradientAttribute aAttr;
+            if (!zetaParseTextGradient(rGrad.maSpec, aAttr))
+                continue;
+            basegfx::B2DRange aLocalOutput(aLocalDefinition);
+            aLocalOutput.expand(rGrad.maLocalInk);
+            // 기울임꼴 넘침 등을 덮도록 줄 높이만큼 넓힌다
+            aLocalOutput.grow(std::max(aLocalOutput.getHeight(), 1.0));
+            basegfx::B2DRange aOutput(aLocalOutput);
+            aOutput.transform(maNewTransformB);
+            for (size_t i = rGrad.mnStart; i < rGrad.mnEnd && i < maTextPortionPrimitives.size(); ++i)
+            {
+                const drawinglayer::primitive2d::Primitive2DReference xText(maTextPortionPrimitives[i]);
+                if (!xText)
+                    continue;
+                basegfx::B2DRange aMaskRange(aOutput);
+                aMaskRange.expand(xText->getB2DRange(aViewInfo));
+                drawinglayer::primitive2d::Primitive2DContainer aMask{
+                    new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
+                        basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(aMaskRange)),
+                        basegfx::BColor(1.0, 1.0, 1.0)),
+                    new drawinglayer::primitive2d::ModifiedColorPrimitive2D(
+                        drawinglayer::primitive2d::Primitive2DContainer{ xText },
+                        std::make_shared<basegfx::BColorModifier_replace>(
+                            basegfx::BColor(0.0, 0.0, 0.0)))
+                };
+                drawinglayer::primitive2d::Primitive2DContainer aContent{
+                    new drawinglayer::primitive2d::TransformPrimitive2D(
+                        maNewTransformB,
+                        drawinglayer::primitive2d::Primitive2DContainer{
+                            new drawinglayer::primitive2d::FillGradientPrimitive2D(
+                                aLocalOutput, aLocalDefinition, aAttr) })
+                };
+                maTextPortionPrimitives[i] = new drawinglayer::primitive2d::TransparencePrimitive2D(
+                    std::move(aContent), std::move(aMask));
+            }
+        }
+        maZetaGradientPortions.clear();
+        return;
+    }
     const basegfx::B2DRange aDefinition(aInk.getMinX(),
                                         aVertical.isEmpty() ? aInk.getMinY() : aVertical.getMinY(),
                                         aInk.getMaxX(),
@@ -700,6 +754,7 @@ void TextHierarchyBreakup::flushTextPortionPrimitivesToLinePrimitives()
 {
     if (!maZetaGradientPortions.empty())
         zetaApplyTextGradients();
+    maZetaLocalLineInk.reset();
 
     // only create a line primitive when we had content; there is no need for
     // empty line primitives (contrary to paragraphs, see below).
@@ -732,12 +787,37 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
     const size_t nBefore(maTextPortionPrimitives.size());
     CreateTextPortionPrimitivesFromDrawPortionInfo(maTextPortionPrimitives, maNewTransformA,
                                                    maNewTransformB, rDrawPortionInfo);
+    // zeta: 회전·기울인 글 상자면 회전 전 좌표 범위도 잰다(그라데이션 범위를 PowerPoint처럼 회전 전 줄 상자로)
+    basegfx::B2DRange aLocalInk;
+    bool bZetaRotated(false);
+    if (maTextPortionPrimitives.size() > nBefore)
+    {
+        basegfx::B2DTuple aScale, aTranslate;
+        double fRotate(0.0), fShearX(0.0);
+        maNewTransformB.decompose(aScale, aTranslate, fRotate, fShearX);
+        bZetaRotated = !basegfx::fTools::equalZero(fRotate) || !basegfx::fTools::equalZero(fShearX);
+        if (bZetaRotated)
+        {
+            drawinglayer::primitive2d::Primitive2DContainer aLocal;
+            CreateTextPortionPrimitivesFromDrawPortionInfo(aLocal, maNewTransformA,
+                                                           basegfx::B2DHomMatrix(), rDrawPortionInfo);
+            const drawinglayer::geometry::ViewInformation2D aViewInfo;
+            for (const auto& rLocal : aLocal)
+                if (rLocal)
+                    aLocalInk.expand(rLocal->getB2DRange(aViewInfo));
+            maZetaLocalLineInk.expand(aLocalInk);
+        }
+    }
     if (!rDrawPortionInfo.maZetaTextGradient.isEmpty()
         && maTextPortionPrimitives.size() > nBefore)
     {
         maZetaGradientPortions.push_back(
             { nBefore, maTextPortionPrimitives.size(), rDrawPortionInfo.maZetaTextGradient,
-              zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA, maNewTransformB) });
+              zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA, maNewTransformB),
+              bZetaRotated ? zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA,
+                                                      basegfx::B2DHomMatrix())
+                           : basegfx::B2DRange(),
+              aLocalInk });
     }
 
     if (rDrawPortionInfo.mbEndOfLine || rDrawPortionInfo.mbEndOfParagraph)
