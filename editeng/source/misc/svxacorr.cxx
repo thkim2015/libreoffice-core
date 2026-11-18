@@ -992,6 +992,14 @@ void SvxAutoCorrect::FnCapitalStartSentence( SvxAutoCorrDoc& rDoc,
         lcl_IsInArr( u".-)>", *pDelim ) )
         return;
 
+#ifdef EMSCRIPTEN
+    // weboffice: PowerPoint·Word는 'www.' 주소의 첫 낱말을 대문자로 바꾸지 않는다('.'을 칠 때 'Www.'가 되던 것)
+    if (*pDelim == '.' && 3 == pDelim - pWordStt
+        && rtl::toAsciiLowerCase(pWordStt[0]) == 'w' && rtl::toAsciiLowerCase(pWordStt[1]) == 'w'
+        && rtl::toAsciiLowerCase(pWordStt[2]) == 'w')
+        return;
+#endif
+
     // tdf#59666 don't capitalize single Greek letters (except in Greek texts)
     if ( 1 == pDelim - pWordStt && 0x03B1 <= *pWordStt && *pWordStt <= 0x03C9 && eLang != LANGUAGE_GREEK )
         return;
