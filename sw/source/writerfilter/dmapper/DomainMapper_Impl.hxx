@@ -1226,6 +1226,8 @@ public:
     struct SectionNoteNumbering
     {
         OUString sPageStyle;
+        /// Writer text section of a continuous section (which keeps the page style before it).
+        OUString sTextSection;
         SectionPropertyMap::NoteNumbering aFootnote;
         SectionPropertyMap::NoteNumbering aEndnote;
     };

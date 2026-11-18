@@ -36,6 +36,7 @@
 #include <pagedesc.hxx>
 #include <swtable.hxx>
 #include <frmfmt.hxx>
+#include <section.hxx>
 #include <SwStyleNameMapper.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
@@ -143,7 +144,19 @@ void lcl_UpdateWordSectionNumbering(SwFootnoteIdxs& rIdxs, SwDoc& rDoc)
             continue;
         const bool bEndNote = rFootnote.IsEndNote();
         const WordNoteNumberings& rMap = bEndNote ? aEndnotes : aFootnotes;
-        const auto it = rMap.find(sStyle);
+        auto it = rMap.find(sStyle);
+        // A continuous section (a Writer text section in the page style before it) has its own
+        // numbering type, but counts the notes of the section before it like Word.
+        for (const SwSectionNode* pSectNd = pTextFootnote->GetTextNode().FindSectionNode(); pSectNd;
+             pSectNd = pSectNd->StartOfSectionNode()->FindSectionNode())
+        {
+            const auto itSection = rMap.find("#" + pSectNd->GetSection().GetSectionName().toString());
+            if (itSection != rMap.end())
+            {
+                it = itSection;
+                break;
+            }
+        }
         sal_Int16 nType = it == rMap.end() ? -1 : it->second[0];
         sal_uInt16 nNumber = rFootnote.GetNumber();
         if (!bEndNote)
