@@ -1669,15 +1669,15 @@ void ScInterpreter::ScSingleValue()
         ScAddress aAdr;
         if (!DoubleRefToPosSingleRef(aRange, aAdr))
         {
-            // DoubleRefToPosSingleRef set FormulaError::NoValue.
-            PushError(nGlobalError);
+            // weboffice: like Excel, a failed @ is a #VALUE! value, not an error that ends the
+            // formula: SUMIF(range;@D1:E1;sum) matches the #VALUE! cells with it
+            nGlobalError = FormulaError::NONE;
+            PushTempTokenWithoutError(new FormulaErrorToken(FormulaError::NoValue));
             return;
         }
-        ScRefCellValue aCell(mrDoc, aAdr);
-        if (aCell.hasString())
-            PushString(aCell.getString(mrDoc));
-        else
-            PushDouble(GetCellValue(aAdr, aCell));
+        // weboffice: the slot as a reference, so a blank cell is "" in CONCAT and a TRUE/FALSE
+        // cell stays TRUE/FALSE (Excel)
+        PushSingleRef(aAdr.Col(), aAdr.Row(), aAdr.Tab());
         return;
     }
     // Same intersection as for a sheet local range above.
@@ -7829,7 +7829,10 @@ bool ScInterpreter::ExcelCriteriaMask( sal_uInt8 nCritParams, std::vector<char>&
                 ScAddress aAdr;
                 if (!PopDoubleRefOrSingleRef(aAdr))
                 {
-                    rCrit.bNumber = true;
+                    // a criteria range the formula cell does not intersect is #VALUE!, which
+                    // matches the #VALUE! cells (measured)
+                    rCrit.bError = true;
+                    rCrit.eError = nGlobalError != FormulaError::NONE ? nGlobalError : FormulaError::NoValue;
                     break;
                 }
                 ScRefCellValue aCell(mrDoc, aAdr);

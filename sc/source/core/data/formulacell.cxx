@@ -2374,7 +2374,11 @@ void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTa
             // top left cell without its hard format - compare with the format the cell has.
             nFormatType = rContext.GetFormatTable()->GetType( rDocument.GetNumberFormat( rContext, aPos));
         }
-        bool bForceNumberFormat = ((mbAllowNumberFormatChange || bMatrixLogical) && !mbNeedsNumberFormat &&
+        // weboffice: Excel shows a TRUE/FALSE result as TRUE/FALSE whatever the cell, so a
+        // cell imported from xls (no format change allowed) also takes and drops the logical format
+        const bool bLogicalResult = pInterpreter->GetRetFormatType() == SvNumFormatType::LOGICAL
+            || nFormatType == SvNumFormatType::LOGICAL;
+        bool bForceNumberFormat = ((mbAllowNumberFormatChange || bMatrixLogical || bLogicalResult) && !mbNeedsNumberFormat &&
                 !SvNumberFormatter::IsCompatible( nFormatType, pInterpreter->GetRetFormatType()));
 
         // We have some requirements additionally to IsCompatible().
