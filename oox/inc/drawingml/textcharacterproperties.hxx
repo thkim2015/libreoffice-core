@@ -47,6 +47,8 @@ struct TextCharacterProperties
     model::ComplexColor maUnderlineColor;
     model::ComplexColor maHighlightColor;
     std::optional< OUString > moLang;
+    /// a:rPr noProof: do not check spelling (imported as the "[None]" language, zxx)
+    std::optional< bool > moNoProof;
     /// zeta: run text has no East Asian characters but an East Asian lang: also set the
     /// Western locale, so the run stays separate and exports its own lang (pptx).
     bool mbLangWestern = false;

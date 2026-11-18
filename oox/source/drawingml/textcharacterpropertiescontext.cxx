@@ -82,6 +82,11 @@ TextCharacterPropertiesContext::TextCharacterPropertiesContext(
     {
         --nVisualTokenAmount; // Not a visual attribute
     }
+    if ( rAttribs.hasAttribute( XML_noProof ) )
+    {
+        mrTextCharacterProperties.moNoProof = rAttribs.getBool( XML_noProof, false );
+        --nVisualTokenAmount; // Not a visual attribute
+    }
     if ( rAttribs.hasAttribute( XML_smtClean ) )
     {
         --nVisualTokenAmount; // Not a visual attribute
