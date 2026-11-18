@@ -1000,6 +1000,11 @@ void DocxSdrExport::startDMLAnchorInline(const SwFrameFormat* pFrameFormat, cons
             default:
                 break;
         }
+        // Word inside/outside margin: page margin area swapped on even pages
+        const bool bMarginToggle
+            = rHoriOri.IsPosToggle()
+              && (rHoriOri.GetRelationOrient() == text::RelOrientation::PAGE_LEFT
+                  || rHoriOri.GetRelationOrient() == text::RelOrientation::PAGE_RIGHT);
         switch (rHoriOri.GetRelationOrient())
         {
             case text::RelOrientation::PAGE_PRINT_AREA:
@@ -1012,10 +1017,10 @@ void DocxSdrExport::startDMLAnchorInline(const SwFrameFormat* pFrameFormat, cons
                 relativeFromH = "character";
                 break;
             case text::RelOrientation::PAGE_RIGHT:
-                relativeFromH = "rightMargin";
+                relativeFromH = bMarginToggle ? "outsideMargin" : "rightMargin";
                 break;
             case text::RelOrientation::PAGE_LEFT:
-                relativeFromH = "leftMargin";
+                relativeFromH = bMarginToggle ? "insideMargin" : "leftMargin";
                 break;
             case text::RelOrientation::FRAME:
             default:
@@ -1025,10 +1030,10 @@ void DocxSdrExport::startDMLAnchorInline(const SwFrameFormat* pFrameFormat, cons
         switch (rHoriOri.GetHoriOrient())
         {
             case text::HoriOrientation::LEFT:
-                alignH = rHoriOri.IsPosToggle() ? "inside" : "left";
+                alignH = rHoriOri.IsPosToggle() && !bMarginToggle ? "inside" : "left";
                 break;
             case text::HoriOrientation::RIGHT:
-                alignH = rHoriOri.IsPosToggle() ? "outside" : "right";
+                alignH = rHoriOri.IsPosToggle() && !bMarginToggle ? "outside" : "right";
                 break;
             case text::HoriOrientation::CENTER:
                 alignH = "center";

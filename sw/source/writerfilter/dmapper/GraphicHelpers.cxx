@@ -106,8 +106,16 @@ void PositionHandler::lcl_attribute( Id aName, const Value& rVal )
                         m_nRelation =  text::RelOrientation::PAGE_FRAME;
                         break;
 
+                    // inside/outside margin: the left/right page margin area on odd pages,
+                    // swapped on even pages (the offset and alignment are not mirrored,
+                    // see SwAnchoredObjectPosition::CalcRelPosX)
                     case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_insideMargin:
-                        m_nRelation = text::RelOrientation::PAGE_FRAME;
+                        m_nRelation = text::RelOrientation::PAGE_LEFT;
+                        m_bPageToggle = true;
+                        break;
+
+                    case NS_ooxml::LN_Value_wordprocessingDrawing_ST_RelFromH_outsideMargin:
+                        m_nRelation = text::RelOrientation::PAGE_RIGHT;
                         m_bPageToggle = true;
                         break;
 
