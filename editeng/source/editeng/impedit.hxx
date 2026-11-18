@@ -581,6 +581,7 @@ private:
     ScalingParameters maCustomScalingParameters;
     ScalingParameters maScalingParameters;
     bool mbRoundToNearestPt;
+    bool mbTitleAutoFit = false;
 
     CharCompressType mnAsianCompressionMode;
 
@@ -802,6 +803,7 @@ private:
     }
 
     void setRoundToNearestPt(bool bRound) { mbRoundToNearestPt = bRound; }
+    void setTitleAutoFit(bool bTitle);
     double roundToNearestPt(double fInput) const;
 
     ContentNode*        GetPrevVisNode( ContentNode const * pCurNode );

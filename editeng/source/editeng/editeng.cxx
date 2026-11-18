@@ -1398,6 +1398,11 @@ void EditEngine::setRoundFontSizeToPt(bool bRound)
     getImpl().setRoundToNearestPt(bRound);
 }
 
+void EditEngine::setTitleAutoFit(bool bTitle)
+{
+    getImpl().setTitleAutoFit(bTitle);
+}
+
 bool EditEngine::ShouldCreateBigTextObject() const
 {
     sal_Int32 nTextPortions = 0;

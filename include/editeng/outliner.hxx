@@ -890,6 +890,8 @@ public:
     }
 
     void setRoundFontSizeToPt(bool bRound) const;
+    /// Shrink an overflowing text by one step only, like a PowerPoint title placeholder
+    void setTitleAutoFit(bool bTitle) const;
 
     void            EraseVirtualDevice();
 
