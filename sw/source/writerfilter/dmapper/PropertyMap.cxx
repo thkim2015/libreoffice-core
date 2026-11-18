@@ -1790,7 +1790,7 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
     const bool bRecordNoteNumbering = rDM_Impl.IsNewDoc() && !rDM_Impl.IsAltChunk();
     if (bRecordNoteNumbering)
         rDM_Impl.m_aSectionNoteNumberings.push_back(
-            { OUString(), m_aFootnoteNumbering, m_aEndnoteNumbering });
+            { OUString(), OUString(), m_aFootnoteNumbering, m_aEndnoteNumbering });
 
     // The default section type is nextPage.
     if ( m_nBreakType == -1 )
@@ -1891,6 +1891,8 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
                 ApplyColumnProperties( xSection, rDM_Impl );
 
             ApplyProtectionProperties( xSection, rDM_Impl );
+            if (bRecordNoteNumbering && !rDM_Impl.m_aSectionNoteNumberings.empty())
+                rDM_Impl.m_aSectionNoteNumberings.back().sTextSection = xSection->getName();
         }
 
         try

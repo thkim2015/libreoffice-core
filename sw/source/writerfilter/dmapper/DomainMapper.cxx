@@ -258,7 +258,9 @@ SectionPropertyMap::NoteNumbering lcl_EffectiveNoteNumbering(SectionPropertyMap:
 
 /// Writer only has document-wide footnote/endnote numbering. When the sections differ, use the
 /// most common numbering for the document, and keep the other ones per page style for the DOCX
-/// export, see DocxAttributeOutput::SectFootnoteEndnotePr().
+/// export, see DocxAttributeOutput::SectFootnoteEndnotePr(). Continuous sections keep the page
+/// style before them, so their numbering is kept per Writer text section ("#" + its name) for
+/// the note numbers, see lcl_UpdateWordSectionNumbering() in sw/source/core/doc/ftnidx.cxx.
 void lcl_ApplySectionNoteNumberings(DomainMapper_Impl& rImpl, comphelper::SequenceAsHashMap& rGrabBag)
 {
     const auto& rSections = rImpl.m_aSectionNoteNumberings;
@@ -305,6 +307,14 @@ void lcl_ApplySectionNoteNumberings(DomainMapper_Impl& rImpl, comphelper::Sequen
         std::vector<beans::PropertyValue> aOverrides;
         for (size_t i = 0; i < rSections.size(); ++i)
         {
+            if (!rSections[i].sTextSection.isEmpty())
+            {
+                aOverrides.push_back(comphelper::makePropertyValue(
+                    "#" + rSections[i].sTextSection,
+                    uno::Sequence<sal_Int16>{ aEffective[i].nType, aEffective[i].nStartAt,
+                                              aEffective[i].nCounting }));
+                continue;
+            }
             const OUString& rStyle = rSections[i].sPageStyle;
             if (rStyle.isEmpty() || aEffective[i] == aBest
                 || std::any_of(aOverrides.begin(), aOverrides.end(),
