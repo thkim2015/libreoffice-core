@@ -2023,11 +2023,15 @@ void VDataSeriesGroup::getMinimumAndMaximumYInContinuousXRange(
                 // Outside specified X range.  Skip it.
                 continue;
 
-            double fY = pSeries->getYValue(i);
-            if (std::isnan(fY))
-                continue;
-
-            aRangeCalc.setValue(fX, fY);
+            // Stock series have no values-y, only first/min/max/last: take
+            // their lowest and highest value (equal to the y value otherwise),
+            // or a stock chart on a date axis got an empty 0..6 value axis.
+            double fYMin = pSeries->getMinimumofAllDifferentYValues(i);
+            double fYMax = pSeries->getMaximumofAllDifferentYValues(i);
+            if (!std::isnan(fYMin))
+                aRangeCalc.setValue(fX, fYMin);
+            if (!std::isnan(fYMax))
+                aRangeCalc.setValue(fX, fYMax);
         }
         aRangeCalc.nextSeries();
     }
