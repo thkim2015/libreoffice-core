@@ -38,6 +38,8 @@
 #include <oox/vml/vmldrawingfragment.hxx>
 #include <drawingml/clrschemecontext.hxx>
 #include <drawingml/fillproperties.hxx>
+#include <drawingml/textliststyle.hxx>
+#include <drawingml/textliststylecontext.hxx>
 #include <oox/ppt/pptimport.hxx>
 #include <oox/token/namespaces.hxx>
 #include <oox/token/properties.hxx>
@@ -208,6 +210,10 @@ SlideFragmentHandler::~SlideFragmentHandler()
         return this;
     case PPT_TOKEN( txStyles ):         // CT_SlideMasterTextStyles
         return new SlideMasterTextStylesContext( *this, mpSlidePersistPtr );
+    case PPT_TOKEN( notesStyle ):       // CT_TextListStyle of the notes master (not inside txStyles)
+        // Without it the notes body has no master list style: runs without sz or latin then
+        // inherited the size and Latin font of the previous run on import (and on export)
+        return new oox::drawingml::TextListStyleContext( *this, *mpSlidePersistPtr->getNotesTextStyle() );
     case PPT_TOKEN( custDataLst ):      // CT_CustomerDataList
     case PPT_TOKEN( tagLst ):           // CT_TagList
         return this;
