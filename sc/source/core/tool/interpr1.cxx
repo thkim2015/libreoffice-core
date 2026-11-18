@@ -3720,6 +3720,8 @@ void ScInterpreter::ScT()
     }
 }
 
+bool ScStripTextDollar( const OUString& rStr, OUString& rOut ); // weboffice: interpr4.cxx
+
 void ScInterpreter::ScValue()
 {
     OUString aInputString;
@@ -3792,8 +3794,11 @@ void ScInterpreter::ScValue()
     }
 
     sal_uInt32 nFIndex = 0;     // 0 for default locale
+    OUString aNoDollar;
     if (mrContext.NFIsNumberFormat(aInputString, nFIndex, fVal))
         PushDouble(fVal);
+    else if (ScStripTextDollar(aInputString, aNoDollar) && mrContext.NFIsNumberFormat(aNoDollar, nFIndex = 0, fVal))
+        PushDouble(fVal); // weboffice: VALUE("$1,000") is 1000 like Excel
     else
         PushIllegalArgument();
 }

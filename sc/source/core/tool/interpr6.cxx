@@ -665,6 +665,14 @@ void ScInterpreter::IterateParameters( ScIterFunc eFunc, bool bTextAsZero )
                 PopSingleRef( aAdr );
                 if (nGlobalError == FormulaError::NoRef)
                 {
+                    // weboffice: like Excel, COUNT skips a #REF! argument and COUNTA counts it
+                    if (eFunc == ifCOUNT || eFunc == ifCOUNT2)
+                    {
+                        nGlobalError = FormulaError::NONE;
+                        if (eFunc == ifCOUNT2)
+                            ++nCount;
+                        break;
+                    }
                     PushError( FormulaError::NoRef);
                     return;
                 }

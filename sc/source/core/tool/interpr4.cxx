@@ -158,11 +158,43 @@ FormulaError ScInterpreter::GetCellErrCode( const ScRefCellValue& rCell )
     return rCell.getType() == CELLTYPE_FORMULA ? rCell.getFormula()->GetErrCode() : FormulaError::NONE;
 }
 
+// weboffice: Excel reads a dollar sign in text as currency in any locale ("$1,000", "-$5", "($5)");
+// remove one leading dollar sign (after spaces, a sign or an opening parenthesis) so the text can be read.
+bool ScStripTextDollar( const OUString& rStr, OUString& rOut );
+bool ScStripTextDollar( const OUString& rStr, OUString& rOut )
+{
+    sal_Int32 i = 0;
+    const sal_Int32 n = rStr.getLength();
+    while (i < n && (rStr[i] == ' ' || rStr[i] == '-' || rStr[i] == '+' || rStr[i] == '('))
+        ++i;
+    if (i >= n - 1 || rStr[i] != '$')
+        return false;
+    const sal_Unicode c = rStr[i + 1];
+    if (!((c >= '0' && c <= '9') || c == '.' || c == ' '))
+        return false;
+    rOut = rStr.replaceAt(i, 1, u"");
+    return true;
+}
+
 double ScInterpreter::ConvertStringToValue( const OUString& rStr )
 {
     FormulaError nError = FormulaError::NONE;
     double fValue = ScGlobal::ConvertStringToValue( rStr, maCalcConfig, nError, mnStringNoValueError,
             mrContext, nCurFmtType);
+    OUString aNoDollar;
+    if (nError != FormulaError::NONE && ScStripTextDollar(rStr, aNoDollar))
+    {
+        FormulaError nError2 = FormulaError::NONE;
+        SvNumFormatType eType = nCurFmtType;
+        const double fValue2 = ScGlobal::ConvertStringToValue( aNoDollar, maCalcConfig, nError2,
+                mnStringNoValueError, mrContext, eType);
+        if (nError2 == FormulaError::NONE)
+        {
+            nError = FormulaError::NONE;
+            fValue = fValue2;
+            nCurFmtType = eType;
+        }
+    }
     if (nError != FormulaError::NONE)
         SetError(nError);
     return fValue;
@@ -170,7 +202,25 @@ double ScInterpreter::ConvertStringToValue( const OUString& rStr )
 
 double ScInterpreter::ConvertStringToValue( const OUString& rStr, FormulaError& rError, SvNumFormatType& rCurFmtType )
 {
-    return ScGlobal::ConvertStringToValue( rStr, maCalcConfig, rError, mnStringNoValueError, mrContext, rCurFmtType);
+    FormulaError nError = FormulaError::NONE;
+    double fValue = ScGlobal::ConvertStringToValue( rStr, maCalcConfig, nError, mnStringNoValueError, mrContext, rCurFmtType);
+    OUString aNoDollar;
+    if (nError != FormulaError::NONE && ScStripTextDollar(rStr, aNoDollar))
+    {
+        FormulaError nError2 = FormulaError::NONE;
+        SvNumFormatType eType = rCurFmtType;
+        const double fValue2 = ScGlobal::ConvertStringToValue( aNoDollar, maCalcConfig, nError2,
+                mnStringNoValueError, mrContext, eType);
+        if (nError2 == FormulaError::NONE)
+        {
+            nError = FormulaError::NONE;
+            fValue = fValue2;
+            rCurFmtType = eType;
+        }
+    }
+    if (nError != FormulaError::NONE)
+        rError = nError;
+    return fValue;
 }
 
 double ScInterpreter::GetCellValue( const ScAddress& rPos, const ScRefCellValue& rCell )
