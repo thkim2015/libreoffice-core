@@ -86,7 +86,9 @@ void VPolarRadiusAxis::initAxisLabelProperties( const css::awt::Size& rFontRefer
 
 sal_Int32 VPolarRadiusAxis::estimateMaximumAutoMainIncrementCount()
 {
-    return 2;
+    // Like Excel, a radar chart labels a ring at every main step (0..35 by 5
+    // for values 10..32), not just 2 steps: estimate as on the label axis.
+    return m_apAxisWithLabels->estimateMaximumAutoMainIncrementCount();
 }
 
 bool VPolarRadiusAxis::prepareShapeCreation()
