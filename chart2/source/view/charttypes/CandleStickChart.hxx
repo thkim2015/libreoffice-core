@@ -45,6 +45,15 @@ public:
 
     virtual LegendSymbolStyle getLegendSymbolStyle() override;
 
+    // Excel shows one legend entry per stock series (Open/High/Low/Close)
+    virtual std::vector< ViewLegendEntry > createLegendEntriesForSeries(
+            const css::awt::Size& rEntryKeyAspectRatio,
+            const VDataSeries& rSeries,
+            const css::uno::Reference< css::beans::XPropertySet >& xTextProperties,
+            const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
+            const css::uno::Reference< css::uno::XComponentContext >& xContext
+            ) override;
+
 private: //member
     BarPositionHelper m_aMainPosHelper;
 };
