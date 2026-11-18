@@ -222,7 +222,8 @@ std::vector<ViewLegendEntry> SurfaceChart::createLegendEntriesForSeries(
     if (!xTarget.is() || aRows.empty() || aRows.front() != &rSeries)
         return aResult;
     const std::vector<double> aEdges = currentBandEdges();
-    for (size_t i = 0; i + 1 < aEdges.size(); ++i)
+    // Excel lists the highest band first
+    for (size_t i = aEdges.size() - 1; i-- > 0;)
         aResult.push_back(createBoxLegendEntry(
             rEntryKeyAspectRatio, lcl_number(aEdges[i]) + "-" + lcl_number(aEdges[i + 1]),
             bandColor(i), xTextProperties, xTarget));

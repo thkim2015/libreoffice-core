@@ -135,6 +135,9 @@ void VPolarRadiusAxis::createShapes()
         xInverseScaling = rAngleScale.Scaling->getInverseScaling();
 
     AxisProperties aAxisProperties(m_aAxisProperties);
+    // Like Excel, the tick marks of the value axis are only on the labelled
+    // first spoke; the other spokes got them at every ring
+    aAxisProperties.m_aTickmarkPropertiesList.clear();
 
     sal_Int32 nTick = 0;
     EquidistantTickIter aIter( aAngleTickInfos, rAngleIncrement, 0 );

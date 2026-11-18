@@ -268,19 +268,11 @@ void AxisConverter::convertFromModel(const Reference<XCoordinateSystem>& rxCoord
 
         // tick mark style
         sal_Int32 nTickStyle = lclGetTickMark( mrModel.mnMajorTickMark );
-        // Excel draws no tick marks on the spokes of a radar chart (the X axis
-        // has no line either); they showed as arrow heads at the outer ring
-        const bool bRadarXAxis = (nAxisIdx == API_X_AXIS) && (rTypeInfo.meTypeCategory == TYPECATEGORY_RADAR);
-        if (bRadarXAxis)
-        {
-            aAxisProp.setProperty( PROP_MajorTickmarks, cssc2::TickmarkStyle::NONE );
-            aAxisProp.setProperty( PROP_MinorTickmarks, cssc2::TickmarkStyle::NONE );
-        }
-        else if (nTickStyle != XML_none) {
+        if (nTickStyle != XML_none) {
             aAxisProp.setProperty( PROP_MajorTickmarks, nTickStyle );
         };
         nTickStyle = lclGetTickMark( mrModel.mnMinorTickMark );
-        if (!bRadarXAxis && nTickStyle != XML_none) {
+        if (nTickStyle != XML_none) {
             aAxisProp.setProperty( PROP_MinorTickmarks, nTickStyle );
         };
 
