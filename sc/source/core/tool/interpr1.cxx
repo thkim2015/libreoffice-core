@@ -8829,8 +8829,9 @@ void ScInterpreter::ScHLookup()
 // the cell, 0 equal, 1 greater. Like Excel (and Apache POI, which reproduces it), cells of
 // another type are stepped over forwards and a run of equal values ends at its last one.
 namespace {
+// nDataEnd: cells from there to the end are known to be empty (stepped over at once).
 template<typename Cmp>
-sal_Int32 lcl_ExcelApproximateSearch( sal_Int32 nSize, const Cmp& rCmp )
+sal_Int32 lcl_ExcelApproximateSearch( sal_Int32 nSize, const Cmp& rCmp, sal_Int32 nDataEnd = SAL_MAX_INT32 )
 {
     sal_Int32 nLow = -1, nHigh = nSize;
     while (true)
@@ -8846,6 +8847,8 @@ sal_Int32 lcl_ExcelApproximateSearch( sal_Int32 nSize, const Cmp& rCmp )
             while (true)
             {
                 ++nNew;
+                if (nNew >= nDataEnd)
+                    nNew = nHigh; // only empty cells follow
                 if (nNew == nHigh)
                 {
                     nHigh = nMid; // all of the upper part has another type
@@ -9282,7 +9285,10 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
             }
             else
                 nLastRow = std::max<SCROW>(nRow1, std::min<SCROW>(nRow2, mrDoc.GetLastDataRow(nTab1, nCol1, nCol1, nRow2)));
-            const sal_Int32 nSize = bHLookup ? (nLastCol - nCol1 + 1) : (nLastRow - nRow1 + 1);
+            // weboffice: Excel searches the whole range; empty cells at the end still move the
+            // middle points (HLOOKUP("STRING";B6:H12;..) with H6 empty finds E6, not G6)
+            const sal_Int32 nSize = bHLookup ? (nCol2 - nCol1 + 1) : (nRow2 - nRow1 + 1);
+            const sal_Int32 nDataEnd = bHLookup ? (nLastCol - nCol1 + 1) : (nLastRow - nRow1 + 1);
             auto aCmp = [&](sal_Int32 i) -> int
             {
                 const ScAddress aAdr = bHLookup ? ScAddress(nCol1 + i, nRow1, nTab1) : ScAddress(nCol1, nRow1 + i, nTab1);
@@ -9301,7 +9307,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
                 const double f = aCell.getValue();
                 return fLookup < f ? -1 : (fLookup > f ? 1 : 0);
             };
-            const sal_Int32 nIdx = lcl_ExcelApproximateSearch(nSize, aCmp);
+            const sal_Int32 nIdx = lcl_ExcelApproximateSearch(nSize, aCmp, nDataEnd);
             if (nIdx < 0)
                 PushNA();
             else
