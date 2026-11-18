@@ -672,7 +672,13 @@ SwRect SwAnchoredDrawObject::GetObjBoundRect() const
     // Resize objects with relative width or height
     if ( !bGroupShape && pPageFrame && ( GetDrawObj( )->GetRelativeWidth( ) || GetDrawObj()->GetRelativeHeight( ) ) )
     {
-        tools::Rectangle aCurrObjRect = GetDrawObj()->GetCurrentBoundRect();
+        // weboffice: Word relates the size to the shape geometry without its outline. Scaling the
+        // bound rect around its top left also scaled the half outline inset and moved the shape
+        // (0.4pt/0.9pt for a 1pt outline), which DOCX export then wrote as a new position.
+        const bool bUseSnapRect = GetDrawObj()->GetRotateAngle() == 0_deg100
+                                  && GetDrawObj()->GetShearAngle() == 0_deg100;
+        tools::Rectangle aCurrObjRect = bUseSnapRect ? GetDrawObj()->GetSnapRect()
+                                                     : GetDrawObj()->GetCurrentBoundRect();
 
         tools::Long nTargetWidth = aCurrObjRect.GetWidth( );
         if ( GetDrawObj( )->GetRelativeWidth( ) )
