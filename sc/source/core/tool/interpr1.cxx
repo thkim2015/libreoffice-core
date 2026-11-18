@@ -2401,6 +2401,9 @@ void ScInterpreter::ScIsLogical()
                 {
                     sal_uInt32 nFormat = GetCellNumberFormat(aAdr, aCell);
                     bRes = (mrContext.NFGetType(nFormat) == SvNumFormatType::LOGICAL);
+                    // weboffice: a formula cell with a TRUE/FALSE result is logical like in Excel
+                    if (!bRes && aCell.getType() == CELLTYPE_FORMULA)
+                        bRes = IsLogicalCell(aAdr, aCell);
                 }
             }
         }
@@ -14554,6 +14557,13 @@ void ScInterpreter::ScIndex()
                     PopDoubleRef( nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
                     if ( nParamCount == 2 && nRow1 == nRow2 )
                         bRowArray = true;
+                }
+                // weboffice: like Excel, a range of several rows and columns needs the column
+                // argument: INDEX(A1:C3;2) is #REF! (INDEX(A1:C3;2;) is the row)
+                if ( nParamCount == 2 && nRow1 != nRow2 && nCol1 != nCol2 )
+                {
+                    PushError( FormulaError::NoRef);
+                    return;
                 }
                 if ( nTab1 != nTab2 ||
                         (nCol > 0 && nCol1+nCol-1 > nCol2) ||
