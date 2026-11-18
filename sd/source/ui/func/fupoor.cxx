@@ -47,6 +47,13 @@
 #include <svx/svditer.hxx>
 
 #include <editeng/editeng.hxx>
+#ifdef EMSCRIPTEN
+#include <editeng/xmlcnitm.hxx>
+#include <svx/svddef.hxx>
+#include <boost/property_tree/json_parser.hpp>
+#include <optional>
+#include <sstream>
+#endif
 
 using namespace ::com::sun::star;
 
@@ -1095,6 +1102,41 @@ bool FuPoor::cancel()
     return false;
 }
 
+#ifdef EMSCRIPTEN
+namespace
+{
+// weboffice: PowerPoint 가로 세로 비율 고정(a:spLocks/a:picLocks noChangeAspect). 앱이 도형 UserDefinedAttributes 'zetaNvPr'에
+// JSON { "locks": { "noChangeAspect": "1" }, ... }으로 둔다('grp…' 칸은 그 도형을 품은 그룹 값이라 보지 않는다).
+// locks가 있으면 그 값, 그 밖의 도형 값만 있으면 끔, 값이 없으면 nullopt(LibreOffice 기본 — 그림·미디어·OLE는 켬)
+std::optional<bool> lcl_ZetaAspectLock(const SdrObject& rObj)
+{
+    const SvXMLAttrContainerItem& rAttrs
+        = static_cast<const SvXMLAttrContainerItem&>(rObj.GetMergedItem(SDRATTR_XMLATTRIBUTES));
+    for (sal_uInt16 i = 0; i < rAttrs.GetAttrCount(); ++i)
+    {
+        if (rAttrs.GetAttrLName(i) != "zetaNvPr")
+            continue;
+        try
+        {
+            std::stringstream aStream(rAttrs.GetAttrValue(i).toUtf8().getStr());
+            boost::property_tree::ptree aTree;
+            boost::property_tree::read_json(aStream, aTree);
+            if (auto oLocks = aTree.get_child_optional("locks"))
+                return oLocks->get<std::string>("noChangeAspect", std::string()) == "1";
+            for (const auto& rChild : aTree)
+                if (rChild.first.rfind("grp", 0) != 0)
+                    return false;
+        }
+        catch (...)
+        {
+        }
+        return std::nullopt;
+    }
+    return std::nullopt;
+}
+}
+#endif
+
 // #i33136#
 bool FuPoor::doConstructOrthogonal() const
 {
@@ -1110,6 +1152,14 @@ bool FuPoor::doConstructOrthogonal() const
             bResizeKeepRatio = aObjIdentifier == SdrObjKind::Graphic ||
                                aObjIdentifier == SdrObjKind::Media ||
                                aObjIdentifier == SdrObjKind::OLE2;
+#ifdef EMSCRIPTEN
+            // weboffice: 도형마다의 PowerPoint 가로 세로 비율 고정을 따른다(그룹은 자식 값이 섞여 보지 않는다)
+            if (aObjIdentifier != SdrObjKind::Group)
+            {
+                if (std::optional<bool> oLock = lcl_ZetaAspectLock(*rMarkList.GetMark(0)->GetMarkedSdrObj()))
+                    bResizeKeepRatio = *oLock;
+            }
+#endif
         }
     }
     SdrHdl* pHdl = mpView->PickHandle(aMDPos);
