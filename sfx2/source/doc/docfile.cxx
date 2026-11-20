@@ -4899,6 +4899,12 @@ ImplSVEvent* SfxMedium::GetWorkerReloadEvent() const
 // should only be called on main thread
 void SfxMedium::AddToCheckEditableWorkerList()
 {
+#if defined(EMSCRIPTEN)
+    // weboffice: comphelper::ThreadPool runs tasks in-line under Emscripten, and this
+    // polling task never ends (and takes g_chkReadOnlyGlobalMutex held here); no file
+    // locks to watch in the browser anyway
+    return;
+#endif
     if (!pImpl->m_bNotifyWhenEditable)
         return;
 
