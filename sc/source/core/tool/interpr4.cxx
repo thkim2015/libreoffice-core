@@ -4994,8 +4994,15 @@ StackVar ScInterpreter::Interpret()
                     break;
                     case svCallable:
                     {
-                        nRetTypeExpr = SvNumFormatType::UNDEFINED;
-                        nRetIndexExpr = 0;
+                        // weboffice: Excel has no function value in a cell: a function or
+                        // macro name without a call (=SUM, =VLOOKUP) is #NAME? and a lambda
+                        // that is not called (=LAMBDA(x,x)) is #CALC!
+                        formula::FormulaCallableRef xCallable
+                            = static_cast<const formula::FormulaCallableToken*>(pCur)->GetCallable();
+                        if (xCallable && xCallable->GetOpCode() == ocLambda)
+                            SetError(FormulaError::NestedArray);    // shown as #CALC!
+                        else
+                            SetError(FormulaError::NoName);
                     }
                     break;
                     default :

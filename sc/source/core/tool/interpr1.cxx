@@ -13488,9 +13488,11 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
         switch (GetStackType())
         {
             case svDouble :
+                // weboffice: like Excel, DCOUNT(db,0,crit) is #VALUE!; only an empty field
+                // (DCOUNT(db,,crit)) counts all records
                 nVal = ::rtl::math::approxFloor( GetDouble() );
-                if ( bAllowMissingField && nVal == 0.0 )
-                    rMissingField = true;   // fake missing parameter
+                if (nVal < 1.0)
+                    SetError( FormulaError::NoValue );
                 break;
             case svString :
                 bByVal = false;

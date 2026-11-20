@@ -1267,7 +1267,7 @@ void ScInterpreter::ScCeil_MS()
     else if ( fVal < 0.0 )
         PushDouble(::rtl::math::approxFloor( fVal / -fDec ) * -fDec );
     else
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel (CEILING(2.5,-1))
 }
 
 void ScInterpreter::ScCeil_Precise()
