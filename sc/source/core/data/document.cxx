@@ -75,6 +75,8 @@
 #include <editutil.hxx>
 #include <stringutil.hxx>
 #include <formulaiter.hxx>
+#include <comphelper/configuration.hxx>
+#include <officecfg/Office/Common.hxx>
 #include <formulacell.hxx>
 #include <clipcontext.hxx>
 #include <listenercontext.hxx>
@@ -6720,6 +6722,17 @@ void ScDocument::EnableUndo( bool bVal )
     {
         GetUndoManager()->EnableUndo(bVal);
         if( mpDrawLayer ) mpDrawLayer->EnableUndo(bVal);
+    }
+
+    // View sub-shells (drawing, cell format, pivot, ...) set the max undo
+    // action count of the document undo manager to 0 when they are created
+    // while undo is disabled (e.g. right after load), and nothing restored it
+    // when undo was enabled again, so the whole session had no undo steps.
+    if (bVal && !comphelper::IsFuzzing()
+        && GetUndoManager()->GetMaxUndoActionCount() == 0)
+    {
+        GetUndoManager()->SetMaxUndoActionCount(
+            officecfg::Office::Common::Undo::Steps::get());
     }
 
     mbUndoEnabled = bVal;
