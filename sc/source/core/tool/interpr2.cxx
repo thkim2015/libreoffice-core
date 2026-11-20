@@ -293,11 +293,13 @@ void ScInterpreter::ScGetDayOfWeek()
     if ( !MustHaveParamCount( nParamCount, 1, 2 ) )
         return;
 
-    sal_Int16 nFlag;
+    // weboffice: like Excel, a return type out of range (also one too big for 16 bits) is #NUM!
+    sal_Int16 nFlag = 1;
     if (nParamCount == 2)
-        nFlag = GetInt16();
-    else
-        nFlag = 1;
+    {
+        const double fFlag = ::rtl::math::approxFloor(GetDouble());
+        nFlag = (fFlag >= 1.0 && fFlag <= 17.0) ? static_cast<sal_Int16>(fFlag) : 0;
+    }
 
     Date aDate = mrContext.NFGetNullDate();
     const sal_Int32 nSerial = GetFloor32();
@@ -335,7 +337,11 @@ void ScInterpreter::ScGetDayOfWeek()
                 nVal -= nFlag - 12;     // nVal -= ((nFlag - 11) - 1 = x - 1 = -1,0,1,2,3,4,5)
         break;
         default:
-            SetError( FormulaError::IllegalArgument);
+            if (nGlobalError == FormulaError::NONE)
+            {
+                PushError( FormulaError::IllegalFPOperation );   // weboffice: #NUM! like Excel
+                return;
+            }
     }
     PushInt( nVal );
 }
@@ -358,10 +364,21 @@ void ScInterpreter::ScGetWeekOfYear()
     if ( !MustHaveParamCount( nParamCount, 1, 2 ) )
         return;
 
-    sal_Int16 nFlag = (nParamCount == 1) ? 1 : GetInt16WithDefault(1);
+    // weboffice: a return type too big for 16 bits is #NUM! like the other unknown types
+    sal_Int16 nFlag = 1;
+    if (nParamCount == 2)
+    {
+        const double fFlag = ::rtl::math::approxFloor(GetDoubleWithDefault(1.0));
+        nFlag = (fFlag >= 1.0 && fFlag <= 150.0) ? static_cast<sal_Int16>(fFlag) : 0;
+    }
 
     Date aDate = mrContext.NFGetNullDate();
     aDate.AddDays( GetFloor32());
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError( nGlobalError );
+        return;
+    }
 
     sal_Int32 nMinimumNumberOfDaysInWeek;
     DayOfWeek eFirstDayOfWeek;
@@ -521,10 +538,11 @@ FormulaError ScInterpreter::GetWeekendAndHolidayMasks_MS(
                         bool bDouble = GetDoubleOrString( fDouble, aSharedString);
                         if ( bDouble )
                         {
-                            if ( fDouble >= 1.0 && fDouble <= 17 )
+                            // weboffice: like Excel, a weekend number other than 1..7, 11..17 is #NUM!
+                            if ( ( fDouble >= 1.0 && fDouble <= 7 ) || ( fDouble >= 11 && fDouble <= 17 ) )
                                 aWeekendDays = OUString::number( fDouble );
                             else
-                                return FormulaError::NoValue;
+                                return FormulaError::IllegalFPOperation;
                         }
                         else
                         {
@@ -741,8 +759,7 @@ void ScInterpreter::ScGetDate()
 
     sal_Int16 nDay   = GetInt16();
     sal_Int16 nMonth = GetInt16();
-    if (IsMissing())
-        SetError( FormulaError::ParameterExpected);    // Year must be given.
+    // weboffice: like Excel, an omitted year is 0 (= 1900)
     sal_Int16 nYear  = GetInt16();
     if (nGlobalError != FormulaError::NONE)
         PushIllegalArgument();

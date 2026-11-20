@@ -34,7 +34,11 @@ double SAL_CALL AnalysisAddIn::getAmordegrc( const css::uno::Reference< css::bea
         fCost <= 0.0 || fRestVal < 0 || fPer < 0 )
         throw css::lang::IllegalArgumentException();
 
-    double fRet = GetAmordegrc( GetNullDate( xOpt ), fCost, nDate, nFirstPer, fRestVal, fPer, fRate, getDateMode( xOpt, rOB ) );
+    // weboffice: Excel has no basis 2 (actual/360) for the French depreciation
+    const sal_Int32 nBase = getDateMode( xOpt, rOB );
+    if ( nBase == 2 )
+        throw css::lang::IllegalArgumentException();
+    double fRet = GetAmordegrc( GetNullDate( xOpt ), fCost, nDate, nFirstPer, fRestVal, fPer, fRate, nBase );
     return finiteOrThrow( fRet );
 }
 
@@ -47,7 +51,11 @@ double SAL_CALL AnalysisAddIn::getAmorlinc( const css::uno::Reference< css::bean
          fCost <= 0.0 || fRestVal < 0 || fPer < 0 )
         throw css::lang::IllegalArgumentException();
 
-    double fRet = GetAmorlinc( GetNullDate( xOpt ), fCost, nDate, nFirstPer, fRestVal, fPer, fRate, getDateMode( xOpt, rOB ) );
+    // weboffice: Excel has no basis 2 (actual/360) for the French depreciation
+    const sal_Int32 nBase = getDateMode( xOpt, rOB );
+    if ( nBase == 2 )
+        throw css::lang::IllegalArgumentException();
+    double fRet = GetAmorlinc( GetNullDate( xOpt ), fCost, nDate, nFirstPer, fRestVal, fPer, fRate, nBase );
     return finiteOrThrow( fRet );
 }
 

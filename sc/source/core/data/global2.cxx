@@ -390,6 +390,17 @@ double ScGlobal::ConvertStringToValue( const OUString& rStr, const ScCalcConfig&
                         return fValue;
                 }
 
+                // weboffice: Excel does not read an ISO 8601 date and time joined by T
+                // ("2015-01-01T10:00:00") as a number: #VALUE!
+                for (sal_Int32 i = 1; i + 1 < rStr.getLength(); ++i)
+                {
+                    if ((rStr[i] == 'T' || rStr[i] == 't') && rtl::isAsciiDigit(rStr[i - 1])
+                        && rtl::isAsciiDigit(rStr[i + 1]))
+                    {
+                        rError = nStringNoValueError;
+                        return 0.0;
+                    }
+                }
                 sal_uInt32 nFIndex = 0;
                 // weboffice: like Excel, the text "TRUE"/"FALSE" is not a number (#VALUE!)
                 if (!rContext.NFIsNumberFormat(rStr, nFIndex, fValue)

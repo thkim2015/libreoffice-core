@@ -1902,6 +1902,9 @@ void ScInterpreter::CalculateAddSub(bool _bSub)
             default: break;
         }
     }
+    // weboffice: like Excel, when both operands are errors the left one is the result
+    const FormulaError nRightError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     if ( GetStackType() == svMatrix )
         pMat1 = GetMatrix();
     else
@@ -1926,6 +1929,8 @@ void ScInterpreter::CalculateAddSub(bool _bSub)
             default: break;
         }
     }
+    if (nGlobalError == FormulaError::NONE)
+        nGlobalError = nRightError;
     if (pMat1 && pMat2)
     {
         ScMatrixRef pResMat;
@@ -2031,10 +2036,15 @@ void ScInterpreter::ScAmpersand()
         pMat2 = GetMatrix();
     else
         sStr2 = PopOperandStringForConcat();
+    // weboffice: like Excel, when both operands are errors the left one is the result
+    const FormulaError nRightError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     if ( GetStackType() == svMatrix )
         pMat1 = GetMatrix();
     else
         sStr1 = PopOperandStringForConcat();
+    if (nGlobalError == FormulaError::NONE)
+        nGlobalError = nRightError;
     if (pMat1 && pMat2)
     {
         ScMatrixRef pResMat = MatConcat(pMat1, pMat2);
@@ -2139,6 +2149,9 @@ void ScInterpreter::ScMul()
             default: break;
         }
     }
+    // weboffice: like Excel, when both operands are errors the left one is the result
+    const FormulaError nRightError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     if ( GetStackType() == svMatrix )
         pMat1 = GetMatrix();
     else
@@ -2153,6 +2166,8 @@ void ScInterpreter::ScMul()
             default: break;
         }
     }
+    if (nGlobalError == FormulaError::NONE)
+        nGlobalError = nRightError;
     if (pMat1 && pMat2)
     {
         ScMatrixRef pResMat = lcl_MatrixCalculation( *pMat1, *pMat2, this, MatrixMul);
@@ -2211,6 +2226,9 @@ void ScInterpreter::ScDiv()
         // do not take over currency, 123kg/456USD is not USD
         nFmtCurrencyType2 = nCurFmtType;
     }
+    // weboffice: like Excel, when both operands are errors the left one is the result
+    const FormulaError nRightError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     if ( GetStackType() == svMatrix )
         pMat1 = GetMatrix();
     else
@@ -2225,6 +2243,8 @@ void ScInterpreter::ScDiv()
             default: break;
         }
     }
+    if (nGlobalError == FormulaError::NONE)
+        nGlobalError = nRightError;
     if (pMat1 && pMat2)
     {
         ScMatrixRef pResMat = lcl_MatrixCalculation( *pMat1, *pMat2, this, MatrixDiv);
@@ -2288,10 +2308,15 @@ void ScInterpreter::ScPow()
         pMat2 = GetMatrix();
     else
         fVal2 = GetDouble();
+    // weboffice: like Excel, when both operands are errors the left one is the result
+    const FormulaError nRightError = nGlobalError;
+    nGlobalError = FormulaError::NONE;
     if ( GetStackType() == svMatrix )
         pMat1 = GetMatrix();
     else
         fVal1 = GetDouble();
+    if (nGlobalError == FormulaError::NONE)
+        nGlobalError = nRightError;
     if (pMat1 && pMat2)
     {
         ScMatrixRef pResMat = lcl_MatrixCalculation( *pMat1, *pMat2, this, MatrixPow);

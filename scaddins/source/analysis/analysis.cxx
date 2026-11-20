@@ -576,6 +576,10 @@ double SAL_CALL AnalysisAddIn::getMround( double fNum, double fMult )
     if( fMult == 0.0 )
         return fMult;
 
+    // weboffice: like Excel, a number and a multiple of different signs is #NUM!
+    if( ( fNum > 0.0 && fMult < 0.0 ) || ( fNum < 0.0 && fMult > 0.0 ) )
+        throw lang::IllegalArgumentException();
+
     double fRet = fMult * ::rtl::math::round( ::rtl::math::approxValue( fNum / fMult));
     return finiteOrThrow( fRet );
 }

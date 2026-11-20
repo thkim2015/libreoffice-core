@@ -881,8 +881,15 @@ double ScInterpreter::Compare( ScQueryOp eOp )
     aComp.meOp = eOp;
     aComp.mbIgnoreCase = mrDoc.GetDocOptions().IsIgnoreCase();
     bool aLogical[2] = { false, false }; // weboffice: TRUE/FALSE operands
+    // weboffice: like Excel, when both operands are errors the left one is the result
+    FormulaError nRightError = FormulaError::NONE;
     for( short i = 1; i >= 0; i-- )
     {
+        if (i == 0)
+        {
+            nRightError = nGlobalError;
+            nGlobalError = FormulaError::NONE;
+        }
         sc::Compare::Cell& rCell = aComp.maCells[i];
 
         switch ( GetRawStackType() )
@@ -971,6 +978,8 @@ double ScInterpreter::Compare( ScQueryOp eOp )
             break;
         }
     }
+    if (nGlobalError == FormulaError::NONE)
+        nGlobalError = nRightError;
     if( nGlobalError != FormulaError::NONE )
         return 0;
     nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL;
@@ -2124,19 +2133,37 @@ void ScInterpreter::ScRad()
     PushDouble(basegfx::deg2rad(GetDouble()));
 }
 
+// weboffice: Excel's SIN, COS and TAN are #NUM! from 2^27 on
+static bool lcl_ExcelTrigTooBig(double fVal)
+{
+    return std::fabs(fVal) >= 134217728.0;
+}
+
 void ScInterpreter::ScSin()
 {
-    PushDouble(::rtl::math::sin(GetDouble()));
+    const double fVal = GetDouble();
+    if (lcl_ExcelTrigTooBig(fVal))
+        PushError(FormulaError::IllegalFPOperation);
+    else
+        PushDouble(::rtl::math::sin(fVal));
 }
 
 void ScInterpreter::ScCos()
 {
-    PushDouble(::rtl::math::cos(GetDouble()));
+    const double fVal = GetDouble();
+    if (lcl_ExcelTrigTooBig(fVal))
+        PushError(FormulaError::IllegalFPOperation);
+    else
+        PushDouble(::rtl::math::cos(fVal));
 }
 
 void ScInterpreter::ScTan()
 {
-    PushDouble(::rtl::math::tan(GetDouble()));
+    const double fVal = GetDouble();
+    if (lcl_ExcelTrigTooBig(fVal))
+        PushError(FormulaError::IllegalFPOperation);
+    else
+        PushDouble(::rtl::math::tan(fVal));
 }
 
 void ScInterpreter::ScCot()
@@ -4232,7 +4259,8 @@ void ScInterpreter::ScUnichar()
     if ( MustHaveParamCount( GetByte(), 1 ) )
     {
         sal_uInt32 nCodePoint = GetUInt32();
-        if (nGlobalError != FormulaError::NONE || !rtl::isUnicodeCodePoint(nCodePoint))
+        // weboffice: like Excel, UNICHAR(0) is #VALUE!
+        if (nGlobalError != FormulaError::NONE || !rtl::isUnicodeCodePoint(nCodePoint) || nCodePoint == 0)
             PushIllegalArgument();
         else
         {
@@ -8170,11 +8198,15 @@ void ScInterpreter::ScLookup()
                 SCTAB nTabJunk;
                 PopDoubleRef(nResCol1, nResRow1, nResTab,
                              nResCol2, nResRow2, nTabJunk);
-                if (nResTab != nTabJunk ||
-                    ((nResRow2 - nResRow1) > 0 && (nResCol2 - nResCol1) > 0))
+                if (nResTab != nTabJunk)
                 {
-                    // The result array must be a vector.
                     PushIllegalParameter();
+                    return;
+                }
+                if ((nResRow2 - nResRow1) > 0 && (nResCol2 - nResCol1) > 0)
+                {
+                    // The result array must be a vector; weboffice: #N/A like Excel.
+                    PushNA();
                     return;
                 }
             }
@@ -8198,8 +8230,8 @@ void ScInterpreter::ScLookup()
                 pResMat->GetDimensions(nC, nR);
                 if (nC != 1 && nR != 1)
                 {
-                    // Result matrix must be a vector.
-                    PushIllegalParameter();
+                    // Result matrix must be a vector; weboffice: #N/A like Excel.
+                    PushNA();
                     return;
                 }
                 nResCol2 = nC - 1;

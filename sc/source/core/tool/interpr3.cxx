@@ -1416,7 +1416,8 @@ void ScInterpreter::ScCritBinom()
     double alpha  = GetDouble();
     double p      = GetDouble();
     double n      = ::rtl::math::approxFloor(GetDouble());
-    if (n < 0.0 || alpha < 0.0 || alpha > 1.0 || p < 0.0 || p > 1.0)
+    // weboffice: like Excel, alpha must be strictly between 0 and 1
+    if (n < 0.0 || alpha <= 0.0 || alpha >= 1.0 || p < 0.0 || p > 1.0)
         PushIllegalArgument();
     else if ( alpha == 0.0 )
         PushDouble( 0.0 );
