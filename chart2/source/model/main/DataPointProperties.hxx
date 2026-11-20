@@ -93,7 +93,8 @@ namespace DataPointProperties
         PROP_DATAPOINT_LABEL_BORDER_TRANS,
         PROP_DATAPOINT_CUSTOM_LABEL_FIELDS,
         PROP_DATAPOINT_LABEL_CUSTOM_POS,
-        PROP_DATAPOINT_LABEL_CUSTOM_SIZE
+        PROP_DATAPOINT_LABEL_CUSTOM_SIZE,
+        PROP_DATAPOINT_LABEL_CALLOUT_SHAPE
 
         // additionally some properties from ::chart::LineProperties
     };

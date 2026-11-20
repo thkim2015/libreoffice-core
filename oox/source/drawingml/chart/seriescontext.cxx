@@ -199,6 +199,9 @@ ContextHandlerRef DataLabelsContext::onCreateContext( sal_Int32 nElement, const 
         case C15_TOKEN( showLeaderLines ):
             mrModel.mbShowLeaderLines = rAttribs.getBool( XML_val, true );
             return nullptr;
+        // weboffice: c15:spPr in the c:dLbls extension - label shape geometry (data callout)
+        case C15_TOKEN( spPr ):
+            return new ShapePropertiesContext( *this, mrModel.mxCalloutShapeProp.create() );
         case C_TOKEN( extLst ):
         case C_TOKEN( ext ):
             return new DataLabelsContext( *this, mrModel );

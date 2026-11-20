@@ -96,6 +96,8 @@ public:
     virtual void SAL_CALL PrintOut( const css::uno::Any& Background, const css::uno::Any& Append, const css::uno::Any& Range, const css::uno::Any& OutputFileName, const css::uno::Any& From, const css::uno::Any& To, const css::uno::Any& Item, const css::uno::Any& Copies, const css::uno::Any& Pages, const css::uno::Any& PageType, const css::uno::Any& PrintToFile, const css::uno::Any& Collate, const css::uno::Any& FileName, const css::uno::Any& ActivePrinterMacGX, const css::uno::Any& ManualDuplexPrint, const css::uno::Any& PrintZoomColumn, const css::uno::Any& PrintZoomRow, const css::uno::Any& PrintZoomPaperWidth, const css::uno::Any& PrintZoomPaperHeight ) override;
     virtual void SAL_CALL PrintPreview(  ) override;
     virtual void SAL_CALL ClosePrintPreview(  ) override;
+    virtual sal_Bool SAL_CALL Undo( const css::uno::Any& Times ) override;
+    virtual sal_Bool SAL_CALL Redo( const css::uno::Any& Times ) override;
     virtual css::uno::Any SAL_CALL Revisions( const css::uno::Any& aIndex ) override;
     virtual css::uno::Any SAL_CALL Frames( const css::uno::Any& aIndex ) override;
     virtual void SAL_CALL SaveAs2000( const css::uno::Any& FileName, const css::uno::Any& FileFormat, const css::uno::Any& LockComments, const css::uno::Any& Password, const css::uno::Any& AddToRecentFiles, const css::uno::Any& WritePassword, const css::uno::Any& ReadOnlyRecommended, const css::uno::Any& EmbedTrueTypeFonts, const css::uno::Any& SaveNativePictureFormat, const css::uno::Any& SaveFormsData, const css::uno::Any& SaveAsAOCELetter ) override;

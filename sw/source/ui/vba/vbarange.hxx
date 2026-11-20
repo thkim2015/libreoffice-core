@@ -85,6 +85,8 @@ public:
     virtual css::uno::Reference< ooo::vba::word::XFont > SAL_CALL getFont() override;
     virtual css::uno::Reference< ooo::vba::word::XFind > SAL_CALL getFind() override;
     virtual css::uno::Reference< ooo::vba::word::XListFormat > SAL_CALL getListFormat() override;
+    virtual ::sal_Int32 SAL_CALL getHighlightColorIndex() override;
+    virtual void SAL_CALL setHighlightColorIndex( ::sal_Int32 nIndex ) override;
 
     //XDefaultProperty
     virtual OUString SAL_CALL getDefaultPropertyName() override { return u"Text"_ustr; }

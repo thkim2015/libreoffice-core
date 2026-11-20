@@ -68,6 +68,9 @@ interface XSelection
     void Copy();
     void CopyAsPicture();
     void Paste();
+    void Cut();
+    void PasteAndFormat([in] long Type);
+    void ClearFormatting();
     void Collapse([in] any Direction);
     void WholeStory();
     boolean InRange( [in] XRange Range );

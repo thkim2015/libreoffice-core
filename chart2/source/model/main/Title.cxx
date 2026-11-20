@@ -62,7 +62,8 @@ enum
     PROP_TITLE_REL_POS,
 
     PROP_TITLE_REF_PAGE_SIZE,
-    PROP_TITLE_HAS_EXPLICIT_SPPR
+    PROP_TITLE_HAS_EXPLICIT_SPPR,
+    PROP_TITLE_OVERLAY
 };
 
 void lcl_AddPropertiesToVector(
@@ -145,6 +146,14 @@ void lcl_AddPropertiesToVector(
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEVOID );
+
+    // weboffice: OOXML c:title/c:overlay (PowerPoint/Excel "Centered Overlay" title) -
+    // the title is drawn over the plot area instead of taking space from it
+    rOutProperties.emplace_back( "Overlay",
+                  PROP_TITLE_OVERLAY,
+                  cppu::UnoType<bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
 }
 
 const ::chart::tPropertyValueMap& StaticTitleDefaults()
@@ -172,6 +181,7 @@ const ::chart::tPropertyValueMap& StaticTitleDefaults()
             // own properties
             ::chart::PropertyHelper::setPropertyValueDefault< double >( aTmp, PROP_TITLE_TEXT_ROTATION, 0.0 );
             ::chart::PropertyHelper::setPropertyValueDefault( aTmp, PROP_TITLE_TEXT_STACKED, false );
+            ::chart::PropertyHelper::setPropertyValueDefault( aTmp, PROP_TITLE_OVERLAY, false );
 
             // override other defaults
             ::chart::PropertyHelper::setPropertyValue( aTmp, ::chart::FillProperties::PROP_FILL_STYLE, drawing::FillStyle_NONE );

@@ -57,6 +57,8 @@ interface XDocument
     void PrintOut([in] any Background, [in] any Append, [in] any Range, [in] any OutputFileName, [in] any From, [in] any To, [in] any Item, [in] any Copies, [in] any Pages, [in] any PageType, [in] any PrintToFile, [in] any Collate, [in] any FileName, [in] any ActivePrinterMacGX, [in] any ManualDuplexPrint, [in] any PrintZoomColumn, [in] any PrintZoomRow, [in] any PrintZoomPaperWidth, [in] any PrintZoomPaperHeight);
     void PrintPreview();
     void ClosePrintPreview();
+    boolean Undo( [in] any Times );
+    boolean Redo( [in] any Times );
     any Revisions( [in] any index );
     any Frames( [in] any index );
     void SaveAs2000( [in] any FileName, [in] any FileFormat, [in] any LockComments, [in] any Password, [in] any AddToRecentFiles, [in] any WritePassword, [in] any ReadOnlyRecommended, [in] any EmbedTrueTypeFonts, [in] any SaveNativePictureFormat, [in] any SaveFormsData, [in] any SaveAsAOCELetter );

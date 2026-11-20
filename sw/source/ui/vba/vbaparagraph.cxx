@@ -19,6 +19,13 @@
 #include "vbaparagraph.hxx"
 #include "vbarange.hxx"
 #include <com/sun/star/lang/XServiceInfo.hpp>
+#include <com/sun/star/beans/Pair.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/style/XStyleFamiliesSupplier.hpp>
+#include <algorithm>
+#include <cmath>
+#include <vector>
 #include <cppuhelper/implbase.hxx>
 #include <utility>
 #include <unotxdoc.hxx>
@@ -80,18 +87,18 @@ class ParagraphCollectionHelper : public ::cppu::WeakImplHelper< container::XInd
                                                                  container::XEnumerationAccess >
 {
 private:
-    uno::Reference< text::XTextDocument > mxTextDocument;
+    // the document text, or a cursor spanning the paragraphs of the selection (Selection.Paragraphs)
+    uno::Reference< container::XEnumerationAccess > mxParEnumAccess;
 
     /// @throws uno::RuntimeException
     uno::Reference< container::XEnumeration > getEnumeration()
     {
-        uno::Reference< container::XEnumerationAccess > xParEnumAccess( mxTextDocument->getText(), uno::UNO_QUERY_THROW );
-        return xParEnumAccess->createEnumeration();
+        return mxParEnumAccess->createEnumeration();
     }
 
 public:
     /// @throws uno::RuntimeException
-    explicit ParagraphCollectionHelper( uno::Reference< text::XTextDocument > xDocument ): mxTextDocument(std::move( xDocument ))
+    explicit ParagraphCollectionHelper( uno::Reference< container::XEnumerationAccess > xParEnumAccess ): mxParEnumAccess(std::move( xParEnumAccess ))
     {
     }
     // XElementAccess
@@ -143,8 +150,128 @@ public:
 SwVbaParagraphs::SwVbaParagraphs( const uno::Reference< XHelperInterface >& xParent,
                                 const uno::Reference< css::uno::XComponentContext > & xContext,
                                 const rtl::Reference< SwXTextDocument >& xDocument )
-: SwVbaParagraphs_BASE( xParent, xContext, new ParagraphCollectionHelper( xDocument ) ), mxTextDocument( xDocument )
+: SwVbaParagraphs_BASE( xParent, xContext, new ParagraphCollectionHelper( uno::Reference< container::XEnumerationAccess >( xDocument->getText(), uno::UNO_QUERY_THROW ) ) ), mxTextDocument( xDocument )
 {
+}
+
+SwVbaParagraphs::SwVbaParagraphs( const uno::Reference< XHelperInterface >& xParent,
+                                const uno::Reference< css::uno::XComponentContext > & xContext,
+                                const rtl::Reference< SwXTextDocument >& xDocument,
+                                const uno::Reference< container::XEnumerationAccess >& xParEnumAccess )
+: SwVbaParagraphs_BASE( xParent, xContext, new ParagraphCollectionHelper( xParEnumAccess ) ), mxTextDocument( xDocument )
+{
+}
+
+namespace {
+
+std::vector< uno::Reference< beans::XPropertySet > > lcl_paragraphProps( const uno::Reference< container::XIndexAccess >& xIndexAccess )
+{
+    std::vector< uno::Reference< beans::XPropertySet > > aParas;
+    sal_Int32 nCount = xIndexAccess->getCount();
+    for( sal_Int32 i = 0; i < nCount; ++i )
+        aParas.emplace_back( xIndexAccess->getByIndex( i ), uno::UNO_QUERY_THROW );
+    return aParas;
+}
+
+bool lcl_isListParagraph( const uno::Reference< beans::XPropertySet >& xProps )
+{
+    bool bIsNumber = false;
+    OUString sStyle, sListId;
+    try
+    {
+        xProps->getPropertyValue(u"NumberingIsNumber"_ustr) >>= bIsNumber;
+        xProps->getPropertyValue(u"NumberingStyleName"_ustr) >>= sStyle;
+        xProps->getPropertyValue(u"ListId"_ustr) >>= sListId;
+    }
+    catch( const uno::Exception& )
+    {
+        return false;
+    }
+    return bIsNumber && ( !sStyle.isEmpty() || !sListId.isEmpty() );
+}
+
+// Word: Increase/Decrease Indent moves a list paragraph one list level, any other paragraph to the
+// next/previous default tab stop
+void lcl_indent( const rtl::Reference< SwXTextDocument >& xDoc, const uno::Reference< container::XIndexAccess >& xIndexAccess, int nStep )
+{
+    sal_Int32 nTab = 1270;
+    try
+    {
+        uno::Reference< beans::XPropertySet > xDefaults( xDoc->createInstance(u"com.sun.star.text.Defaults"_ustr), uno::UNO_QUERY_THROW );
+        xDefaults->getPropertyValue(u"TabStopDistance"_ustr) >>= nTab;
+    }
+    catch( const uno::Exception& ) {}
+    if( nTab <= 0 )
+        nTab = 1270;
+    for( const auto& xProps : lcl_paragraphProps( xIndexAccess ) )
+    {
+        if( lcl_isListParagraph( xProps ) )
+        {
+            sal_Int16 nLevel = 0;
+            xProps->getPropertyValue(u"NumberingLevel"_ustr) >>= nLevel;
+            nLevel = std::clamp< sal_Int16 >( nLevel + nStep, 0, 9 );
+            xProps->setPropertyValue(u"NumberingLevel"_ustr, uno::Any( nLevel ) );
+            continue;
+        }
+        sal_Int32 nLeft = 0;
+        xProps->getPropertyValue(u"ParaLeftMargin"_ustr) >>= nLeft;
+        sal_Int32 n = nStep > 0 ? ( nLeft < 0 ? 0 : nLeft / nTab ) + 1
+                                : std::max< sal_Int32 >( 0, ( nLeft + nTab - 1 ) / nTab - 1 );
+        xProps->setPropertyValue(u"ParaLeftMargin"_ustr, uno::Any( n * nTab ) );
+    }
+}
+
+}
+
+void SAL_CALL SwVbaParagraphs::Indent()
+{
+    lcl_indent( mxTextDocument, m_xIndexAccess, 1 );
+}
+
+void SAL_CALL SwVbaParagraphs::Outdent()
+{
+    lcl_indent( mxTextDocument, m_xIndexAccess, -1 );
+}
+
+// Word (East Asian): indents by whole characters of the Normal style; the indent keeps its character unit
+// like the Korean Word Increase Indent button (FONT_CJK_ADVANCE = 20)
+void SAL_CALL SwVbaParagraphs::IndentCharWidth( sal_Int16 Count )
+{
+    double fUnit = 11.0 * 2540.0 / 72.0;
+    try
+    {
+        uno::Reference< container::XNameAccess > xFamily( mxTextDocument->getStyleFamilies()->getByName(u"ParagraphStyles"_ustr), uno::UNO_QUERY_THROW );
+        uno::Reference< beans::XPropertySet > xStd( xFamily->getByName(u"Standard"_ustr), uno::UNO_QUERY_THROW );
+        float fPt = 0;
+        xStd->getPropertyValue(u"CharHeightAsian"_ustr) >>= fPt;
+        if( fPt > 0 )
+            fUnit = fPt * 2540.0 / 72.0;
+    }
+    catch( const uno::Exception& ) {}
+    const double eps = 0.01;
+    for( const auto& xProps : lcl_paragraphProps( m_xIndexAccess ) )
+    {
+        css::beans::Pair< double, sal_Int16 > aUnit( 0, 0 );
+        bool bHasUnit = false;
+        try { bHasUnit = ( xProps->getPropertyValue(u"ParaLeftMarginUnit"_ustr) >>= aUnit ) && aUnit.Second == 20 && aUnit.First != 0; }
+        catch( const uno::Exception& ) {}
+        double fChars;
+        if( bHasUnit )
+            fChars = aUnit.First;
+        else
+        {
+            sal_Int32 nLeft = 0;
+            xProps->getPropertyValue(u"ParaLeftMargin"_ustr) >>= nLeft;
+            fChars = nLeft / fUnit;
+        }
+        double n = Count > 0 ? std::floor( fChars + eps ) + Count : std::max( 0.0, std::ceil( fChars - eps ) + Count );
+        xProps->setPropertyValue(u"ParaLeftMargin"_ustr, uno::Any( static_cast< sal_Int32 >( std::lround( n * fUnit ) ) ) );
+        if( n > 0 || bHasUnit )
+        {
+            try { xProps->setPropertyValue(u"ParaLeftMarginUnit"_ustr, uno::Any( css::beans::Pair< double, sal_Int16 >( n, 20 ) ) ); }
+            catch( const uno::Exception& ) {}
+        }
+    }
 }
 
 // XEnumerationAccess

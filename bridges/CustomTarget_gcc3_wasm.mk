@@ -12,6 +12,8 @@ $(eval $(call gb_CustomTarget_CustomTarget,bridges/gcc3_wasm))
 # weboffice: Calc add-in functions (QUOTIENT, DEC2HEX, YEARFRAC, COMPLEX, ...) are called through
 # UNO reflection, so the bridge needs call stubs for the scaddins interfaces (XAnalysis, XDateFunctions,
 # XPricingFunctions) too; without them every such call failed with #VALUE!.
+# Likewise the VBA API (oovbaapi): Basic calls e.g. Word Find.Execute (20 optional arguments) through
+# UNO reflection, which failed with "Wasm bridge cannot call virtual function with signature ...".
 
 $(eval $(call gb_CustomTarget_register_targets,bridges/gcc3_wasm, \
     generated-cxx.cxx \
@@ -25,12 +27,14 @@ $(gb_CustomTarget_workdir)/bridges/gcc3_wasm/exports: \
         $(call gb_Executable_get_target_for_build,wasmbridgegen) \
         $(call gb_UnoApi_get_target,udkapi) \
         $(call gb_UnoApi_get_target,offapi) \
-        $(call gb_UnoApiTarget_get_target,scaddins)
+        $(call gb_UnoApiTarget_get_target,scaddins) \
+        $(call gb_UnoApi_get_target,oovbaapi)
 	$(call gb_Executable_get_command,wasmbridgegen) \
         $(gb_CustomTarget_workdir)/bridges/gcc3_wasm/generated-cxx.cxx \
         $(gb_CustomTarget_workdir)/bridges/gcc3_wasm/generated-asm.s \
         $(gb_CustomTarget_workdir)/bridges/gcc3_wasm/exports \
         +$(call gb_UnoApi_get_target,udkapi) +$(call gb_UnoApi_get_target,offapi) \
-        +$(call gb_UnoApiTarget_get_target,scaddins)
+        +$(call gb_UnoApiTarget_get_target,scaddins) \
+        +$(call gb_UnoApi_get_target,oovbaapi)
 
 # vim: set noet sw=4 ts=4:

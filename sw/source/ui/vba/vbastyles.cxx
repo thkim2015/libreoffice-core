@@ -46,7 +46,7 @@ struct BuiltinStyleTable
 
 const BuiltinStyleTable aBuiltinStyleTable[] =
 {
-    { word::WdBuiltinStyle::wdStyleBlockQuotation, "", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleBlockQuotation, "Quotations", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleBodyText, "Text body", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleBodyText2, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleBodyText3, "", word::WdStyleType::wdStyleTypeParagraph },
@@ -55,18 +55,18 @@ const BuiltinStyleTable aBuiltinStyleTable[] =
     { word::WdBuiltinStyle::wdStyleBodyTextIndent, "Text body indent", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleBodyTextIndent2, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleBodyTextIndent3, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleCaption, "", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleCaption, "Caption", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleClosing, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleCommentReference, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleCommentText, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleDate, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleDefaultParagraphFont, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleEmphasis, "", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleEmphasis, "Emphasis", word::WdStyleType::wdStyleTypeCharacter },
     { word::WdBuiltinStyle::wdStyleEndnoteReference, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleEndnoteText, "Endnote", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleEnvelopeAddress, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleEnvelopeReturn, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleFooter, "", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleFooter, "Footer", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleFootnoteReference, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleFootnoteText, "Footnote", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleHeader, "Header", word::WdStyleType::wdStyleTypeParagraph },
@@ -90,7 +90,7 @@ const BuiltinStyleTable aBuiltinStyleTable[] =
     { word::WdBuiltinStyle::wdStyleHtmlSamp, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleHtmlTt, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleHtmlVar, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleHyperlink, "", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleHyperlink, "Internet link", word::WdStyleType::wdStyleTypeCharacter },
     { word::WdBuiltinStyle::wdStyleHyperlinkFollowed, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleIndex1, "Index 1", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleIndex2, "Index 2", word::WdStyleType::wdStyleTypeParagraph },
@@ -126,7 +126,7 @@ const BuiltinStyleTable aBuiltinStyleTable[] =
     { word::WdBuiltinStyle::wdStyleMacroText, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleMessageHeader, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleNavPane, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleNormal, "Default", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleNormal, "Standard", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleNormalIndent, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleNormalTable, "Table", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleNoteHeading, "", word::WdStyleType::wdStyleTypeParagraph },
@@ -134,8 +134,8 @@ const BuiltinStyleTable aBuiltinStyleTable[] =
     { word::WdBuiltinStyle::wdStylePlainText, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleSalutation, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleSignature, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleStrong, "", word::WdStyleType::wdStyleTypeParagraph },
-    { word::WdBuiltinStyle::wdStyleSubtitle, "", word::WdStyleType::wdStyleTypeParagraph },
+    { word::WdBuiltinStyle::wdStyleStrong, "Strong Emphasis", word::WdStyleType::wdStyleTypeCharacter },
+    { word::WdBuiltinStyle::wdStyleSubtitle, "Subtitle", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleTableOfAuthorities, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleTableOfFigures, "", word::WdStyleType::wdStyleTypeParagraph },
     { word::WdBuiltinStyle::wdStyleTitle, "Title", word::WdStyleType::wdStyleTypeParagraph },
@@ -164,7 +164,10 @@ struct MSOStyleNameTable
 
 const MSOStyleNameTable aMSOStyleNameTable[] =
 {
-    { "Normal", "Default" },
+    // Word English names of built-in styles -> Writer programmatic names
+    { "Normal", "Standard" },
+    { "Body Text", "Text body" },
+    { "Quote", "Quotations" },
     { nullptr, nullptr }
 };
 
@@ -176,6 +179,7 @@ class StyleCollectionHelper : public ::cppu::WeakImplHelper< container::XNameAcc
 {
 private:
     rtl::Reference< SwXStyleFamily > mxParaStyles;
+    rtl::Reference< SwXStyleFamily > mxCharStyles;
     uno::Any m_cachePos;
 public:
     explicit StyleCollectionHelper( const rtl::Reference< SwXTextDocument >& _xModel )
@@ -183,6 +187,7 @@ public:
         // we only concern about the Paragraph styles
         rtl::Reference< SwXStyleFamilies > xStyleFamilies = _xModel->getSwStyleFamilies();
         mxParaStyles = xStyleFamilies->GetParagraphStyles();
+        mxCharStyles = xStyleFamilies->GetCharacterStyles();
     }
     // XElementAccess
     virtual uno::Type SAL_CALL getElementType(  ) override { return  cppu::UnoType<style::XStyle>::get(); }
@@ -229,6 +234,20 @@ public:
             if (pStyleName != sElementNames.end())
             {
                 m_cachePos = mxParaStyles->getByName( *pStyleName );
+                return true;
+            }
+        }
+        // Word: Styles("Strong") etc. also finds character styles (Selection.Style = ... applies them)
+        if( mxCharStyles.is() )
+        {
+            OUString sCharName = aName;
+            if( aName.equalsIgnoreAsciiCase( u"Strong" ) )
+                sCharName = u"Strong Emphasis"_ustr;
+            else if( aName.equalsIgnoreAsciiCase( u"Hyperlink" ) )
+                sCharName = u"Internet link"_ustr;
+            if( mxCharStyles->hasByName( sCharName ) )
+            {
+                m_cachePos = mxCharStyles->getByName( sCharName );
                 return true;
             }
         }
@@ -309,7 +328,7 @@ SwVbaStyles::Item( const uno::Any& Index1, const uno::Any& Index2 )
     sal_Int32 nIndex = 0;
     if( ( Index1 >>= nIndex ) && ( nIndex < 0 ) )
     {
-        for( const BuiltinStyleTable* pTable = aBuiltinStyleTable; pTable != nullptr; pTable++ )
+        for( const BuiltinStyleTable* pTable = aBuiltinStyleTable; pTable->pOOoStyleName != nullptr; pTable++ )
         {
             if( nIndex == pTable->wdBuiltinStyle )
             {

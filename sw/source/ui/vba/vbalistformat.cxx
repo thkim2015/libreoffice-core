@@ -63,14 +63,21 @@ void SAL_CALL SwVbaListFormat::ApplyListTemplate( const css::uno::Reference< wor
     sal_Int32 bApplyTo = word::WdListApplyTo::wdListApplyToSelection;
     if( ApplyTo.hasValue() )
         ApplyTo >>= bApplyTo;
-    if( bApplyTo != word::WdListApplyTo::wdListApplyToSelection )
+    // Word records ApplyTo:=wdListApplyToWholeList for the bullets/numbering buttons; applying to the
+    // selected paragraphs is what the button does for a new list, so accept the known values
+    if( bApplyTo != word::WdListApplyTo::wdListApplyToSelection
+        && bApplyTo != word::WdListApplyTo::wdListApplyToWholeList
+        && bApplyTo != word::WdListApplyTo::wdListApplyToThisPointForward )
         throw uno::RuntimeException();
 
     // default behaviour must be wdWord8ListBehavior
     sal_Int32 nDefaultListBehavior = word::WdDefaultListBehavior::wdWord8ListBehavior;
     if( DefaultListBehavior.hasValue() )
         DefaultListBehavior >>= nDefaultListBehavior;
-    if( nDefaultListBehavior != word::WdDefaultListBehavior::wdWord8ListBehavior )
+    // Word 2002+ records wdWord10ListBehavior; the indents differ only in Word, so treat all three alike
+    if( nDefaultListBehavior != word::WdDefaultListBehavior::wdWord8ListBehavior
+        && nDefaultListBehavior != word::WdDefaultListBehavior::wdWord9ListBehavior
+        && nDefaultListBehavior != word::WdDefaultListBehavior::wdWord10ListBehavior )
         throw uno::RuntimeException();
 
     uno::Reference< container::XEnumerationAccess > xEnumAccess( mxTextRange, uno::UNO_QUERY_THROW );
@@ -130,6 +137,21 @@ static void addParagraphsToList(const Ref& a,
         while (xEnum->hasMoreElements())
             addParagraphsToList(xEnum->nextElement(), rList);
     }
+}
+
+// Word removes list numbering (and bullets) from the paragraphs of the range. NumberType
+// (wdNumberParagraph / wdNumberListNum / wdNumberAllNumbers) is accepted; Writer only has paragraph lists
+void SAL_CALL SwVbaListFormat::ApplyListTemplateWithLevel( const css::uno::Reference< word::XListTemplate >& ListTemplate, const css::uno::Any& ContinuePreviousList, const css::uno::Any& ApplyTo, const css::uno::Any& DefaultListBehavior, const css::uno::Any& /*ApplyLevel*/ )
+{
+    // what the Word macro recorder writes for the bullets/numbering buttons; the level stays the paragraph's own
+    ApplyListTemplate( ListTemplate, ContinuePreviousList, ApplyTo, DefaultListBehavior );
+}
+
+void SAL_CALL SwVbaListFormat::RemoveNumbers( const css::uno::Any& /*NumberType*/ )
+{
+    uno::Reference< beans::XPropertySet > xProps( mxTextRange, uno::UNO_QUERY_THROW );
+    // void NumberingRules = SwDoc::DelNumRules over the range (unocrsrhelper setNumberingProperty)
+    xProps->setPropertyValue(u"NumberingRules"_ustr, uno::Any());
 }
 
 void SAL_CALL SwVbaListFormat::ConvertNumbersToText(  )

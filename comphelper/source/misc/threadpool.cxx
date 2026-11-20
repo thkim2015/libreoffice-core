@@ -212,6 +212,20 @@ void ThreadPool::shutdownLocked(std::unique_lock<std::mutex>& aGuard)
 
 void ThreadPool::pushTask( std::unique_ptr<ThreadTask> pTask )
 {
+#if defined(EMSCRIPTEN)
+    // weboffice: this WASM build has no pthread pool, so every new pool worker makes the
+    // browser main thread spawn a Web Worker while the pushing LibreOffice thread blocks in
+    // waitUntilDone (suspected cause of PowerPoint start-up hangs). Run the task in-line
+    // instead; the tag is already done when the caller waits or polls.
+    {
+        std::shared_ptr<ThreadTaskTag> pTag(pTask->mpTag);
+        pTag->onTaskPushed();
+        pTask->exec();
+        pTask.reset();
+        pTag->onTaskWorkerDone();
+        return;
+    }
+#endif
     std::scoped_lock< std::mutex > aGuard( maMutex );
 
     mbTerminate = false;

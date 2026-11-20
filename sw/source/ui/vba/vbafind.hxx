@@ -46,6 +46,7 @@ private:
 
 private:
     /// @throws css::uno::RuntimeException
+    bool IsCollapsed();
     bool InRange( const css::uno::Reference< css::text::XTextRange >& xCurrentRange );
     /// @throws css::uno::RuntimeException
     bool InEqualRange( const css::uno::Reference< css::text::XTextRange >& xCurrentRange );

@@ -43,6 +43,7 @@
 #include <com/sun/star/form/XFormsSupplier.hpp>
 #include <com/sun/star/frame/XStorable.hpp>
 #include <com/sun/star/document/XRedlinesSupplier.hpp>
+#include <com/sun/star/document/XUndoManager.hpp>
 #include <com/sun/star/util/thePathSettings.hpp>
 #include <ooo/vba/XControlProvider.hpp>
 #include <ooo/vba/word/WdProtectionType.hpp>
@@ -516,6 +517,38 @@ void SAL_CALL SwVbaDocument::PrintOut( const uno::Any& /*Background*/, const uno
 void SAL_CALL SwVbaDocument::PrintPreview(  )
 {
     dispatchRequests( static_cast<SfxBaseModel*>(mxTextDocument.get()), u".uno:PrintPreview"_ustr );
+}
+
+// Word ActiveDocument.Undo/Redo [Times]: True when at least one action was undone (redone)
+static bool lcl_undoRedo( const rtl::Reference< SwXTextDocument >& xDoc, const uno::Any& Times, bool bUndo )
+{
+    sal_Int32 nTimes = 1;
+    double fTimes = 0;
+    if( !( Times >>= nTimes ) && ( Times >>= fTimes ) )
+        nTimes = static_cast< sal_Int32 >( fTimes );
+    uno::Reference< document::XUndoManager > xUndo = xDoc->getUndoManager();
+    bool bDone = false;
+    for( sal_Int32 i = 0; i < nTimes; ++i )
+    {
+        if( bUndo ? !xUndo->isUndoPossible() : !xUndo->isRedoPossible() )
+            break;
+        if( bUndo )
+            xUndo->undo();
+        else
+            xUndo->redo();
+        bDone = true;
+    }
+    return bDone;
+}
+
+sal_Bool SAL_CALL SwVbaDocument::Undo( const uno::Any& Times )
+{
+    return lcl_undoRedo( mxTextDocument, Times, true );
+}
+
+sal_Bool SAL_CALL SwVbaDocument::Redo( const uno::Any& Times )
+{
+    return lcl_undoRedo( mxTextDocument, Times, false );
 }
 
 void SAL_CALL SwVbaDocument::ClosePrintPreview(  )

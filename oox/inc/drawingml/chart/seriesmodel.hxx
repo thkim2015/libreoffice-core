@@ -77,6 +77,7 @@ struct DataLabelsModel : public DataLabelModelBase
 
     DataLabelVector     maPointLabels;      /// Settings for individual data point labels.
     ShapeRef            mxLeaderLines;      /// Formatting of connector lines between data points and labels.
+    ShapeRef            mxCalloutShapeProp; /// c15:spPr - label shape geometry (data callout).
 
     /// Labels source (owned by SeriesModel's DataSourceMap)
     const DataSourceModel*  mpLabelsSource;

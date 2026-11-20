@@ -29,7 +29,15 @@ interface XListFormat
         [in] any /* optional */ ApplyTo,
         [in] any /* optional */ DefaultListBehavior);
 
+    void ApplyListTemplateWithLevel([in] XListTemplate ListTemplate,
+        [in] any /* optional */ ContinuePreviousList,
+        [in] any /* optional */ ApplyTo,
+        [in] any /* optional */ DefaultListBehavior,
+        [in] any /* optional */ ApplyLevel);
+
     void ConvertNumbersToText();
+
+    void RemoveNumbers([in] any /* optional */ NumberType);
 };
 
 }; }; };
