@@ -390,6 +390,17 @@ double ScGlobal::ConvertStringToValue( const OUString& rStr, const ScCalcConfig&
                         return fValue;
                 }
 
+                // weboffice: Excel does not read a trailing sign ("5-", "5+") as a number
+                {
+                    sal_Int32 nEnd = rStr.getLength();
+                    while (nEnd > 0 && rStr[nEnd - 1] == ' ')
+                        --nEnd;
+                    if (nEnd > 1 && (rStr[nEnd - 1] == '-' || rStr[nEnd - 1] == '+'))
+                    {
+                        rError = nStringNoValueError;
+                        return 0.0;
+                    }
+                }
                 // weboffice: Excel does not read an ISO 8601 date and time joined by T
                 // ("2015-01-01T10:00:00") as a number: #VALUE!
                 for (sal_Int32 i = 1; i + 1 < rStr.getLength(); ++i)

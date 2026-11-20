@@ -907,9 +907,13 @@ void ScInterpreter::ScGetDateDif()
     }
 
     // Excel doesn't swap dates or return negative numbers, so don't we.
-    if (nDate1 > nDate2)
+    // weboffice: like Excel, that and an unknown unit are #NUM!
+    if (nDate1 > nDate2
+        || !(aInterval.equalsIgnoreAsciiCase("d") || aInterval.equalsIgnoreAsciiCase("m")
+             || aInterval.equalsIgnoreAsciiCase("y") || aInterval.equalsIgnoreAsciiCase("md")
+             || aInterval.equalsIgnoreAsciiCase("ym") || aInterval.equalsIgnoreAsciiCase("yd")))
     {
-        PushIllegalArgument();
+        PushError( FormulaError::IllegalFPOperation );
         return;
     }
 
@@ -1442,6 +1446,8 @@ void ScInterpreter::ScLog()
     double fVal = GetDouble();
     if (fVal > 0.0 && fBase > 0.0 && fBase != 1.0)
         PushDouble(log(fVal) / log(fBase));
+    else if (fVal > 0.0 && fBase == 1.0)
+        PushError( FormulaError::DivisionByZero ); // weboffice: LOG(x,1) is #DIV/0! in Excel
     else
         PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
 }

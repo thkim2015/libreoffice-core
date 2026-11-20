@@ -393,10 +393,16 @@ double SAL_CALL AnalysisAddIn::getYearfrac( const uno::Reference< beans::XProper
 
 sal_Int32 SAL_CALL AnalysisAddIn::getEdate( const uno::Reference< beans::XPropertySet >& xOpt, sal_Int32 nStartDate, sal_Int32 nMonths )
 {
+    // weboffice: like Excel, a negative start date or a result after 9999-12-31 is #NUM!
+    if( nStartDate < 0 )
+        throw lang::IllegalArgumentException();
     sal_Int32 nNullDate = GetNullDate( xOpt );
     ScaDate aDate( nNullDate, nStartDate, 5 );
     aDate.addMonths( nMonths );
-    return aDate.getDate( nNullDate );
+    const sal_Int32 nRet = aDate.getDate( nNullDate );
+    if( nRet < 0 || nRet > 2958465 )
+        throw lang::IllegalArgumentException();
+    return nRet;
 }
 
 sal_Int32 SAL_CALL AnalysisAddIn::getWeeknum( const uno::Reference< beans::XPropertySet >& xOpt, sal_Int32 nDate, sal_Int32 nMode )
@@ -433,6 +439,9 @@ sal_Int32 SAL_CALL AnalysisAddIn::getWeeknum( const uno::Reference< beans::XProp
 
 sal_Int32 SAL_CALL AnalysisAddIn::getEomonth( const uno::Reference< beans::XPropertySet >& xOpt, sal_Int32 nDate, sal_Int32 nMonths )
 {
+    // weboffice: like Excel, a negative start date is #NUM!
+    if( nDate < 0 )
+        throw lang::IllegalArgumentException();
     sal_Int32   nNullDate = GetNullDate( xOpt );
     nDate += nNullDate;
     sal_uInt16  nDay, nMonth, nYear;

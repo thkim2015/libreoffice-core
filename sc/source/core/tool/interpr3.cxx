@@ -1165,10 +1165,11 @@ void ScInterpreter::ScFisherInv()
 void ScInterpreter::ScFact()
 {
     double nVal = GetDouble();
-    if (nVal < 0.0)
-        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
+    const double fFact = nVal < 0.0 ? 0.0 : Fakultaet(nVal);
+    if (nVal < 0.0 || !std::isfinite(fFact))
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error and an overflow
     else
-        PushDouble(Fakultaet(nVal));
+        PushDouble(fFact);
 }
 
 void ScInterpreter::ScCombin()

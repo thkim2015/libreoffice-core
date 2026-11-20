@@ -14286,7 +14286,7 @@ void ScInterpreter::ScOffset()
     }
     if (nColNew <= 0 || nRowNew <= 0)
     {
-        PushIllegalArgument();
+        PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
         return;
     }
     SCCOL nCol1(0);
@@ -14305,7 +14305,7 @@ void ScInterpreter::ScOffset()
             nCol1 = static_cast<SCCOL>(static_cast<tools::Long>(nCol1) + nColPlus);
             nRow1 = static_cast<SCROW>(static_cast<tools::Long>(nRow1) + nRowPlus);
             if (!mrDoc.ValidCol(nCol1) || !mrDoc.ValidRow(nRow1))
-                PushIllegalArgument();
+                PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
             else
                 PushSingleRef(nCol1, nRow1, nTab1);
         }
@@ -14317,7 +14317,7 @@ void ScInterpreter::ScOffset()
             nRow2 = static_cast<SCROW>(static_cast<tools::Long>(nRow1)+nRowNew-1);
             if (!mrDoc.ValidCol(nCol1) || !mrDoc.ValidRow(nRow1) ||
                 !mrDoc.ValidCol(nCol2) || !mrDoc.ValidRow(nRow2))
-                PushIllegalArgument();
+                PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
             else
                 PushDoubleRef(nCol1, nRow1, nTab1, nCol2, nRow2, nTab1);
         }
@@ -14339,7 +14339,7 @@ void ScInterpreter::ScOffset()
             nCol1 = static_cast<SCCOL>(static_cast<tools::Long>(nCol1) + nColPlus);
             nRow1 = static_cast<SCROW>(static_cast<tools::Long>(nRow1) + nRowPlus);
             if (!mrDoc.ValidCol(nCol1) || !mrDoc.ValidRow(nRow1))
-                PushIllegalArgument();
+                PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
             else
                 PushExternalSingleRef(nFileId, aTabName, nCol1, nRow1, nTab1);
         }
@@ -14352,7 +14352,7 @@ void ScInterpreter::ScOffset()
             nTab2 = nTab1;
             if (!mrDoc.ValidCol(nCol1) || !mrDoc.ValidRow(nRow1) ||
                 !mrDoc.ValidCol(nCol2) || !mrDoc.ValidRow(nRow2))
-                PushIllegalArgument();
+                PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
             else
                 PushExternalDoubleRef(nFileId, aTabName, nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
         }
@@ -14371,7 +14371,7 @@ void ScInterpreter::ScOffset()
         nRow2 = static_cast<SCROW>(static_cast<tools::Long>(nRow1)+nRowNew-1);
         if (!mrDoc.ValidCol(nCol1) || !mrDoc.ValidRow(nRow1) ||
             !mrDoc.ValidCol(nCol2) || !mrDoc.ValidRow(nRow2) || nTab1 != nTab2)
-            PushIllegalArgument();
+            PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
         else
             PushDoubleRef(nCol1, nRow1, nTab1, nCol2, nRow2, nTab1);
         break;
@@ -14399,7 +14399,7 @@ void ScInterpreter::ScOffset()
         nRow2 = static_cast<SCROW>(static_cast<tools::Long>(nRow1)+nRowNew-1);
         if (!mrDoc.ValidCol(nCol1) || !mrDoc.ValidRow(nRow1) ||
             !mrDoc.ValidCol(nCol2) || !mrDoc.ValidRow(nRow2) || nTab1 != nTab2)
-            PushIllegalArgument();
+            PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
         else
             PushExternalDoubleRef(nFileId, aTabName, nCol1, nRow1, nTab1, nCol2, nRow2, nTab2);
         break;
@@ -14990,11 +14990,15 @@ void ScInterpreter::ScFind()
     else
         nCnt = 1;
     OUString sStr = GetString().getString();
-    if (nCnt < 1 || nCnt > sStr.getLength())
+    const OUString sFind = GetString().getString();
+    // weboffice: like Excel, an empty find text is found at the start position (up to LEN+1)
+    if (sFind.isEmpty() && nCnt >= 1 && nCnt <= sStr.getLength() + 1)
+        PushDouble( static_cast<double>(nCnt) );
+    else if (nCnt < 1 || nCnt > sStr.getLength())
         PushNoValue();
     else
     {
-        sal_Int32 nPos = sStr.indexOf(GetString().getString(), nCnt - 1);
+        sal_Int32 nPos = sStr.indexOf(sFind, nCnt - 1);
         if (nPos == -1)
             PushNoValue();
         else

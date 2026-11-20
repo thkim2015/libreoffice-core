@@ -29,6 +29,11 @@ static double err_pow(const double& fVal1, const double& fVal2)
 
 double power(const double& fVal1, const double& fVal2)
 {
+    // weboffice: like Excel, 0^0 is #NUM! and 0 to a negative power is #DIV/0!
+    if (fVal1 == 0.0 && fVal2 == 0.0)
+        return CreateDoubleError(FormulaError::IllegalFPOperation);
+    if (fVal1 == 0.0 && fVal2 < 0.0)
+        return CreateDoubleError(FormulaError::DivisionByZero);
     double fPow;
     if (fVal1 < 0 && fVal2 != 0.0)
     {
