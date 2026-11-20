@@ -30,6 +30,8 @@ interface XListFormat
         [in] any /* optional */ DefaultListBehavior);
 
     void ConvertNumbersToText();
+
+    void RemoveNumbers([in] any /* optional */ NumberType);
 };
 
 }; }; };

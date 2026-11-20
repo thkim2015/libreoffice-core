@@ -39,6 +39,7 @@ public:
     // Methods
     virtual void SAL_CALL ApplyListTemplate( const css::uno::Reference< ::ooo::vba::word::XListTemplate >& ListTemplate, const css::uno::Any& ContinuePreviousList, const css::uno::Any& ApplyTo, const css::uno::Any& DefaultListBehavior ) override;
     virtual void SAL_CALL ConvertNumbersToText(  ) override;
+    virtual void SAL_CALL RemoveNumbers( const css::uno::Any& NumberType ) override;
 
     // XHelperInterface
     virtual OUString getServiceImplName() override;
