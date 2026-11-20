@@ -2906,6 +2906,8 @@ static ScDdeLink* lcl_GetDdeLink( const sfx2::LinkManager* pLinkMgr,
     return nullptr;
 }
 
+static bool lcl_ZetaNoDdeFunction() { return true; }
+
 void ScInterpreter::ScDde()
 {
     //  application, file, scope
@@ -2914,6 +2916,16 @@ void ScInterpreter::ScDde()
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 3, 4 ) )
         return;
+
+    // weboffice: Excel has no DDE function (a DDE link is an external name there) and the web
+    // office has no DDE server, so like Excel the function is an unknown name: #NAME?
+    if (lcl_ZetaNoDdeFunction())
+    {
+        while (nParamCount-- > 0)
+            Pop();
+        PushError( FormulaError::NoName );
+        return;
+    }
 
     sal_uInt8 nMode = SC_DDE_DEFAULT;
     if (nParamCount == 4)
