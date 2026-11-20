@@ -2127,7 +2127,7 @@ void ScInterpreter::ScNormInv()
         if (sigma <= 0.0 || x < 0.0 || x > 1.0)
             PushIllegalArgument();
         else if (x == 0.0 || x == 1.0)
-            PushNoValue();
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         else
             PushDouble(gaussinv(x)*sigma + mue);
     }
@@ -2139,7 +2139,7 @@ void ScInterpreter::ScSNormInv()
     if (x < 0.0 || x > 1.0)
         PushIllegalArgument();
     else if (x == 0.0 || x == 1.0)
-        PushNoValue();
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
     else
         PushDouble(gaussinv(x));
 }
@@ -2926,7 +2926,7 @@ void ScInterpreter::ScHarMean()
                     nValCount++;
                 }
                 else
-                    SetError( FormulaError::IllegalArgument);
+                    SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                 break;
             }
             case svSingleRef :
@@ -2942,7 +2942,7 @@ void ScInterpreter::ScHarMean()
                         nValCount++;
                     }
                     else
-                        SetError( FormulaError::IllegalArgument);
+                        SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                 }
                 break;
             }
@@ -2962,7 +2962,7 @@ void ScInterpreter::ScHarMean()
                         nValCount++;
                     }
                     else
-                        SetError( FormulaError::IllegalArgument);
+                        SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                     SetError(nErr);
                     while ((nErr == FormulaError::NONE) && aValIter.GetNext(nCellVal, nErr))
                     {
@@ -2972,7 +2972,7 @@ void ScInterpreter::ScHarMean()
                             nValCount++;
                         }
                         else
-                            SetError( FormulaError::IllegalArgument);
+                            SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                     }
                     SetError(nErr);
                 }
@@ -2997,7 +2997,7 @@ void ScInterpreter::ScHarMean()
                                 nValCount++;
                             }
                             else
-                                SetError( FormulaError::IllegalArgument);
+                                SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                         }
                     }
                     else
@@ -3012,7 +3012,7 @@ void ScInterpreter::ScHarMean()
                                     nValCount++;
                                 }
                                 else
-                                    SetError( FormulaError::IllegalArgument);
+                                    SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                             }
                     }
                 }
@@ -3057,7 +3057,7 @@ void ScInterpreter::ScGeoMean()
                     return;
                 }
                 else
-                    SetError( FormulaError::IllegalArgument);
+                    SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                 break;
             }
             case svSingleRef :
@@ -3081,7 +3081,7 @@ void ScInterpreter::ScGeoMean()
                         return;
                     }
                     else
-                        SetError( FormulaError::IllegalArgument);
+                        SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                 }
                 break;
             }
@@ -3109,7 +3109,7 @@ void ScInterpreter::ScGeoMean()
                         return;
                     }
                     else
-                        SetError( FormulaError::IllegalArgument);
+                        SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                     SetError(nErr);
                     while ((nErr == FormulaError::NONE) && aValIter.GetNext(nCellVal, nErr))
                     {
@@ -3127,7 +3127,7 @@ void ScInterpreter::ScGeoMean()
                             return;
                         }
                         else
-                            SetError( FormulaError::IllegalArgument);
+                            SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                     }
                     SetError(nErr);
                 }
@@ -3160,7 +3160,7 @@ void ScInterpreter::ScGeoMean()
                                 return;
                             }
                             else
-                                SetError( FormulaError::IllegalArgument);
+                                SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                         }
                     }
                     else
@@ -3184,7 +3184,7 @@ void ScInterpreter::ScGeoMean()
                                     return;
                                 }
                                 else
-                                    SetError( FormulaError::IllegalArgument);
+                                    SetError( FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
                             }
                         }
                     }
@@ -3746,7 +3746,7 @@ void ScInterpreter::ScPercentrank( bool bInclusive )
     else
     {
         if ( fNum < aSortArray[ 0 ] || fNum > aSortArray[ nSize - 1 ] )
-            PushNoValue();
+            PushNA(); // weboffice: #N/A like Excel
         else
         {
             double fRes;

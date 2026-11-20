@@ -5547,6 +5547,11 @@ void ScInterpreter::ScMatch()
 
     // get match mode
     double fType = ( nParamCount == 3 ? GetDouble() : 1.0 );
+    // weboffice: like Excel, a match type above 1 works as 1 and below -1 as -1
+    if (fType > 1.0)
+        fType = 1.0;
+    else if (fType < -1.0)
+        fType = -1.0;
     switch ( static_cast<int>(fType) )
     {
         case -1 :
@@ -14175,13 +14180,10 @@ void ScInterpreter::ScAddressFunc()
                 PushNoValue();
                 return;
 
-            case 5:
+            // weboffice: Excel knows abs_num 1..4 only (5..8 are #VALUE!)
             case 1 : break; // default
-            case 6:
             case 2 : nFlags = ScRefFlags::ROW_ABS; break;
-            case 7:
             case 3 : nFlags = ScRefFlags::COL_ABS; break;
-            case 8:
             case 4 : nFlags = ScRefFlags::ZERO; break; // both relative
         }
     }
