@@ -15866,6 +15866,46 @@ void ScInterpreter::ScMid()
     }
 }
 
+// weboffice: a number format code with one section that shows a date or a time
+// (y m d h s outside quotes, escapes and [colour]/[condition] brackets; [h] [m] [s] count)
+static bool lcl_ExcelSingleDateTimeCode( const OUString& rCode )
+{
+    bool bDateTime = false;
+    const sal_Int32 nLen = rCode.getLength();
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            const sal_Int32 nEnd = rCode.indexOf('"', i + 1);
+            if (nEnd < 0)
+                break;
+            i = nEnd;
+        }
+        else if (c == '\\' || c == '_' || c == '*')
+            ++i;
+        else if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i + 1);
+            if (nEnd < 0)
+                break;
+            const sal_Unicode c1 = i + 1 < nEnd ? rtl::toAsciiLowerCase(rCode[i + 1]) : 0;
+            if (c1 == 'h' || c1 == 'm' || c1 == 's')
+                bDateTime = true;
+            i = nEnd;
+        }
+        else if (c == ';')
+            return false;
+        else
+        {
+            const sal_Unicode l = rtl::toAsciiLowerCase(c);
+            if (l == 'y' || l == 'm' || l == 'd' || l == 'h' || l == 's')
+                bDateTime = true;
+        }
+    }
+    return bDateTime;
+}
+
 void ScInterpreter::ScText()
 {
     if ( !MustHaveParamCount( GetByte(), 2 ) )
@@ -15947,10 +15987,12 @@ void ScInterpreter::ScText()
             eCellLang = pPattern->GetItem( ATTR_LANGUAGE_FORMAT ).GetValue();
         else
             eCellLang = ScGlobal::eLnge;
+        // weboffice: like Excel, a negative number in a date or time code (one section) is #VALUE!
+        const bool bNegativeDate = !bString && fVal < 0.0 && lcl_ExcelSingleDateTimeCode( sFormatString );
         // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
         bool bInvalidCode = false;
         sFormatString = ScGlobal::ExcelTextFunctionFormatCode( sFormatString, eCellLang, bInvalidCode );
-        if (bInvalidCode)
+        if (bInvalidCode || bNegativeDate)
             PushNoValue();
         else if (bString)
         {
