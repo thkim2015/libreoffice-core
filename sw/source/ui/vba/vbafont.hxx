@@ -36,6 +36,11 @@ public:
     virtual void SAL_CALL setUnderline( const css::uno::Any& _underline ) override;
     virtual css::uno::Any SAL_CALL getSubscript() override;
     virtual css::uno::Any SAL_CALL getSuperscript() override;
+    virtual void SAL_CALL setSubscript( const css::uno::Any& aValue ) override;
+    virtual void SAL_CALL setSuperscript( const css::uno::Any& aValue ) override;
+    // XFont
+    virtual void SAL_CALL Grow() override;
+    virtual void SAL_CALL Shrink() override;
 
     virtual css::uno::Any SAL_CALL getBold() override;
     virtual css::uno::Any SAL_CALL getItalic() override;
