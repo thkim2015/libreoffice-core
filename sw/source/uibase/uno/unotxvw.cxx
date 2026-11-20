@@ -20,6 +20,8 @@
 #include <memory>
 #include <viscrs.hxx>
 #include <o3tl/any.hxx>
+#include <o3tl/unit_conversion.hxx>
+#include <o3tl/string_view.hxx>
 #include <sfx2/printer.hxx>
 #include <sfx2/viewfrm.hxx>
 #include <cmdid.h>
@@ -78,6 +80,7 @@
 #include <names.hxx>
 #ifdef EMSCRIPTEN
 #include <pagefrm.hxx>
+#include <crstate.hxx>
 #include <txtfrm.hxx>
 #include <txtfld.hxx>
 #include <fmtfld.hxx>
@@ -968,6 +971,42 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         for (const SwFrame* pPage = pRoot ? pRoot->Lower() : nullptr; pPage; pPage = pPage->GetNext())
             aRects.push_back(toMm100(pPage->getFrameArea().SVRect()));
         aRet <<= comphelper::containerToSequence(aRects);
+        return aRet;
+    }
+    // Click and Type pointer (web shell): "ZetaShadowCursorAt:<x>,<y>" with a document point in
+    // 1/100 mm asks the direct-cursor fill logic (SwCursorShell::GetShadowCursorPos, the same test
+    // the shadow cursor uses on mouse move) whether the point is an empty place where typing could
+    // start. Returns void when it is not, otherwise sal_Int32[] { paragraphs to insert, orientation,
+    // cursor x, cursor y, cursor height, body left, body right } in 1/100 mm. Nothing moves.
+    if (rPropertyName.startsWith("ZetaShadowCursorAt:"))
+    {
+        const std::u16string_view aArgs = rPropertyName.subView(19);
+        const size_t nComma = aArgs.find(u',');
+        if (nComma == std::u16string_view::npos)
+            return aRet;
+        Point aPt(o3tl::toTwips(o3tl::toInt32(aArgs.substr(0, nComma)), o3tl::Length::mm100),
+                        o3tl::toTwips(o3tl::toInt32(aArgs.substr(nComma + 1)), o3tl::Length::mm100));
+        SwWrtShell& rSh = m_pView->GetWrtShell();
+        CurrShell aCurr(&rSh);
+        const SwRootFrame* pRoot = rSh.GetLayout();
+        const SwPageFrame* pPage = pRoot ? pRoot->GetPageAtPos(aPt) : nullptr;
+        const SwLayoutFrame* pBody = pPage ? pPage->FindBodyCont() : nullptr;
+        if (!pBody)
+            return aRet;
+        SwFillCursorPos aFPos(rSh.GetViewOptions()->GetShdwCursorFillMode());
+        SwCursorMoveState aState(&aFPos);
+        SwPosition aPos(*rSh.GetCursor()->GetPoint());
+        if (rSh.IsTableMode() || rSh.HasSelection()
+            || !pRoot->GetModelPositionForViewPoint(&aPos, aPt, &aState)
+            || aPos.GetNode().IsProtect())
+            return aRet;
+        SwRect aPrt = pBody->getFramePrintArea();
+        aPrt.Pos() += pBody->getFrameArea().Pos();
+        const auto mm = [](tools::Long n) { return static_cast<sal_Int32>(convertTwipToMm100(n)); };
+        const css::uno::Sequence<sal_Int32> aOut{ static_cast<sal_Int32>(aFPos.nParaCnt), static_cast<sal_Int32>(aFPos.eOrient),
+                                                  mm(aFPos.aCursor.Left()), mm(aFPos.aCursor.Top()), mm(aFPos.aCursor.Height()),
+                                                  mm(aPrt.Left()), mm(aPrt.Right()) };
+        aRet <<= aOut;
         return aRet;
     }
     // Selected frame (picture, text frame, embedded object) for the web shell: the print area
