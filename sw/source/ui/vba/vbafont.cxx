@@ -23,6 +23,12 @@
 #include <com/sun/star/container/XIndexAccess.hpp>
 #include <ooo/vba/word/WdUnderline.hpp>
 #include <sal/macros.h>
+#include <com/sun/star/container/XEnumerationAccess.hpp>
+#include <com/sun/star/text/XTextRange.hpp>
+#include <ooo/vba/word/WdConstants.hpp>
+#include <algorithm>
+#include <cmath>
+#include <iterator>
 #include <unordered_map>
 
 using namespace ::ooo::vba;
@@ -162,6 +168,120 @@ SwVbaFont::getColorIndex()
     }
     return uno::Any( nIndex );
 }
+namespace
+{
+// Word Grow Font / Shrink Font steps (as the web office ribbon: 8..72 list, below 8 by 1, above 72 by 10)
+float lcl_WordFontStep(float fSize, bool bGrow)
+{
+    static constexpr float aSteps[] = { 8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72 };
+    if (!(fSize > 0))
+        return 0;
+    if (bGrow)
+    {
+        if (fSize < 8)
+            return std::min(8.0f, std::floor(fSize) + 1);
+        if (fSize >= 72)
+            return std::min(1638.0f, std::floor(fSize / 10) * 10 + 10);
+        for (float f : aSteps)
+            if (f > fSize)
+                return f;
+        return fSize;
+    }
+    if (fSize <= 8)
+        return std::max(1.0f, std::ceil(fSize) - 1);
+    if (fSize > 72)
+        return std::max(72.0f, std::ceil(fSize / 10) * 10 - 10);
+    for (auto it = std::rbegin(aSteps); it != std::rend(aSteps); ++it)
+        if (*it < fSize)
+            return *it;
+    return fSize;
+}
+
+void lcl_StepHeights(const uno::Reference<beans::XPropertySet>& xProps, bool bGrow)
+{
+    for (const OUString& sName : { u"CharHeight"_ustr, u"CharHeightAsian"_ustr, u"CharHeightComplex"_ustr })
+    {
+        float fSize = 0;
+        if (!(xProps->getPropertyValue(sName) >>= fSize))
+            continue;
+        float fNext = lcl_WordFontStep(fSize, bGrow);
+        if (fNext > 0 && fNext != fSize)
+            xProps->setPropertyValue(sName, uno::Any(fNext));
+    }
+}
+
+// each text portion of the range by its own size (Word steps mixed sizes run by run)
+void lcl_StepFont(const uno::Reference<beans::XPropertySet>& xRange, bool bGrow)
+{
+    bool bDone = false;
+    uno::Reference<container::XEnumerationAccess> xParas(xRange, uno::UNO_QUERY);
+    uno::Reference<text::XTextRange> xRangeText(xRange, uno::UNO_QUERY);
+    if (xParas.is() && xRangeText.is() && !xRangeText->getString().isEmpty())
+    {
+        uno::Reference<container::XEnumeration> xParaEnum = xParas->createEnumeration();
+        while (xParaEnum->hasMoreElements())
+        {
+            uno::Reference<container::XEnumerationAccess> xPortions(xParaEnum->nextElement(), uno::UNO_QUERY);
+            if (!xPortions.is())
+                continue;
+            uno::Reference<container::XEnumeration> xEnum = xPortions->createEnumeration();
+            while (xEnum->hasMoreElements())
+            {
+                uno::Reference<beans::XPropertySet> xPortion(xEnum->nextElement(), uno::UNO_QUERY);
+                uno::Reference<text::XTextRange> xText(xPortion, uno::UNO_QUERY);
+                if (!xPortion.is() || !xText.is() || xText->getString().isEmpty())
+                    continue;
+                lcl_StepHeights(xPortion, bGrow);
+                bDone = true;
+            }
+        }
+    }
+    if (!bDone)
+        lcl_StepHeights(xRange, bGrow);
+}
+
+bool lcl_IsToggle(const uno::Any& aValue)
+{
+    sal_Int32 nValue = 0;
+    return aValue.getValueTypeClass() != uno::TypeClass_BOOLEAN && (aValue >>= nValue) && nValue == word::WdConstants::wdToggle;
+}
+}
+
+void SAL_CALL SwVbaFont::Grow()
+{
+    lcl_StepFont(mxFont, true);
+}
+
+void SAL_CALL SwVbaFont::Shrink()
+{
+    lcl_StepFont(mxFont, false);
+}
+
+// Word records Font.Superscript/Subscript = wdToggle for the ribbon buttons
+void SAL_CALL SwVbaFont::setSuperscript( const uno::Any& aValue )
+{
+    if (lcl_IsToggle(aValue))
+    {
+        bool bOn = false;
+        SwVbaFont_BASE::getSuperscript() >>= bOn;
+        SwVbaFont_BASE::setSuperscript(uno::Any(!bOn));
+        return;
+    }
+    SwVbaFont_BASE::setSuperscript(aValue);
+}
+
+void SAL_CALL SwVbaFont::setSubscript( const uno::Any& aValue )
+{
+    if (lcl_IsToggle(aValue))
+    {
+        bool bOn = false;
+        SwVbaFont_BASE::getSubscript() >>= bOn;
+        SwVbaFont_BASE::setSubscript(uno::Any(!bOn));
+        return;
+    }
+    SwVbaFont_BASE::setSubscript(aValue);
+}
+
 uno::Any SAL_CALL
 SwVbaFont::getSubscript()
 {

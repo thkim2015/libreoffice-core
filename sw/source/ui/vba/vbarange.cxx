@@ -19,6 +19,7 @@
 #include "vbarange.hxx"
 
 #include <algorithm>
+#include <iterator>
 #include <utility>
 #include <vbahelper/vbahelper.hxx>
 #include <basic/sberrors.hxx>
@@ -354,6 +355,41 @@ uno::Reference< word::XListFormat > SAL_CALL
 SwVbaRange::getListFormat()
 {
     return uno::Reference< word::XListFormat >( new SwVbaListFormat( this, mxContext, getXTextRange() ) );
+}
+
+namespace
+{
+// Word highlight palette (WdColorIndex 1..16); 0 = wdNoHighlight
+constexpr sal_Int32 aHighlightColors[] = {
+    0x000000, 0x000000, 0x0000FF, 0x00FFFF, 0x00FF00, 0xFF00FF, 0xFF0000, 0xFFFF00,
+    0xFFFFFF, 0x000080, 0x008080, 0x008000, 0x800080, 0x800000, 0x808000, 0xC0C0C0, 0x808080
+};
+}
+
+::sal_Int32 SAL_CALL SwVbaRange::getHighlightColorIndex()
+{
+    uno::Reference< beans::XPropertySet > xProps( getXTextRange(), uno::UNO_QUERY_THROW );
+    // the web office highlight pen writes character background (as Writer's highlight button can); docx w:highlight comes in as CharHighlight
+    sal_Int32 nColor = -1;
+    xProps->getPropertyValue(u"CharHighlight"_ustr) >>= nColor;
+    if (nColor == -1)
+        xProps->getPropertyValue(u"CharBackColor"_ustr) >>= nColor;
+    if (nColor == -1)
+        return 0; // wdNoHighlight
+    for (sal_Int32 i = 1; i < sal_Int32(std::size(aHighlightColors)); ++i)
+        if (aHighlightColors[i] == nColor)
+            return i;
+    return 9999999; // wdUndefined
+}
+
+void SAL_CALL SwVbaRange::setHighlightColorIndex( ::sal_Int32 nIndex )
+{
+    if (nIndex < 0 || nIndex >= sal_Int32(std::size(aHighlightColors)))
+        throw uno::RuntimeException(u"Invalid highlight color index"_ustr);
+    uno::Reference< beans::XPropertySet > xProps( getXTextRange(), uno::UNO_QUERY_THROW );
+    // same result as the highlight pen: character background colour, and no separate highlight on top of it
+    xProps->setPropertyValue(u"CharHighlight"_ustr, uno::Any( sal_Int32(-1) ));
+    xProps->setPropertyValue(u"CharBackColor"_ustr, uno::Any( nIndex == 0 ? sal_Int32(-1) : aHighlightColors[nIndex] ));
 }
 
 ::sal_Int32 SAL_CALL SwVbaRange::getLanguageID()

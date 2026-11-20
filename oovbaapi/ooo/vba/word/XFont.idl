@@ -23,6 +23,9 @@ module ooo {  module vba {  module word {
 
 interface XFont : com::sun::star::uno::XInterface
 {
+    // Word font size steps (Grow Font / Shrink Font buttons)
+    void Grow();
+    void Shrink();
 };
 
 
