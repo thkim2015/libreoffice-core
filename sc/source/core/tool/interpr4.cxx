@@ -3740,7 +3740,16 @@ void ScInterpreter::ScMacro()
     PushNoValue();      // without DocShell no CallBasic
 #else
     OUString aMacro( static_cast<const FormulaExternalToken*>(pCur)->GetExternal() );
-    PushCallable(new ScMacroFunction(*this, aMacro));
+    ScMacroFunction* pMacro = new ScMacroFunction(*this, aMacro);
+    formula::FormulaCallableRef xMacro(pMacro);
+    // weboffice: like Excel, a name with no definition and no such macro is #NAME? also
+    // when it is not called (xls NAME record with an empty formula, imported as a macro name)
+    if (!pMacro->IsValid() && pMacro->GetError() == FormulaError::NoMacro)
+    {
+        PushError(FormulaError::NoName);
+        return;
+    }
+    PushCallable(xMacro);
 #endif
 }
 

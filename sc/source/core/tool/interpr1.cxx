@@ -9019,7 +9019,23 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     }
 
     // Index of column to search.
-    double fIndex = ::rtl::math::approxFloor( GetDouble() ) - 1.0;
+    // weboffice: like Excel, a number taken from a cell that holds an error or text that is not
+    // a number is a bad number: #REF! when the value is found, else #N/A
+    bool bBadRefIndex = false;
+    double fIndex;
+    if (GetStackType() == svSingleRef && nGlobalError == FormulaError::NONE)
+    {
+        fIndex = GetDouble();
+        if (nGlobalError != FormulaError::NONE)
+        {
+            nGlobalError = FormulaError::NONE;
+            bBadRefIndex = true;
+            fIndex = 1.0;
+        }
+    }
+    else
+        fIndex = GetDouble();
+    fIndex = ::rtl::math::approxFloor( fIndex ) - 1.0;
 
     ScMatrixRef pMat = nullptr;
     SCSIZE nC = 0, nR = 0;
@@ -9068,7 +9084,9 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     // weboffice: like Excel, a bad column/row number is only an error when the value is found;
     // a value that is not there stays #N/A. Look up with the first column and replace the result.
     FormulaError eIndexError = FormulaError::NONE;
-    if ( fIndex < 0.0 )
+    if ( bBadRefIndex )
+        eIndexError = FormulaError::NoRef;
+    else if ( fIndex < 0.0 )
         eIndexError = FormulaError::NoValue;
     else if ( bHLookup ? (pMat ? (fIndex >= nR) : (fIndex+nRow1 > nRow2)) : (pMat ? (fIndex >= nC) : (fIndex+nCol1 > nCol2)) )
         eIndexError = FormulaError::NoRef; // #REF! like Excel

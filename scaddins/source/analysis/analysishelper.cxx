@@ -2748,7 +2748,8 @@ double ScaAnyConverter::convertToDouble( const OUString& rString ) const
         }
         catch( uno::Exception& )
         {
-            throw lang::IllegalArgumentException();
+            // weboffice: text that is not a number is #VALUE! in Excel
+            throw lang::IllegalArgumentException(u"#VALUE!"_ustr, {}, 0);
         }
     }
     else
@@ -2757,7 +2758,7 @@ double ScaAnyConverter::convertToDouble( const OUString& rString ) const
         sal_Int32 nEnd;
         fValue = ::rtl::math::stringToDouble( rString, '.', ',', &eStatus, &nEnd );
         if( (eStatus != rtl_math_ConversionStatus_Ok) || (nEnd < rString.getLength()) )
-            throw lang::IllegalArgumentException();
+            throw lang::IllegalArgumentException(u"#VALUE!"_ustr, {}, 0);
     }
     return fValue;
 }
