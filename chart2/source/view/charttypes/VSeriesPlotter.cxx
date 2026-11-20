@@ -86,6 +86,8 @@
 #include <rtl/ustrbuf.hxx>
 #include <rtl/math.hxx>
 #include <basegfx/vector/b2dvector.hxx>
+#include <svx/svdobj.hxx>
+#include <svx/svdpage.hxx>
 #include <com/sun/star/drawing/FillStyle.hpp>
 #include <com/sun/star/drawing/LineStyle.hpp>
 #include <com/sun/star/util/XCloneable.hpp>
@@ -420,6 +422,23 @@ rtl::Reference<SvxShapeText> VSeriesPlotter::createDataLabel( const rtl::Referen
                 aAny >>= aCustomLabels;
             }
         }
+
+        // weboffice: "Data Callout" labels (LabelCalloutShape, e.g. wedgeRectCallout) are drawn as a
+        // callout - the label box gets a pointer to the data point, so keep some distance for it
+        OUString aCalloutShape;
+        if( xPropertySet.is() )
+        {
+            try
+            {
+                xPropertySet->getPropertyValue( u"LabelCalloutShape"_ustr ) >>= aCalloutShape;
+            }
+            catch( const uno::Exception& ) {}
+        }
+        const bool bCalloutWedge = aCalloutShape.startsWith( "wedge" )
+            && !( m_xChartTypeModel.is()
+                  && m_xChartTypeModel->getChartType().equalsIgnoreAsciiCase( CHART2_SERVICE_NAME_CHARTTYPE_PIE ) );
+        if( bCalloutWedge && eAlignment != LABEL_ALIGN_CENTER )
+            nOffset += 250;
 
         awt::Point aScreenPosition2D(rScreenPosition2D);
         if(eAlignment==LABEL_ALIGN_LEFT)
@@ -777,6 +796,9 @@ rtl::Reference<SvxShapeText> VSeriesPlotter::createDataLabel( const rtl::Referen
             xSymbol->setPosition( aSymbolPosition );
             xTextShape->setPosition( aNewTextPos );
         }
+
+        if( bCalloutWedge && fRotationDegrees == 0.0 )
+            createCalloutWedge( xTarget_, xTextShape, rScreenPosition2D );
     }
     catch( const uno::Exception& )
     {
@@ -784,6 +806,98 @@ rtl::Reference<SvxShapeText> VSeriesPlotter::createDataLabel( const rtl::Referen
     }
 
     return xTextShape;
+}
+
+// weboffice: draw a "Data Callout" label (wedgeRectCallout) - one closed polygon around the label box
+// with a pointer whose tip is the data point; it takes over the label fill and border and lies below
+// the text, so the text shape itself is drawn without fill and border
+void VSeriesPlotter::createCalloutWedge( const rtl::Reference<SvxShapeGroup>& xTarget,
+                                         const rtl::Reference<SvxShapeText>& xTextShape,
+                                         const awt::Point& rAnchor )
+{
+    if( !xTarget.is() || !xTextShape.is() )
+        return;
+    const awt::Point aPos( xTextShape->getPosition() );
+    const awt::Size aSize( xTextShape->getSize() );
+    if( aSize.Width <= 0 || aSize.Height <= 0 )
+        return;
+    const double fL = aPos.X, fT = aPos.Y, fR = aPos.X + aSize.Width, fB = aPos.Y + aSize.Height;
+    const double fAX = rAnchor.X, fAY = rAnchor.Y;
+
+    auto P = []( double x, double y ) { return drawing::Position3D( x, y, 0 ); };
+    std::vector<drawing::Position3D> aPoly;
+    // the pointer sits on the side facing the data point; its base is a quarter of that side
+    // (at most 4 mm) centered at the data point, kept inside the side
+    auto base = []( double fFrom, double fTo, double fAt, double& rB1, double& rB2 )
+    {
+        const double fHalf = std::min( ( fTo - fFrom ) / 8.0, 200.0 );
+        const double fC = std::clamp( fAt, fFrom + fHalf, fTo - fHalf );
+        rB1 = fC - fHalf;
+        rB2 = fC + fHalf;
+    };
+    const double fGap = 50.0; // no pointer when the data point touches the box
+    double fB1 = 0, fB2 = 0;
+    aPoly.push_back( P( fL, fT ) );
+    if( fAY < fT - fGap )
+    {
+        base( fL, fR, fAX, fB1, fB2 );
+        aPoly.push_back( P( fB1, fT ) );
+        aPoly.push_back( P( fAX, fAY ) );
+        aPoly.push_back( P( fB2, fT ) );
+    }
+    aPoly.push_back( P( fR, fT ) );
+    if( fAY >= fT - fGap && fAY <= fB + fGap && fAX > fR + fGap )
+    {
+        base( fT, fB, fAY, fB1, fB2 );
+        aPoly.push_back( P( fR, fB1 ) );
+        aPoly.push_back( P( fAX, fAY ) );
+        aPoly.push_back( P( fR, fB2 ) );
+    }
+    aPoly.push_back( P( fR, fB ) );
+    if( fAY > fB + fGap )
+    {
+        base( fL, fR, fAX, fB1, fB2 );
+        aPoly.push_back( P( fB2, fB ) );
+        aPoly.push_back( P( fAX, fAY ) );
+        aPoly.push_back( P( fB1, fB ) );
+    }
+    aPoly.push_back( P( fL, fB ) );
+    if( fAY >= fT - fGap && fAY <= fB + fGap && fAX < fL - fGap )
+    {
+        base( fT, fB, fAY, fB1, fB2 );
+        aPoly.push_back( P( fL, fB2 ) );
+        aPoly.push_back( P( fAX, fAY ) );
+        aPoly.push_back( P( fL, fB1 ) );
+    }
+    aPoly.push_back( P( fL, fT ) );
+
+    rtl::Reference<SvxShapePolyPolygon> xCallout = ShapeFactory::createArea2D( xTarget, { aPoly } );
+    if( !xCallout.is() )
+        return;
+    try
+    {
+        static constexpr OUString aCopied[] = { u"FillStyle"_ustr, u"FillColor"_ustr,
+            u"FillTransparence"_ustr, u"LineStyle"_ustr, u"LineWidth"_ustr, u"LineColor"_ustr,
+            u"LineTransparence"_ustr, u"LineDashName"_ustr };
+        for( const OUString& rName : aCopied )
+        {
+            try
+            {
+                xCallout->SvxShape::setPropertyValue( rName, xTextShape->SvxShape::getPropertyValue( rName ) );
+            }
+            catch( const uno::Exception& ) {}
+        }
+        xCallout->SvxShape::setPropertyValue( u"Name"_ustr, uno::Any( u"DataCallout"_ustr ) );
+        xTextShape->SvxShape::setPropertyValue( u"FillStyle"_ustr, uno::Any( drawing::FillStyle_NONE ) );
+        xTextShape->SvxShape::setPropertyValue( u"LineStyle"_ustr, uno::Any( drawing::LineStyle_NONE ) );
+        if( SdrObject* pObj = xCallout->GetSdrObject() )
+            if( SdrObjList* pList = pObj->getParentSdrObjListFromSdrObject() )
+                pList->SetObjectOrdNum( pObj->GetOrdNum(), 0 );
+    }
+    catch( const uno::Exception& )
+    {
+        TOOLS_WARN_EXCEPTION("chart2", "" );
+    }
 }
 
 namespace
