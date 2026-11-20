@@ -678,6 +678,19 @@ void PieChart::createTextLabelShape(
     bool bShowLeaderLine = rSeries.getModel()
                                    ->getFastPropertyValue(PROP_DATASERIES_SHOW_CUSTOM_LEADERLINES) // "ShowCustomLeaderLines"
                                    .get<sal_Bool>();
+    // weboffice: "Data Callout" labels (wedge callout) point to the slice with their tail, no leader line
+    bool bCallout = false;
+    try
+    {
+        uno::Reference<beans::XPropertySet> xPointProps(rSeries.getPropertiesOfPoint(nPointIndex));
+        OUString aCalloutShape;
+        if (xPointProps.is() && (xPointProps->getPropertyValue(u"LabelCalloutShape"_ustr) >>= aCalloutShape))
+            bCallout = aCalloutShape.startsWith("wedge");
+    }
+    catch (const uno::Exception&) {}
+    aPieLabelInfo.bCallout = bCallout;
+    if (bCallout)
+        bShowLeaderLine = false;
     if (m_bPieLabelsAllowToMove)
     {
         ::basegfx::B2IRectangle aRect(lcl_getRect(aPieLabelInfo.xLabelGroupShape));
@@ -748,7 +761,7 @@ void PieChart::createTextLabelShape(
     aPieLabelInfo.bMovementAllowed = bMovementAllowed;
     aPieLabelInfo.bMoved = false;
     aPieLabelInfo.xTextTarget = xTextTarget;
-    aPieLabelInfo.bShowLeaderLine = bShowLeaderLine && !rSeries.isLabelCustomPos(nPointIndex);
+    aPieLabelInfo.bShowLeaderLine = bShowLeaderLine && !rSeries.isLabelCustomPos(nPointIndex) && !bCallout;
 
     m_aLabelInfoList.push_back(aPieLabelInfo);
 }
@@ -1473,7 +1486,7 @@ void PieChart::createOneBar(
 PieChart::PieLabelInfo::PieLabelInfo()
     :  fValue(0.0)
     , bMovementAllowed(false), bMoved(false)
-    , bShowLeaderLine(false), pPrevious(nullptr)
+    , bShowLeaderLine(false), bCallout(false), pPrevious(nullptr)
     , pNext(nullptr)
 {
 }
@@ -1805,6 +1818,34 @@ bool PieChart::tryMoveLabels( PieLabelInfo const * pFirstBorder, PieLabelInfo co
 }
 
 void PieChart::rearrangeLabelToAvoidOverlapIfRequested( const awt::Size& rPageSize )
+{
+    rearrangeLabels(rPageSize);
+    createPieCalloutWedges();
+}
+
+// weboffice: PowerPoint/Excel draw a pie "Data Callout" as a wedge callout whose tail tip is the
+// slice midpoint on the circumference - inside labels point outwards to the edge, outside labels
+// point back to it. Drawn after the labels got their final place (best fit, moved apart)
+void PieChart::createPieCalloutWedges()
+{
+    for (auto const& labelInfo : m_aLabelInfoList)
+    {
+        if (!labelInfo.bCallout || !labelInfo.xTextShape.is() || !labelInfo.xLabelGroupShape.is())
+            continue;
+        try
+        {
+            sal_Int32 nRotation = 0;
+            labelInfo.xTextShape->SvxShape::getPropertyValue(u"RotateAngle"_ustr) >>= nRotation;
+            if (nRotation != 0)
+                continue;
+        }
+        catch (const uno::Exception&) {}
+        createCalloutWedge(labelInfo.xLabelGroupShape, labelInfo.xTextShape,
+                           awt::Point(labelInfo.aOuterPosition.getX(), labelInfo.aOuterPosition.getY()));
+    }
+}
+
+void PieChart::rearrangeLabels( const awt::Size& rPageSize )
 {
     ///this method is invoked by `ChartView::impl_createDiagramAndContent` for
     ///pie and donut charts after text label creation;
