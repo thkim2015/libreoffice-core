@@ -173,7 +173,7 @@ const ScParameterClassification::RawData ScParameterClassification::pRawData[] =
     { ocHStack,          {{ ReferenceOrRefArray, ReferenceOrRefArray,            }, 1, ForceArrayReturn }},
     { ocHarMean,         {{ Reference                                            }, 1, Value }},
     { ocIRR,             {{ Reference, Value                                     }, 0, Value }},
-    { ocIndex,           {{ Reference, Value, Value, Value                       }, 0, Value }},
+    { ocIndex,           {{ ReferenceOrForceArray, Value, Value, Value           }, 0, Value }}, // weboffice: like Excel, INDEX(A1:A3*2,2) picks from the array
     { ocIndirect,        {{ Value, Value                                         }, 0, Reference }},
     { ocIntercept,       {{ ForceArray, ForceArray                               }, 0, Value }},
     { ocIntersect,       {{ Reference, Reference                                 }, 0, Reference }},
