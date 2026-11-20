@@ -138,6 +138,10 @@ public:
      */
     virtual void createShapes() override;
     virtual void rearrangeLabelToAvoidOverlapIfRequested( const css::awt::Size& rPageSize ) override;
+    /// weboffice: rearrangeLabelToAvoidOverlapIfRequested body (labels moved apart, leader lines)
+    void rearrangeLabels( const css::awt::Size& rPageSize );
+    /// weboffice: draw "Data Callout" labels (wedge callout shape) with a pointer to the slice edge
+    void createPieCalloutWedges();
 
     virtual void setScales( std::vector< ExplicitScaleData >&& rScales, bool bSwapXAndYAxis ) override;
     virtual void addSeries( std::unique_ptr<VDataSeries> pSeries, sal_Int32 zSlot, sal_Int32 xSlot, sal_Int32 ySlot ) override;
@@ -291,6 +295,7 @@ private: //member
         bool bMovementAllowed;
         bool bMoved;
         bool bShowLeaderLine;
+        bool bCallout; // weboffice: LabelCalloutShape is a wedge callout
         rtl::Reference<SvxShapeGroupAnyD> xTextTarget;
         PieLabelInfo* pPrevious;
         PieLabelInfo* pNext;

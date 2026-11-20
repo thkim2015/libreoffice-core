@@ -313,7 +313,7 @@ protected:
         getErrorBarsGroupShape( VDataSeries& rDataSeries
             , const rtl::Reference<SvxShapeGroupAnyD>& xTarget, bool bYError );
 
-    static void createCalloutWedge( const rtl::Reference<SvxShapeGroup>& xTarget,
+    static void createCalloutWedge( const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
                                     const rtl::Reference<SvxShapeText>& xTextShape,
                                     const css::awt::Point& rAnchor );
 
