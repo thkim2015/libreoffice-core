@@ -488,6 +488,14 @@ void DataPointProperties::AddPropertiesToVector(
                                 cppu::UnoType<chart2::RelativeSize>::get(),
                                 beans::PropertyAttribute::BOUND
                                     | beans::PropertyAttribute::MAYBEVOID);
+
+    // weboffice: OOXML data label callout shape (c15:spPr a:prstGeom, e.g. "wedgeRectCallout" for
+    // PowerPoint/Excel "Data Callout"); empty = plain label. Kept for round trip only - the view
+    // draws the label frame as usual
+    rOutProperties.emplace_back("LabelCalloutShape", PROP_DATAPOINT_LABEL_CALLOUT_SHAPE,
+                                cppu::UnoType<OUString>::get(),
+                                beans::PropertyAttribute::BOUND
+                                    | beans::PropertyAttribute::MAYBEDEFAULT);
 }
 
 void DataPointProperties::AddDefaultsToMap(
@@ -576,6 +584,7 @@ void DataPointProperties::AddDefaultsToMap(
     PropertyHelper::setPropertyValueDefault(rOutMap, PROP_DATAPOINT_LABEL_BORDER_DASH, drawing::LineDash());
     PropertyHelper::setEmptyPropertyValueDefault(rOutMap, PROP_DATAPOINT_LABEL_BORDER_DASH_NAME);
     PropertyHelper::setPropertyValueDefault(rOutMap, PROP_DATAPOINT_LABEL_BORDER_TRANS, sal_Int16(0));
+    PropertyHelper::setPropertyValueDefault(rOutMap, PROP_DATAPOINT_LABEL_CALLOUT_SHAPE, OUString());
 
     uno::Sequence<uno::Reference<chart2::XDataPointCustomLabelField>> aFields(0);
     PropertyHelper::setPropertyValueDefault(rOutMap, PROP_DATAPOINT_CUSTOM_LABEL_FIELDS, aFields);

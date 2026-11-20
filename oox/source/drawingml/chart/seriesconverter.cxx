@@ -46,6 +46,8 @@
 #include <drawingml/chart/typegroupconverter.hxx>
 #include <drawingml/chart/typegroupmodel.hxx>
 #include <drawingml/fillproperties.hxx>
+#include <drawingml/customshapeproperties.hxx>
+#include <oox/drawingml/shape.hxx>
 #include <oox/core/xmlfilterbase.hxx>
 #include <oox/helper/modelobjecthelper.hxx>
 #include <oox/token/properties.hxx>
@@ -502,6 +504,13 @@ void DataLabelsConverter::convertFromModel( const Reference< XDataSeries >& rxDa
             ModelObjectHelper& rHelper = getFilter().getModelObjectHelperForModel(xFactory);
             importFillProperties(aPropSet, *mrModel.mxShapeProp, getFilter().getGraphicHelper(),
                                  rHelper);
+        }
+        // weboffice: data callout - keep the c15:spPr callout geometry name for round trip
+        if (mrModel.mxCalloutShapeProp && mrModel.mxCalloutShapeProp->getCustomShapeProperties())
+        {
+            OUString aPreset = mrModel.mxCalloutShapeProp->getCustomShapeProperties()->getShapePresetTypeName();
+            if (aPreset.indexOf(u"Callout") >= 0)
+                aPropSet.setProperty(PROP_LabelCalloutShape, aPreset);
         }
     }
     // import leaderline of data labels

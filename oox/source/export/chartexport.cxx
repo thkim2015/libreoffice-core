@@ -6371,6 +6371,26 @@ void ChartExport::exportDataLabels(
         bool bIsPieOrDoughnut = eChartType == chart::TYPEID_PIE
                                 || eChartType == chart::TYPEID_DOUGHNUT;
 
+        // weboffice: data callout shape (PowerPoint/Excel write it as c15:spPr in the dLbls extension)
+        OUString aCalloutShape;
+        try
+        {
+            xPropSet->getPropertyValue(u"LabelCalloutShape"_ustr) >>= aCalloutShape;
+        }
+        catch (const uno::Exception&)
+        {
+        }
+        auto writeCalloutShape = [&]()
+        {
+            if (aCalloutShape.isEmpty())
+                return;
+            pFS->startElement(FSNS(XML_c15, XML_spPr), FSNS(XML_xmlns, XML_c15), GetFB()->getNamespaceURL(OOX_NS(c15)));
+            pFS->startElement(FSNS(XML_a, XML_prstGeom), XML_prst, aCalloutShape);
+            pFS->singleElement(FSNS(XML_a, XML_avLst));
+            pFS->endElement(FSNS(XML_a, XML_prstGeom));
+            pFS->endElement(FSNS(XML_c15, XML_spPr));
+        };
+
         // showLeaderLines and leaderLines are only valid inside dLbls for
         // pie and doughnut charts per the OOXML schema. Writing them for
         // other chart types (e.g. barChart) causes Excel to crash.
@@ -6389,12 +6409,21 @@ void ChartExport::exportDataLabels(
                 pFS->endElement(FSNS(XML_c, XML_spPr));
                 pFS->endElement(FSNS(XML_c, XML_leaderLines));
             }
+            if (!aCalloutShape.isEmpty())
+            {
+                pFS->startElement(FSNS(XML_c, XML_extLst));
+                pFS->startElement(FSNS(XML_c, XML_ext), XML_uri, "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}", FSNS(XML_xmlns, XML_c15), GetFB()->getNamespaceURL(OOX_NS(c15)));
+                writeCalloutShape();
+                pFS->endElement(FSNS(XML_c, XML_ext));
+                pFS->endElement(FSNS(XML_c, XML_extLst));
+            }
         }
         else
         {
             // For non-pie/doughnut charts, use the c15 extension for leader lines.
             pFS->startElement(FSNS(XML_c, XML_extLst));
             pFS->startElement(FSNS(XML_c, XML_ext), XML_uri, "{CE6537A1-D6FC-4f65-9D91-7224C49458BB}", FSNS(XML_xmlns, XML_c15), GetFB()->getNamespaceURL(OOX_NS(c15)));
+            writeCalloutShape();
             pFS->singleElement(FSNS(XML_c15, XML_showLeaderLines), XML_val, ToPsz10(bShowLeaderLines));
             pFS->endElement(FSNS(XML_c, XML_ext));
             pFS->endElement(FSNS(XML_c, XML_extLst));

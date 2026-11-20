@@ -352,6 +352,7 @@ LabelBorderColor
 LabelBorderComplexColor
 LabelBorderStyle
 LabelBorderWidth
+LabelCalloutShape
 LabelPlacement
 LabelPosition
 LabelSeparator
