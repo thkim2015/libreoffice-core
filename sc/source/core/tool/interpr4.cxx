@@ -4394,6 +4394,7 @@ void ScInterpreter::DispatchOpCode( OpCode eOp )
         case ocOffset           : ScOffset();                   break;
         case ocAreas            : ScAreas();                    break;
         case ocCurrency         : ScCurrency();                 break;
+        case ocUsDollar         : ScUsDollar();                 break;
         case ocReplace          : ScReplace();                  break;
         case ocFixed            : ScFixed();                    break;
         case ocFind             : ScFind();                     break;

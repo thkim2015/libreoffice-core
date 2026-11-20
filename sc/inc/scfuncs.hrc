@@ -4595,6 +4595,16 @@ const TranslateId ocPERCENTOF_ARY[] =
     NC_("ocPERCENTOF", "All the values.")
 };
 
+// -=*# Resource for function USDOLLAR #*=-
+const TranslateId ocUSDOLLAR_ARY[] =
+{
+    NC_("ocUSDOLLAR", "Converts a number to text in U.S. dollar currency format."),
+    NC_("ocUSDOLLAR", "Value"),
+    NC_("ocUSDOLLAR", "Value is a number, a reference to a cell containing a number or a formula that results in a number."),
+    NC_("ocUSDOLLAR", "Decimals"),
+    NC_("ocUSDOLLAR", "Decimal places. Denotes the number of digits to the right of the decimal point.")
+};
+
 // -=*# Resource for function DBCS #*=-
 const TranslateId ocDBCS_ARY[] =
 {

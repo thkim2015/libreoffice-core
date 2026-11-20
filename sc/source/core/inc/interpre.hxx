@@ -802,6 +802,7 @@ private:
     void ScArrayToText();
     void ScValueToText();
     void ScDbcs();
+    void ScUsDollar();
     void ScPhonetic();
     void ScPercentOf();
     void ScTrimRange();

@@ -392,7 +392,7 @@ const FunctionData saFuncTableBiff3[] =
     { "LOGEST",                 "LOGEST",               51,     51,     1,  4,  A, { RA, RA, VV }, FuncFlags::NONE },             // BIFF2: 1-2, BIFF3: 1-4
     { "GROWTH",                 "GROWTH",               52,     52,     1,  4,  A, { RA, RA, RA, VV }, FuncFlags::NONE },             // BIFF2: 1-3, BIFF3: 1-4
     { "TRUNC",                  "TRUNC",                197,    197,    1,  2,  V, { VR }, FuncFlags::NONE },                      // BIFF2: 1,   BIFF3: 1-2
-    { "DOLLAR",                 "USDOLLAR",             204,    204,    1,  2,  V, { VR }, FuncFlags::IMPORTONLY },
+    { "COM.MICROSOFT.USDOLLAR", "USDOLLAR",             204,    204,    1,  2,  V, { VR }, FuncFlags::NONE },
     { "FINDB",                  "FINDB",                205,    205,    2,  3,  V, { VR }, FuncFlags::NONE },
     { "SEARCHB",                "SEARCHB",              206,    206,    2,  3,  V, { VR }, FuncFlags::NONE },
     { "REPLACEB",               "REPLACEB",             207,    207,    4,  4,  V, { VR }, FuncFlags::NONE },

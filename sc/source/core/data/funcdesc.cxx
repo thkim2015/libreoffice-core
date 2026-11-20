@@ -826,6 +826,7 @@ ScFunctionList::ScFunctionList( bool bEnglishFunctionNames )
         { ocTrimRange, ENTRY(ocTRIMRANGE_ARY), 0, ID_FUNCTION_GRP_TABLE, HID_FUNC_TRIMRANGE_MS, 3, { 0, 1, 1 }, 0 },
         { ocGroupBy, ENTRY(ocGROUPBY_ARY), 0, ID_FUNCTION_GRP_TABLE, HID_FUNC_GROUPBY_MS, 8, { 0, 0, 0, 1, 1, 1, 1, 1 }, 0 },
         { ocPivotBy, ENTRY(ocPIVOTBY_ARY), 0, ID_FUNCTION_GRP_TABLE, HID_FUNC_PIVOTBY_MS, 11, { 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1 }, 0 },
+        { ocUsDollar, ENTRY(ocUSDOLLAR_ARY), 0, ID_FUNCTION_GRP_TEXT, HID_FUNC_USDOLLAR_MS, 2, { 0, 1 }, 0 },
         { ocDbcs, ENTRY(ocDBCS_ARY), 0, ID_FUNCTION_GRP_TEXT, HID_FUNC_DBCS_MS, 1, { 0 }, 0 },
         { ocPhonetic, ENTRY(ocPHONETIC_ARY), 0, ID_FUNCTION_GRP_TEXT, HID_FUNC_PHONETIC_MS, 1, { 0 }, 0 },
     };

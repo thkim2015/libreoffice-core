@@ -14689,8 +14689,13 @@ void ScInterpreter::ScCurrency()
     double fDec;
     if (nParamCount == 2)
     {
-        fDec = ::rtl::math::approxFloor(GetDouble());
-        if (fDec < -15.0 || fDec > 15.0)
+        // weboffice: like Excel, the decimals are truncated toward zero (-0.5 is 0) and any
+        // number of integer places rounds (DOLLAR(1,-128) is 0)
+        fDec = ::rtl::math::approxValue(GetDouble());
+        fDec = (fDec < 0.0) ? ::rtl::math::approxCeil(fDec) : ::rtl::math::approxFloor(fDec);
+        if (fDec < -15.0)
+            fDec = -309.0;
+        if (fDec > 15.0)
         {
             PushIllegalArgument();
             return;
@@ -14703,15 +14708,8 @@ void ScInterpreter::ScCurrency()
                                     SvNumFormatType::CURRENCY, ScGlobal::eLnge) );
     }
     double fVal = GetDouble();
-    double fFac;
-    if ( fDec != 0.0 )
-        fFac = pow( double(10), fDec );
-    else
-        fFac = 1.0;
-    if (fVal < 0.0)
-        fVal = ceil(fVal*fFac-0.5)/fFac;
-    else
-        fVal = floor(fVal*fFac+0.5)/fFac;
+    // weboffice: decimal-corrected rounding like Excel (DOLLAR(1.005,2) is 1.01)
+    fVal = ::rtl::math::round(fVal, static_cast<int>(fDec));
     const Color* pColor = nullptr;
     if ( fDec < 0.0 )
         fDec = 0.0;
@@ -14736,6 +14734,55 @@ void ScInterpreter::ScCurrency()
     else
     {
         mrContext.NFGetOutputString(fVal, nIndex, aStr, &pColor);
+    }
+    PushString(aStr);
+}
+
+// weboffice: Excel USDOLLAR — like DOLLAR but always U.S. dollars, $#,##0.00_);($#,##0.00)
+// whatever the locale: USDOLLAR(-1234.567,1) is "($1,234.6)", a negative value that rounds to
+// zero keeps its parentheses, decimals are truncated (up to 127), a result longer than 255
+// characters is #VALUE!.
+void ScInterpreter::ScUsDollar()
+{
+    sal_uInt8 nParamCount = GetByte();
+    if ( !MustHaveParamCount( nParamCount, 1, 2 ) )
+        return;
+
+    double fDec = 2.0;
+    if (nParamCount == 2)
+    {
+        fDec = ::rtl::math::approxValue(GetDouble());
+        fDec = (fDec < 0.0) ? ::rtl::math::approxCeil(fDec) : ::rtl::math::approxFloor(fDec);
+        if (fDec > 127.0)
+        {
+            PushNoValue();
+            return;
+        }
+        if (fDec < -309.0)
+            fDec = -309.0;
+    }
+    double fVal = GetDouble();
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    if (!std::isfinite(fVal))
+    {
+        PushNoValue();
+        return;
+    }
+    const bool bNegative = fVal < 0.0;
+    const sal_Int32 nDec = static_cast<sal_Int32>(fDec);
+    double fAbs = ::rtl::math::round(std::fabs(fVal), static_cast<int>(nDec));
+    static const sal_Int32 aGroups[] = { 3, 0 };
+    OUString aNum = ::rtl::math::doubleToUString(fAbs, rtl_math_StringFormat_F,
+                                                 std::max<sal_Int32>(nDec, 0), '.', aGroups, ',');
+    OUString aStr = bNegative ? OUString("($" + aNum + ")") : OUString("$" + aNum);
+    if (aStr.getLength() > 255)
+    {
+        PushNoValue();
+        return;
     }
     PushString(aStr);
 }

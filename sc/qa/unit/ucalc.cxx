@@ -3263,6 +3263,7 @@ CPPUNIT_TEST_FIXTURE(Test, testFunctionLists)
         "UNICHAR",
         "UNICODE",
         "UPPER",
+        "USDOLLAR",
         "VALUE",
         "VALUETOTEXT",
         "WEBSERVICE",
