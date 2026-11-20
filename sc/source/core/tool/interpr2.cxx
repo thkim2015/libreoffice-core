@@ -244,7 +244,13 @@ void ScInterpreter::ScGetMin()
 {
     sal_uInt16 nHour, nMinute, nSecond;
     double fFractionOfSecond;
-    tools::Time::GetClock( GetDouble(), nHour, nMinute, nSecond, fFractionOfSecond, 0);
+    const double fClock = GetDouble();
+    if (nGlobalError == FormulaError::NONE && (fClock < 0.0 || fClock >= 2958466.0))
+    {
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+        return;
+    }
+    tools::Time::GetClock( fClock, nHour, nMinute, nSecond, fFractionOfSecond, 0);
     PushDouble( nMinute);
 }
 
@@ -252,7 +258,13 @@ void ScInterpreter::ScGetSec()
 {
     sal_uInt16 nHour, nMinute, nSecond;
     double fFractionOfSecond;
-    tools::Time::GetClock( GetDouble(), nHour, nMinute, nSecond, fFractionOfSecond, 0);
+    const double fClock = GetDouble();
+    if (nGlobalError == FormulaError::NONE && (fClock < 0.0 || fClock >= 2958466.0))
+    {
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+        return;
+    }
+    tools::Time::GetClock( fClock, nHour, nMinute, nSecond, fFractionOfSecond, 0);
     if ( fFractionOfSecond >= 0.5 )
         nSecond = ( nSecond + 1 ) % 60;
     PushDouble( nSecond );
@@ -263,7 +275,13 @@ void ScInterpreter::ScGetHour()
 {
     sal_uInt16 nHour, nMinute, nSecond;
     double fFractionOfSecond;
-    tools::Time::GetClock( GetDouble(), nHour, nMinute, nSecond, fFractionOfSecond, 0);
+    const double fClock = GetDouble();
+    if (nGlobalError == FormulaError::NONE && (fClock < 0.0 || fClock >= 2958466.0))
+    {
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+        return;
+    }
+    tools::Time::GetClock( fClock, nHour, nMinute, nSecond, fFractionOfSecond, 0);
     PushDouble( nHour);
 }
 
@@ -278,7 +296,10 @@ void ScInterpreter::ScGetDateValue()
         if (eType == SvNumFormatType::DATE || eType == SvNumFormatType::DATETIME)
         {
             nFuncFmtType = SvNumFormatType::DATE;
-            PushDouble(::rtl::math::approxFloor(fVal));
+            if (::rtl::math::approxFloor(fVal) < 1.0)
+                PushNoValue(); // weboffice: like Excel, a date before 1900-01-01 is #VALUE!
+            else
+                PushDouble(::rtl::math::approxFloor(fVal));
         }
         else
             PushIllegalArgument();
@@ -746,7 +767,10 @@ void ScInterpreter::ScWorkday_MS()
                          nDays++;
                 }
             }
-            PushDouble( static_cast<double>( nDate - nNullDate ) );
+            if (nDate - nNullDate < 0)
+                PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
+            else
+                PushDouble( static_cast<double>( nDate - nNullDate ) );
         }
     }
 }
@@ -770,7 +794,11 @@ void ScInterpreter::ScGetDate()
         // weboffice: like Excel, a year 0..1899 is counted from 1900 (no two-digit year window)
         if (nYear < 1900)
             nYear += 1900;
-        PushDouble(GetDateSerial(nYear, nMonth, nDay, false));
+        const double fSerial = GetDateSerial(nYear, nMonth, nDay, false);
+        if (nGlobalError == FormulaError::NONE && fSerial > 2958465.0)
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: like Excel, after 9999-12-31 is #NUM!
+        else
+            PushDouble(fSerial);
     }
 }
 
@@ -782,6 +810,11 @@ void ScInterpreter::ScGetTime()
         double fSec = GetDouble();
         double fMin = GetDouble();
         double fHour = GetDouble();
+        if (nGlobalError == FormulaError::NONE && (fSec >= 32768.0 || fMin >= 32768.0 || fHour >= 32768.0))
+        {
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: like Excel, above 32767 is #NUM!
+            return;
+        }
         double fTime = fmod( (fHour * ::tools::Time::secondPerHour) + (fMin * ::tools::Time::secondPerMinute) + fSec, DATE_TIME_FACTOR) / DATE_TIME_FACTOR;
         if (fTime < 0)
             PushIllegalArgument();
@@ -1059,6 +1092,11 @@ void ScInterpreter::ScGetTimeValue()
             double fTimeVal = fVal - fDateVal;
             fTimeVal = ::tools::Duration(fTimeVal).GetInDays();  // force corrected
             PushDouble(fTimeVal);
+        }
+        else if (eType == SvNumFormatType::DATE)
+        {
+            nFuncFmtType = SvNumFormatType::TIME;
+            PushDouble(0.0); // weboffice: like Excel, a date without time is midnight
         }
         else
             PushIllegalArgument();
@@ -1484,6 +1522,11 @@ void ScInterpreter::ScNPV()
     {
         double  fCount = 1.0;
         double  fRate = GetDouble();
+        if (fRate == -1.0 && nGlobalError == FormulaError::NONE)
+        {
+            PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
+            return;
+        }
         --nParamCount;
         size_t nRefInList = 0;
         ScRange aRange;
@@ -1575,6 +1618,12 @@ void ScInterpreter::ScIRR()
     if ( !MustHaveParamCount( nParamCount, 1, 2 ) )
         return;
     double fEstimated = nParamCount == 2 ? GetDouble() : 0.1;
+    if (fEstimated <= -1.0 && nGlobalError == FormulaError::NONE)
+    {
+        Pop();
+        PushNoValue(); // weboffice: like Excel
+        return;
+    }
     double fEps = 1.0;
     // If it's -1 the default result for division by zero else startvalue
     double x = fEstimated == -1.0 ? 0.1 : fEstimated;
@@ -1847,7 +1896,10 @@ void ScInterpreter::ScPV()
     double fPmt  = GetDouble();
     double fNper = GetDouble();
     double fRate = GetDouble();
-    PushDouble(ScGetPV(fRate, fNper, fPmt, fFv, bPayInAdvance));
+    if (fRate == -1.0 && nGlobalError == FormulaError::NONE)
+        PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
+    else
+        PushDouble(ScGetPV(fRate, fNper, fPmt, fFv, bPayInAdvance));
 }
 
 void ScInterpreter::ScSYD()
@@ -1859,6 +1911,12 @@ void ScInterpreter::ScSYD()
         double fLife = GetDouble();
         double fSalvage = GetDouble();
         double fCost = GetDouble();
+        // weboffice: like Excel
+        if (fPer <= 0.0 || fLife <= 0.0 || fSalvage < 0.0 || fPer > fLife)
+        {
+            PushError( FormulaError::IllegalFPOperation );
+            return;
+        }
         double fSyd = o3tl::div_allow_zero((fCost - fSalvage) * (fLife - fPer + 1.0),
                       (fLife * (fLife + 1.0)) / 2.0);
         PushDouble(fSyd);
@@ -1915,6 +1973,7 @@ void ScInterpreter::ScDB()
     double fCost = GetDouble();
     if (fMonths < 1.0 || fMonths > 12.0 || fLife > 1200.0 || fSalvage < 0.0 ||
         fPeriod > (fLife + 1.0) || fSalvage > fCost || fCost <= 0.0 ||
+        (fMonths == 12.0 && ::rtl::math::approxFloor(fPeriod) > fLife) || // weboffice: like Excel
         fLife <= 0 || fPeriod <= 0 )
     {
         PushIllegalArgument();
@@ -2203,7 +2262,9 @@ void ScInterpreter::ScNper()
     double fRate = GetDouble();
     // Note that due to the function specification in ODFF1.2 (and Excel) the
     // amount to be paid to get from fPV to fFV is fFV_+_fPV.
-    if ( fPV + fFV == 0.0 )
+    if (fRate == 0.0 && fPmt == 0.0)
+        PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
+    else if ( fPV + fFV == 0.0 )
         PushDouble( 0.0 );
     else if (fRate == 0.0)
         PushDouble(-o3tl::div_allow_zero(fPV + fFV, fPmt));
@@ -2542,7 +2603,7 @@ void ScInterpreter::ScNominal()
         double fPeriods = GetDouble();
         double fEffective = GetDouble();
         if (fPeriods < 1.0 || fEffective <= 0.0)
-            PushIllegalArgument();
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         else
         {
             fPeriods = ::rtl::math::approxFloor(fPeriods);

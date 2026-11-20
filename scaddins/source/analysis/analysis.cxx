@@ -380,6 +380,8 @@ sal_Int32 SAL_CALL AnalysisAddIn::getWorkday( const uno::Reference< beans::XProp
         }
     }
 
+    if( nActDate - nNullDate < 0 )
+        throw lang::IllegalArgumentException(); // weboffice: #NUM! like Excel
     return nActDate - nNullDate;
 }
 

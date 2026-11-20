@@ -1906,7 +1906,10 @@ void ScInterpreter::ScBitLshift()
             fRes = num;
         else
             fRes = num * pow( 2.0, fShift);
-        PushDouble( fRes);
+        if (fRes >= n2power48) // weboffice: like Excel, a result of 2^48 or more is #NUM!
+            PushIllegalArgument();
+        else
+            PushDouble( fRes);
     }
 }
 
@@ -1929,7 +1932,10 @@ void ScInterpreter::ScBitRshift()
             fRes = num;
         else
             fRes = ::rtl::math::approxFloor( num / pow( 2.0, fShift));
-        PushDouble( fRes);
+        if (fRes >= n2power48) // weboffice: like Excel, a result of 2^48 or more is #NUM!
+            PushIllegalArgument();
+        else
+            PushDouble( fRes);
     }
 }
 

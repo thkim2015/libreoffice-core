@@ -293,7 +293,9 @@ double SAL_CALL AnalysisAddIn::getNominal( double fRate, sal_Int32 nPeriods )
 
 double SAL_CALL AnalysisAddIn::getDollarfr( double fDollarDec, sal_Int32 nFrac )
 {
-    if( nFrac <= 0 )
+    if( nFrac == 0 )
+        throw css::lang::IllegalArgumentException(u"#DIV/0!"_ustr, {}, 0); // weboffice: like Excel
+    if( nFrac < 0 )
         throw css::lang::IllegalArgumentException();
 
     double  fInt;
@@ -313,7 +315,9 @@ double SAL_CALL AnalysisAddIn::getDollarfr( double fDollarDec, sal_Int32 nFrac )
 
 double SAL_CALL AnalysisAddIn::getDollarde( double fDollarFrac, sal_Int32 nFrac )
 {
-    if( nFrac <= 0 )
+    if( nFrac == 0 )
+        throw css::lang::IllegalArgumentException(u"#DIV/0!"_ustr, {}, 0); // weboffice: like Excel
+    if( nFrac < 0 )
         throw css::lang::IllegalArgumentException();
 
     double  fInt;
@@ -394,7 +398,7 @@ double SAL_CALL AnalysisAddIn::getTbilleq( const css::uno::Reference< css::beans
 double SAL_CALL AnalysisAddIn::getTbillprice( const css::uno::Reference< css::beans::XPropertySet >& xOpt,
     sal_Int32 nSettle, sal_Int32 nMat, double fDisc )
 {
-    if( fDisc <= 0.0 || nSettle > nMat )
+    if( fDisc <= 0.0 || nSettle > nMat || nMat - nSettle > 365 ) // weboffice: like Excel, at most a year
         throw css::lang::IllegalArgumentException();
 
     nMat++;
