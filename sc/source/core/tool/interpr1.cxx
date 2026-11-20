@@ -997,6 +997,7 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
     aComp.mbIgnoreCase = mrDoc.GetDocOptions().IsIgnoreCase();
     sc::RangeMatrix aMat[2];
     ScAddress aAdr;
+    bool aLogical[2] = { false, false }; // weboffice: TRUE/FALSE scalar operands
     for( short i = 1; i >= 0; i-- )
     {
         sc::Compare::Cell& rCell = aComp.maCells[i];
@@ -1009,6 +1010,9 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
                 break;
             case svMissing:
             case svDouble:
+                aLogical[i] = pStack[sp - 1]->GetType() == svDouble
+                    && static_cast<const FormulaDoubleToken*>(pStack[sp - 1])->GetDoubleType()
+                           == static_cast<sal_Int16>(SvNumFormatType::LOGICAL);
                 rCell.mfValue = GetDouble();
                 rCell.mbValue = true;
                 break;
@@ -1031,6 +1035,7 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
                 }
                 else
                 {
+                    aLogical[i] = IsLogicalCell(aAdr, aCell);
                     rCell.mfValue = GetCellValue(aAdr, aCell);
                     rCell.mbValue = true;
                 }
@@ -1146,6 +1151,74 @@ sc::RangeMatrix ScInterpreter::CompareMat( ScQueryOp eOp, sc::CompareOptions* pO
         aRes.mpMat = rMat.CompareMatrix(aComp, i, pOptions);
         if (!aRes.mpMat)
             return aRes;
+    }
+
+    // weboffice: Excel orders the types number < text < TRUE/FALSE also element by element
+    // (A1:A3>5 is TRUE for a TRUE cell and for a text cell), as Compare() does for one value
+    if (aRes.mpMat && !pOptions)
+    {
+        SCSIZE nC, nR;
+        aRes.mpMat->GetDimensions(nC, nR);
+        for (SCSIZE c = 0; c < nC; ++c)
+            for (SCSIZE r = 0; r < nR; ++r)
+            {
+                bool bLogical[2] = { aLogical[0], aLogical[1] };
+                bool bSkip = false;
+                for (short i = 0; i < 2 && !bSkip; ++i)
+                {
+                    if (!aMat[i].mpMat)
+                    {
+                        bSkip = aComp.maCells[i].mbEmpty;
+                        continue;
+                    }
+                    const ScMatrix& rM = *aMat[i].mpMat;
+                    SCSIZE nMC, nMR;
+                    rM.GetDimensions(nMC, nMR);
+                    const SCSIZE cc = nMC == 1 ? 0 : c, rr = nMR == 1 ? 0 : r;
+                    if (cc >= nMC || rr >= nMR || rM.IsEmpty(cc, rr))
+                    {
+                        bSkip = true;
+                        continue;
+                    }
+                    if (!rM.IsValue(cc, rr))
+                    {
+                        bLogical[i] = false; // text
+                        continue;
+                    }
+                    if (rM.GetError(cc, rr) != FormulaError::NONE)
+                    {
+                        bSkip = true;
+                        continue;
+                    }
+                    bLogical[i] = rM.IsBoolean(cc, rr);
+                    if (!bLogical[i] && aMat[i].isRangeValid())
+                    {
+                        const ScAddress aCellPos(static_cast<SCCOL>(aMat[i].mnCol1 + cc),
+                                                 static_cast<SCROW>(aMat[i].mnRow1 + rr),
+                                                 static_cast<SCTAB>(aMat[i].mnTab1));
+                        ScRefCellValue aCell(mrDoc, aCellPos);
+                        bLogical[i] = IsLogicalCell(aCellPos, aCell);
+                    }
+                }
+                if (bSkip || bLogical[0] == bLogical[1])
+                    continue;
+                if (!aRes.mpMat->IsValue(c, r)
+                    || GetDoubleErrorValue(aRes.mpMat->GetDouble(c, r)) != FormulaError::NONE)
+                    continue;
+                const double fSign = bLogical[0] ? 1.0 : -1.0;
+                bool bRes;
+                switch (eOp)
+                {
+                    case SC_EQUAL:         bRes = false;        break;
+                    case SC_NOT_EQUAL:     bRes = true;         break;
+                    case SC_LESS:
+                    case SC_LESS_EQUAL:    bRes = fSign < 0.0;  break;
+                    case SC_GREATER:
+                    case SC_GREATER_EQUAL: bRes = fSign > 0.0;  break;
+                    default: continue;
+                }
+                aRes.mpMat->PutDouble(bRes ? 1.0 : 0.0, c, r);
+            }
     }
 
     // weboffice: the result of a comparison operator is TRUE/FALSE, not 1/0 - Excel's functions
