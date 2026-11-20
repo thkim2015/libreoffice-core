@@ -2092,7 +2092,11 @@ void FormulaCompiler::Factor()
                 else
                 {
                     // if we're not calling the function right now, we need a Callable form
-                    if ((ocStartTwoParameters <= eMyLastOp && eMyLastOp < ocStopTwoParameters)
+                    // weboffice: ocUDExternal (an unknown function name, e.g. an xls name with
+                    // no definition) lies inside the two-parameter range but is no built-in
+                    // function; keep it so the interpreter reports #NAME? like Excel, not a lambda.
+                    if (((ocStartTwoParameters <= eMyLastOp && eMyLastOp < ocStopTwoParameters)
+                         && eMyLastOp != ocUDExternal)
                        || eMyLastOp == ocAnd
                        || eMyLastOp == ocOr)
                         pFacToken = new FormulaCallableToken( FormulaBuiltInFunction::Get( eMyLastOp ) );
