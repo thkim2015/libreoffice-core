@@ -70,6 +70,16 @@ public:
     SwVbaParagraphs( const css::uno::Reference< ov::XHelperInterface >& xParent,
                     const css::uno::Reference< css::uno::XComponentContext > & xContext,
                     const rtl::Reference< SwXTextDocument >& xDocument );
+    /// the paragraphs of xParEnumAccess (Selection.Paragraphs: a cursor spanning the selected paragraphs)
+    SwVbaParagraphs( const css::uno::Reference< ov::XHelperInterface >& xParent,
+                    const css::uno::Reference< css::uno::XComponentContext > & xContext,
+                    const rtl::Reference< SwXTextDocument >& xDocument,
+                    const css::uno::Reference< css::container::XEnumerationAccess >& xParEnumAccess );
+
+    // XParagraphs
+    virtual void SAL_CALL Indent() override;
+    virtual void SAL_CALL Outdent() override;
+    virtual void SAL_CALL IndentCharWidth( sal_Int16 Count ) override;
 
     // XEnumerationAccess
     virtual css::uno::Type SAL_CALL getElementType() override;

@@ -27,6 +27,10 @@ module ooo {  module vba {  module word {
 interface XParagraphs
 {
     interface ::ooo::vba::XCollection;
+
+    void Indent();
+    void Outdent();
+    void IndentCharWidth( [in] short Count );
 };
 
 }; }; };

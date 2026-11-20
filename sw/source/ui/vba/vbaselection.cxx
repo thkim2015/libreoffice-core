@@ -528,16 +528,9 @@ SwVbaSelection::setParagraphFormat( const uno::Reference< word::XParagraphFormat
 uno::Reference< word::XFind > SAL_CALL
 SwVbaSelection::getFind()
 {
+    // Word: a collapsed selection searches from the insertion point (SwVbaFind handles the collapsed range);
+    // selecting the whole story here made Find.Execute always start at the top of the document
     uno::Reference< text::XTextRange > xTextRange = GetSelectedRange();
-    uno::Reference< text::XTextRange > xStart = xTextRange->getStart();
-    uno::Reference< text::XTextRange > xEnd = xTextRange->getEnd();
-    uno::Reference< text::XTextRangeCompare > xTRC( xTextRange->getText(), uno::UNO_QUERY_THROW );
-    int n = xTRC->compareRegionStarts( xStart, xEnd);
-    if( n == 0 )
-    {
-        WholeStory();
-        xTextRange = GetSelectedRange();
-    }
     return SwVbaFind::GetOrCreateFind(this, mxContext, mxModel, xTextRange);
 }
 
@@ -1154,32 +1147,19 @@ void SAL_CALL SwVbaSelection::SplitTable()
 uno::Any SAL_CALL
 SwVbaSelection::Paragraphs( const uno::Any& aIndex )
 {
-    // Hacky implementation due to missing api ( and lack of knowledge )
-    // we can only support a selection that is a single paragraph
-    if ( !aIndex.hasValue() ) // currently we can't support multiple paragraphs in a selection
-       throw uno::RuntimeException();
-
-    sal_Int32 nIndex = 0;
-    aIndex >>= nIndex;
-
-    uno::Any aRet;
-
-    if ( nIndex != 1 )
-       throw uno::RuntimeException();
-
-    uno::Reference< text::XTextRange > xTextRange = mxTextViewCursor->getStart();
-    uno::Reference< text::XText > xText = xTextRange->getText();
-    rtl::Reference< SwXTextCursor > xParaCursor = dynamic_cast<SwXTextCursor*>( xText->createTextCursor().get() );
-    if (!xParaCursor)
-        throw uno::RuntimeException();
+    // Word: the paragraphs the selection touches (a collapsed selection: its own paragraph). Earlier only
+    // Paragraphs(1) worked, and its range was empty (start of paragraph to start of paragraph)
+    uno::Reference< text::XText > xText = mxTextViewCursor->getText();
+    uno::Reference< text::XTextCursor > xCursor = xText->createTextCursorByRange( mxTextViewCursor->getStart() );
+    uno::Reference< text::XParagraphCursor > xParaCursor( xCursor, uno::UNO_QUERY_THROW );
     xParaCursor->gotoStartOfParagraph( false );
-    xParaCursor->gotoStartOfParagraph( true );
-
-    uno::Reference< text::XTextRange > xParaRange( static_cast<text::XSentenceCursor*>(xParaCursor.get()) );
-    uno::Reference< word::XParagraph > xParagraph = new SwVbaParagraph( mxParent, mxContext, mxModel, xParaRange );
-
-    aRet <<= xParagraph;
-    return aRet;
+    xCursor->gotoRange( mxTextViewCursor->getEnd(), true );
+    xParaCursor->gotoEndOfParagraph( true );
+    uno::Reference< container::XEnumerationAccess > xParEnumAccess( xCursor, uno::UNO_QUERY_THROW );
+    uno::Reference< XCollection > xCol( new SwVbaParagraphs( this, mxContext, mxModel, xParEnumAccess ) );
+    if ( aIndex.hasValue() )
+        return xCol->Item( aIndex, uno::Any() );
+    return uno::Any( xCol );
 }
 
 OUString

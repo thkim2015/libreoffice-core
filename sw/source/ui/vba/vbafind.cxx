@@ -71,9 +71,23 @@ uno::Reference< word::XFind > SwVbaFind::GetOrCreateFind(const uno::Reference< o
 }
 
 
+bool SwVbaFind::IsCollapsed()
+{
+    uno::Reference< text::XTextRangeCompare > xTRC( mxTextRange->getText(), uno::UNO_QUERY_THROW );
+    return xTRC->compareRegionStarts( mxTextRange->getStart(), mxTextRange->getEnd() ) == 0;
+}
+
 bool SwVbaFind::InRange( const uno::Reference< text::XTextRange >& xCurrentRange )
 {
     uno::Reference< text::XTextRangeCompare > xTRC( mxTextRange->getText(), uno::UNO_QUERY_THROW );
+    // Word: with no selection the search covers the text from the insertion point to the end
+    // (forward) or to the start (backward) of the story
+    if( IsCollapsed() )
+    {
+        if( getForward() )
+            return xTRC->compareRegionStarts( mxTextRange, xCurrentRange ) >= 0;
+        return xTRC->compareRegionEnds( mxTextRange, xCurrentRange ) <= 0;
+    }
     return xTRC->compareRegionStarts( mxTextRange, xCurrentRange ) >= 0 && xTRC->compareRegionEnds( mxTextRange, xCurrentRange ) <= 0;
 }
 
@@ -126,7 +140,13 @@ uno::Reference< text::XTextRange > SwVbaFind::FindOneElement()
         xFoundOne.set( mxModel->findNext( mxTextRange, uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
     }
 
-    if( !xFoundOne.is() && ( getWrap() == word::WdFindWrap::wdFindContinue || getWrap() == word::WdFindWrap::wdFindAsk ) )
+    if( !xFoundOne.is() && ( getWrap() == word::WdFindWrap::wdFindContinue || getWrap() == word::WdFindWrap::wdFindAsk ) && IsCollapsed() )
+    {
+        // searched from the insertion point to the end (start): continue from the other end of the story
+        uno::Reference< text::XText > xText = mxTextRange->getText();
+        xFoundOne.set( mxModel->findNext( getForward() ? xText->getStart() : xText->getEnd(), uno::Reference< util::XSearchDescriptor >( mxPropertyReplace, uno::UNO_QUERY_THROW ) ), uno::UNO_QUERY );
+    }
+    else if( !xFoundOne.is() && ( getWrap() == word::WdFindWrap::wdFindContinue || getWrap() == word::WdFindWrap::wdFindAsk ) )
     {
         if( getForward() )
         {
