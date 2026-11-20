@@ -313,6 +313,10 @@ protected:
         getErrorBarsGroupShape( VDataSeries& rDataSeries
             , const rtl::Reference<SvxShapeGroupAnyD>& xTarget, bool bYError );
 
+    static void createCalloutWedge( const rtl::Reference<SvxShapeGroup>& xTarget,
+                                    const rtl::Reference<SvxShapeText>& xTextShape,
+                                    const css::awt::Point& rAnchor );
+
     /** This method creates a text shape for a label related to a data point
      *  and append it to the root text shape group (xTarget).
      *
