@@ -14679,6 +14679,46 @@ void ScInterpreter::ScAreas()
     PushDouble( double(nCount));
 }
 
+namespace {
+
+// weboffice: digits of a FIXED/DOLLAR/USDOLLAR result like Excel: nDec decimals (fAbs already
+// rounded), but only 15 significant digits, the rest are zeros (FIXED(1/3,20) is
+// 0.33333333333333300000). cGroup 0 means no thousands separator.
+OUString lcl_ExcelNumberDigits(double fAbs, sal_Int32 nDec, sal_Unicode cDec, sal_Unicode cGroup)
+{
+    sal_Int32 nShow = std::max<sal_Int32>(nDec, 0);
+    sal_Int32 nPad = 0;
+    if (fAbs != 0.0)
+    {
+        const sal_Int32 nExp = static_cast<sal_Int32>(std::floor(std::log10(fAbs)));
+        const sal_Int32 nMax = std::max<sal_Int32>(14 - nExp, 0);
+        if (nShow > nMax)
+        {
+            nPad = nShow - nMax;
+            nShow = nMax;
+        }
+    }
+    else if (nShow > 15)
+    {
+        nPad = nShow - 15;
+        nShow = 15;
+    }
+    static const sal_Int32 aGroups[] = { 3, 0 };
+    OUStringBuffer aBuf(cGroup
+        ? ::rtl::math::doubleToUString(fAbs, rtl_math_StringFormat_F, nShow, cDec, aGroups, cGroup)
+        : ::rtl::math::doubleToUString(fAbs, rtl_math_StringFormat_F, nShow, cDec));
+    if (nPad > 0)
+    {
+        if (nShow == 0)
+            aBuf.append(cDec);
+        for (sal_Int32 i = 0; i < nPad; ++i)
+            aBuf.append('0');
+    }
+    return aBuf.makeStringAndClear();
+}
+
+}
+
 void ScInterpreter::ScCurrency()
 {
     sal_uInt8 nParamCount = GetByte();
@@ -14695,9 +14735,9 @@ void ScInterpreter::ScCurrency()
         fDec = (fDec < 0.0) ? ::rtl::math::approxCeil(fDec) : ::rtl::math::approxFloor(fDec);
         if (fDec < -15.0)
             fDec = -309.0;
-        if (fDec > 15.0)
+        if (fDec > 127.0)
         {
-            PushIllegalArgument();
+            PushNoValue();
             return;
         }
     }
@@ -14709,10 +14749,18 @@ void ScInterpreter::ScCurrency()
     }
     double fVal = GetDouble();
     // weboffice: decimal-corrected rounding like Excel (DOLLAR(1.005,2) is 1.01)
+    // weboffice: like Excel, a negative value that rounds to zero keeps its sign (DOLLAR(-0.4) is -KRW 0)
+    const bool bNegZero = fVal < 0.0 && ::rtl::math::round(fVal, static_cast<int>(fDec)) == 0.0;
     fVal = ::rtl::math::round(fVal, static_cast<int>(fDec));
+    if (bNegZero)
+        fVal = -1.0;
     const Color* pColor = nullptr;
     if ( fDec < 0.0 )
         fDec = 0.0;
+    // the number formatter shows at most 15 decimals, Excel up to 127 (15 significant digits)
+    const sal_Int32 nPadDec = fDec > 15.0 ? static_cast<sal_Int32>(fDec) - 15 : 0;
+    if (nPadDec > 0)
+        fDec = 15.0;
     sal_uLong nIndex = mrContext.NFGetStandardFormat(
                                     SvNumFormatType::CURRENCY,
                                     ScGlobal::eLnge);
@@ -14734,6 +14782,28 @@ void ScInterpreter::ScCurrency()
     else
     {
         mrContext.NFGetOutputString(fVal, nIndex, aStr, &pColor);
+    }
+    if (bNegZero)
+    {
+        // formatted -1: turn its one digit into the zero
+        sal_Int32 nOne = aStr.indexOf('1');
+        if (nOne >= 0)
+            aStr = aStr.replaceAt(nOne, 1, u"0");
+    }
+    if (nPadDec > 0)
+    {
+        sal_Int32 nLast = aStr.getLength() - 1;
+        while (nLast >= 0 && !(aStr[nLast] >= '0' && aStr[nLast] <= '9'))
+            --nLast;
+        OUStringBuffer aZeros;
+        for (sal_Int32 i = 0; i < nPadDec; ++i)
+            aZeros.append('0');
+        aStr = aStr.replaceAt(nLast + 1, 0, aZeros.makeStringAndClear());
+    }
+    if (aStr.getLength() > 255)
+    {
+        PushNoValue();
+        return;
     }
     PushString(aStr);
 }
@@ -14775,9 +14845,7 @@ void ScInterpreter::ScUsDollar()
     const bool bNegative = fVal < 0.0;
     const sal_Int32 nDec = static_cast<sal_Int32>(fDec);
     double fAbs = ::rtl::math::round(std::fabs(fVal), static_cast<int>(nDec));
-    static const sal_Int32 aGroups[] = { 3, 0 };
-    OUString aNum = ::rtl::math::doubleToUString(fAbs, rtl_math_StringFormat_F,
-                                                 std::max<sal_Int32>(nDec, 0), '.', aGroups, ',');
+    OUString aNum = lcl_ExcelNumberDigits(fAbs, nDec, '.', ',');
     OUString aStr = bNegative ? OUString("($" + aNum + ")") : OUString("$" + aNum);
     if (aStr.getLength() > 255)
     {
@@ -14820,7 +14888,6 @@ void ScInterpreter::ScFixed()
     if ( !MustHaveParamCount( nParamCount, 1, 3 ) )
         return;
 
-    OUString aStr;
     double fDec;
     bool bThousand;
     if (nParamCount == 3)
@@ -14829,45 +14896,47 @@ void ScInterpreter::ScFixed()
         bThousand = true;
     if (nParamCount >= 2)
     {
-        fDec = ::rtl::math::approxFloor(GetDoubleWithDefault( 2.0 ));
-        if (fDec < -15.0 || fDec > 15.0)
+        // weboffice: like Excel, decimals truncate toward zero (-0.5 is 0), up to 127, and any
+        // number of integer places rounds (FIXED(1,-128) is 0)
+        fDec = ::rtl::math::approxValue(GetDoubleWithDefault( 2.0 ));
+        fDec = (fDec < 0.0) ? ::rtl::math::approxCeil(fDec) : ::rtl::math::approxFloor(fDec);
+        if (fDec > 127.0)
         {
-            PushIllegalArgument();
+            PushNoValue();
             return;
         }
+        if (fDec < -309.0)
+            fDec = -309.0;
     }
     else
         fDec = 2.0;
     double fVal = GetDouble();
-    double fFac;
-    if ( fDec != 0.0 )
-        fFac = pow( double(10), fDec );
-    else
-        fFac = 1.0;
-    if (fVal < 0.0)
-        fVal = ceil(fVal*fFac-0.5)/fFac;
-    else
-        fVal = floor(fVal*fFac+0.5)/fFac;
-    const Color* pColor = nullptr;
-    if (fDec < 0.0)
-        fDec = 0.0;
-    sal_uLong nIndex = mrContext.NFGetStandardFormat(
-                                        SvNumFormatType::NUMBER,
-                                        ScGlobal::eLnge);
-    OUString sFormatString = mrContext.NFGenerateFormat(
-                                           nIndex,
-                                           ScGlobal::eLnge,
-                                           bThousand,   // with thousands separator
-                                           false,       // not red
-                                           static_cast<sal_uInt16>(fDec));// decimal places
-    if (!mrContext.NFGetPreviewString(sFormatString,
-                                              fVal,
-                                              aStr,
-                                              &pColor,
-                                              ScGlobal::eLnge))
-        PushIllegalArgument();
-    else
-        PushString(aStr);
+    if (nGlobalError != FormulaError::NONE)
+    {
+        PushError(nGlobalError);
+        return;
+    }
+    if (!std::isfinite(fVal))
+    {
+        PushNoValue();
+        return;
+    }
+    // weboffice: Excel text: decimal-corrected rounding (FIXED(1.005,2) is 1.01), 15
+    // significant digits then zeros, no sign when the value rounds to zero, 255 characters at most
+    const sal_Int32 nDec = static_cast<sal_Int32>(fDec);
+    double fAbs = ::rtl::math::round(std::fabs(fVal), static_cast<int>(nDec));
+    const LocaleDataWrapper& rLocale = ScGlobal::getLocaleData();
+    const sal_Unicode cDec = rLocale.getNumDecimalSep()[0];
+    const sal_Unicode cGroup = bThousand ? rLocale.getNumThousandSep()[0] : 0;
+    OUString aStr = lcl_ExcelNumberDigits(fAbs, nDec, cDec, cGroup);
+    if (fVal < 0.0 && fAbs != 0.0)
+        aStr = "-" + aStr;
+    if (aStr.getLength() > 255)
+    {
+        PushNoValue();
+        return;
+    }
+    PushString(aStr);
 }
 
 void ScInterpreter::ScFind()
