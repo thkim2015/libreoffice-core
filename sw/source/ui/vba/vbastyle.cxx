@@ -105,6 +105,12 @@ void SwVbaStyle::setStyle( const uno::Reference< beans::XPropertySet >& xParaPro
     if( rStyle >>= xStyle )
     {
         sStyle = xStyle->getName();
+        // Word: Selection.Style = ActiveDocument.Styles("Strong") applies a character style to the text
+        if( !sStyle.isEmpty() && xStyle->getType() == word::WdStyleType::wdStyleTypeCharacter )
+        {
+            xParaProps->setPropertyValue(u"CharStyleName"_ustr, uno::Any( sStyle ) );
+            return;
+        }
     }
     else
     {
