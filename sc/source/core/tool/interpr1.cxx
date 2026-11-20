@@ -15866,11 +15866,13 @@ void ScInterpreter::ScMid()
     }
 }
 
-// weboffice: a number format code with one section that shows a date or a time
+// weboffice: whether the section of a number format code used for a negative number (the
+// second if there are two or more, else the first) shows a date or a time
 // (y m d h s outside quotes, escapes and [colour]/[condition] brackets; [h] [m] [s] count)
-static bool lcl_ExcelSingleDateTimeCode( const OUString& rCode )
+static bool lcl_ExcelNegativeDateTimeCode( const OUString& rCode )
 {
     bool bDateTime = false;
+    sal_Int32 nSection = 0;
     const sal_Int32 nLen = rCode.getLength();
     for (sal_Int32 i = 0; i < nLen; ++i)
     {
@@ -15895,7 +15897,11 @@ static bool lcl_ExcelSingleDateTimeCode( const OUString& rCode )
             i = nEnd;
         }
         else if (c == ';')
-            return false;
+        {
+            if (++nSection == 2)
+                break;
+            bDateTime = false;
+        }
         else
         {
             const sal_Unicode l = rtl::toAsciiLowerCase(c);
@@ -15987,8 +15993,8 @@ void ScInterpreter::ScText()
             eCellLang = pPattern->GetItem( ATTR_LANGUAGE_FORMAT ).GetValue();
         else
             eCellLang = ScGlobal::eLnge;
-        // weboffice: like Excel, a negative number in a date or time code (one section) is #VALUE!
-        const bool bNegativeDate = !bString && fVal < 0.0 && lcl_ExcelSingleDateTimeCode( sFormatString );
+        // weboffice: like Excel, a negative number shown with a date or time section is #VALUE!
+        const bool bNegativeDate = !bString && fVal < 0.0 && lcl_ExcelNegativeDateTimeCode( sFormatString );
         // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
         bool bInvalidCode = false;
         sFormatString = ScGlobal::ExcelTextFunctionFormatCode( sFormatString, eCellLang, bInvalidCode );
