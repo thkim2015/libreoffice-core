@@ -977,7 +977,7 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
     // 1/100 mm asks the direct-cursor fill logic (SwCursorShell::GetShadowCursorPos, the same test
     // the shadow cursor uses on mouse move) whether the point is an empty place where typing could
     // start. Returns void when it is not, otherwise sal_Int32[] { paragraphs to insert, orientation,
-    // cursor x, cursor y, cursor height, body left, body right } in 1/100 mm. Nothing moves.
+    // cursor x, cursor y, cursor height, body left, body right, at paragraph end, in plain body } in 1/100 mm. Nothing moves.
     if (rPropertyName.startsWith("ZetaShadowCursorAt:"))
     {
         const std::u16string_view aArgs = rPropertyName.subView(19);
@@ -1005,7 +1005,19 @@ uno::Any SAL_CALL SwXTextView::getPropertyValue(
         const auto mm = [](tools::Long n) { return static_cast<sal_Int32>(convertTwipToMm100(n)); };
         const css::uno::Sequence<sal_Int32> aOut{ static_cast<sal_Int32>(aFPos.nParaCnt), static_cast<sal_Int32>(aFPos.eOrient),
                                                   mm(aFPos.aCursor.Left()), mm(aFPos.aCursor.Top()), mm(aFPos.aCursor.Height()),
-                                                  mm(aPrt.Left()), mm(aPrt.Right()) };
+                                                  mm(aPrt.Left()), mm(aPrt.Right()),
+                                                  // 1 when the hit position is the end of its paragraph (Word acts on a
+                                                  // double click right of a paragraph's last line only, not of other lines)
+                                                  static_cast<sal_Int32>(aPos.GetNode().IsTextNode()
+                                                      && aPos.GetContentIndex() >= aPos.GetNode().GetTextNode()->Len()),
+                                                  // 1 when the hit is plain body text (not in a table, frame, header/footer,
+                                                  // footnote or section) - the only place the web shell's Click and Type acts
+                                                  static_cast<sal_Int32>(!aPos.GetNode().FindTableNode()
+                                                      && !aPos.GetNode().FindFlyStartNode()
+                                                      && !aPos.GetNode().FindHeaderStartNode()
+                                                      && !aPos.GetNode().FindFooterStartNode()
+                                                      && !aPos.GetNode().FindFootnoteStartNode()
+                                                      && !aPos.GetNode().FindSectionNode()) };
         aRet <<= aOut;
         return aRet;
     }
