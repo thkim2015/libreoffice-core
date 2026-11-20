@@ -3848,6 +3848,90 @@ void ImpSvNumberInputScan::ChangeNullDate( const sal_uInt16 Day,
 /**
  * Does rString represent a number (also date, time et al)
  */
+namespace {
+
+// weboffice: Excel reads an English month name in any locale in "Jan 5, 2015" (day, comma and
+// a space, year; any month prefix of three letters or more: "Janu", "Sept") and in "5 Jan 2015".
+// Such an upper-cased input is rewritten to an ISO 8601 date that every locale scans.
+sal_Int32 lcl_ExcelEnglishMonth( std::u16string_view aWord )
+{
+    static const char* const aMonths[12] = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE",
+        "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
+    if (aWord.size() < 3)
+        return 0;
+    for (sal_Int32 m = 0; m < 12; ++m)
+    {
+        const char* pName = aMonths[m];
+        size_t i = 0;
+        while (i < aWord.size() && pName[i] && aWord[i] == static_cast<sal_Unicode>(pName[i]))
+            ++i;
+        if (i == aWord.size())
+            return m + 1;
+    }
+    return 0;
+}
+
+bool lcl_ExcelEnglishMonthDate( OUString& rString )
+{
+    const sal_Int32 nLen = rString.getLength();
+    sal_Int32 i = 0;
+    auto skipSpaces = [&]() { sal_Int32 n = 0; while (i < nLen && rString[i] == ' ') { ++i; ++n; } return n; };
+    auto readDigits = [&]() { sal_Int32 nStart = i; while (i < nLen && rtl::isAsciiDigit(rString[i])) ++i; return i - nStart; };
+    auto readLetters = [&]() { sal_Int32 nStart = i; while (i < nLen && rString[i] >= 'A' && rString[i] <= 'Z') ++i; return i - nStart; };
+
+    skipSpaces();
+    sal_Int32 nMonth = 0, nDay = 0, nYear = 0;
+    sal_Int32 nStart = i;
+    if (sal_Int32 nLetters = readLetters())
+    {
+        // Month [spaces] Day "," spaces Year
+        nMonth = lcl_ExcelEnglishMonth(rString.subView(nStart, nLetters));
+        skipSpaces();
+        nStart = i;
+        const sal_Int32 nDayDigits = readDigits();
+        if (!nMonth || nDayDigits < 1 || nDayDigits > 2)
+            return false;
+        nDay = o3tl::toInt32(rString.subView(nStart, nDayDigits));
+        if (i >= nLen || rString[i] != ',')
+            return false;
+        ++i;
+        if (skipSpaces() < 1)
+            return false;
+    }
+    else
+    {
+        // Day spaces Month spaces Year
+        const sal_Int32 nDayDigits = readDigits();
+        if (nDayDigits < 1 || nDayDigits > 2 || skipSpaces() < 1)
+            return false;
+        nDay = o3tl::toInt32(rString.subView(nStart, nDayDigits));
+        nStart = i;
+        const sal_Int32 nLetters2 = readLetters();
+        nMonth = nLetters2 ? lcl_ExcelEnglishMonth(rString.subView(nStart, nLetters2)) : 0;
+        if (!nMonth || skipSpaces() < 1)
+            return false;
+    }
+    nStart = i;
+    if (readDigits() != 4)
+        return false;
+    nYear = o3tl::toInt32(rString.subView(nStart, 4));
+    skipSpaces();
+    if (i != nLen || nDay < 1 || nDay > 31 || nYear < 1900)
+        return false;
+    OUStringBuffer aBuf(10);
+    aBuf.append(OUString::number(nYear) + "-");
+    if (nMonth < 10)
+        aBuf.append('0');
+    aBuf.append(OUString::number(nMonth) + "-");
+    if (nDay < 10)
+        aBuf.append('0');
+    aBuf.append(nDay);
+    rString = aBuf.makeStringAndClear();
+    return true;
+}
+
+}
+
 bool ImpSvNumberInputScan::IsNumberFormat( const OUString& rString,         // string to be analyzed
                                            SvNumFormatType& F_Type,         // IN: old type, OUT: new type
                                            double& fOutNumber,              // OUT: number if convertible
@@ -3873,6 +3957,7 @@ bool ImpSvNumberInputScan::IsNumberFormat( const OUString& rString,         // s
         OUString aString = mrCurrentLanguageData.GetCharClass()->uppercase( rString );
         // convert native number to ASCII if necessary
         TransformInput(rNatNum, mrCurrentLanguageData, aString);
+        lcl_ExcelEnglishMonthDate( aString );
         res = IsNumberFormatMain( aString, pFormat );
     }
 
