@@ -419,12 +419,13 @@ SwVbaFind::Execute( const uno::Any& FindText, const uno::Any& MatchCase, const u
         SetReplaceWith( sValue );
     }
 
+    // Word: Replace defaults to wdReplaceNone for every Execute call; a replacement text (or an earlier
+    // Execute Replace:=...) must not turn a plain Find.Execute into a replace (the Find object is shared)
+    sal_Int32 nReplace = word::WdReplace::wdReplaceNone;
     if( Replace.hasValue() )
-    {
-        sal_Int32 nValue(0);
-        Replace >>= nValue;
-        SetReplace( nValue );
-    }
+        Replace >>= nReplace;
+    SetReplace( nReplace );
+    mbReplace = nReplace != word::WdReplace::wdReplaceNone;
 
     result = SearchReplace();
 
