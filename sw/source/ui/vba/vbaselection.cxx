@@ -1061,6 +1061,25 @@ void SAL_CALL SwVbaSelection::Paste(  )
     dispatchRequests( static_cast<SfxBaseModel*>(mxModel.get()), u".uno:Paste"_ustr );
 }
 
+void SAL_CALL SwVbaSelection::Cut(  )
+{
+    dispatchRequests( static_cast<SfxBaseModel*>(mxModel.get()), u".uno:Cut"_ustr );
+}
+
+// What the Word macro recorder writes for Ctrl+V (wdFormatOriginalFormatting); other types also paste as is
+void SAL_CALL SwVbaSelection::PasteAndFormat( sal_Int32 /*Type*/ )
+{
+    Paste();
+}
+
+// Word: clears character formatting and resets the paragraphs to the Normal style
+void SAL_CALL SwVbaSelection::ClearFormatting(  )
+{
+    dispatchRequests( static_cast<SfxBaseModel*>(mxModel.get()), u".uno:ResetAttributes"_ustr );
+    uno::Reference< beans::XPropertySet > xParaProps( mxTextViewCursor, uno::UNO_QUERY_THROW );
+    xParaProps->setPropertyValue(u"ParaStyleName"_ustr, uno::Any( u"Standard"_ustr ) );
+}
+
 void SAL_CALL SwVbaSelection::Collapse( const uno::Any& Direction )
 {
     if( word::gotoSelectedObjectAnchor( mxModel ) )

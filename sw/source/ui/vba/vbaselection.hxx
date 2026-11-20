@@ -107,6 +107,9 @@ public:
     virtual void SAL_CALL Copy(  ) override;
     virtual void SAL_CALL CopyAsPicture(  ) override;
     virtual void SAL_CALL Paste(  ) override;
+    virtual void SAL_CALL Cut(  ) override;
+    virtual void SAL_CALL PasteAndFormat( sal_Int32 Type ) override;
+    virtual void SAL_CALL ClearFormatting(  ) override;
     virtual void SAL_CALL Collapse( const css::uno::Any& Direction ) override;
     virtual void SAL_CALL WholeStory(  ) override;
     virtual sal_Bool SAL_CALL InRange( const css::uno::Reference< ::ooo::vba::word::XRange >& Range ) override;
