@@ -13485,7 +13485,12 @@ std::unique_ptr<ScDBQueryParamBase> ScInterpreter::GetDBParams( bool& rMissingFi
         svl::SharedString  aStr;
         ScRange aMissingRange;
         bool bRangeFake = false;
-        switch (GetStackType())
+        // weboffice: GetStackType() reports an empty argument as svDouble; keep it
+        // apart from an explicit 0 so that only DCOUNT(db,,crit) counts all records
+        StackVar eFieldType = GetRawStackType();
+        if (eFieldType == svEmptyCell)
+            eFieldType = svDouble;
+        switch (eFieldType)
         {
             case svDouble :
                 // weboffice: like Excel, DCOUNT(db,0,crit) is #VALUE!; only an empty field
