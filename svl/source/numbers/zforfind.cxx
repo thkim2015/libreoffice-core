@@ -818,6 +818,26 @@ bool ImpSvNumberInputScan::GetTimeAmPm( const OUString& rString, sal_Int32& nPos
             nPos = nPos + pLoc->getTimePM().getLength();
             return true;
         }
+        // weboffice: like Excel, the English AM/PM is read in every locale ("3:43 PM")
+        else if ( StringContains( u"AM"_ustr, rString, nPos ) )
+        {
+            nAmPm = 1;
+            nPos = nPos + 2;
+            return true;
+        }
+        else if ( StringContains( u"PM"_ustr, rString, nPos ) )
+        {
+            nAmPm = -1;
+            nPos = nPos + 2;
+            return true;
+        }
+        // and the single letter A/P at the end ("3:43 P")
+        else if ( nPos + 1 == rString.getLength() && ( rString[nPos] == 'A' || rString[nPos] == 'P' ) )
+        {
+            nAmPm = rString[nPos] == 'A' ? 1 : -1;
+            nPos = nPos + 1;
+            return true;
+        }
     }
 
     return false;
