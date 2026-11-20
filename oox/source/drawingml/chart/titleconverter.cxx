@@ -215,6 +215,10 @@ void TitleConverter::convertFromModel( const Reference< XTitled >& rxTitled, con
             aPropSet.setProperty(PROP_HasExplicitSpPr, true);
         }
 
+        // weboffice: c:overlay val="1" - title over the plot area
+        if (mrModel.mbOverlay)
+            aPropSet.setProperty(PROP_Overlay, true);
+
         // frame rotation
         OSL_ENSURE( !mrModel.mxTextProp || !rText.mxTextBody, "TitleConverter::convertFromModel - multiple text properties" );
         ModelRef< TextBody > xTextProp = mrModel.mxTextProp.is() ? mrModel.mxTextProp : rText.mxTextBody;

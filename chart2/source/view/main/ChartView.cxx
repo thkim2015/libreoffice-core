@@ -1164,6 +1164,12 @@ std::shared_ptr<VTitle> lcl_createTitle( TitleHelper::eTitleType eType
     }
     apVTitle->changePosition( aNewPosition );
 
+    // weboffice: an overlay title (OOXML c:overlay val="1") is drawn over the diagram and
+    // does not take space from it
+    bool bOverlay = false;
+    if (xTitle.is() && (xTitle->getPropertyValue(u"Overlay"_ustr) >>= bOverlay) && bOverlay)
+        return apVTitle;
+
     //remaining space
     switch( eAlignment )
     {

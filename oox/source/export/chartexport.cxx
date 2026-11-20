@@ -2899,7 +2899,17 @@ void ChartExport::exportTitle( const Reference< XShape >& xShape, bool bIsCharte
     }
 
     if (!bIsChartex) {
-        pFS->singleElement(FSNS(XML_c, XML_overlay), XML_val, "0");
+        // weboffice: chart2 Title "Overlay" (title drawn over the plot area)
+        bool bOverlay = false;
+        try
+        {
+            if (xPropSet.is())
+                xPropSet->getPropertyValue(u"Overlay"_ustr) >>= bOverlay;
+        }
+        catch (const uno::Exception&)
+        {
+        }
+        pFS->singleElement(FSNS(XML_c, XML_overlay), XML_val, bOverlay ? "1" : "0");
     }
 
     if (!bIsChartex) {

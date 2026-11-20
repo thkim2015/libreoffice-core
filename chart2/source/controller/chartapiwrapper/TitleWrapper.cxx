@@ -176,7 +176,8 @@ enum
     PROP_TITLE_FORMATTED_STRINGS,
     PROP_TITLE_VISIBLE,
     PROP_TITLE_TEXT_ROTATION,
-    PROP_TITLE_TEXT_STACKED
+    PROP_TITLE_TEXT_STACKED,
+    PROP_TITLE_OVERLAY
 };
 
 void lcl_AddPropertiesToVector(
@@ -207,6 +208,12 @@ void lcl_AddPropertiesToVector(
                   | beans::PropertyAttribute::MAYBEDEFAULT );
     rOutProperties.emplace_back( "StackedText",
                   PROP_TITLE_TEXT_STACKED,
+                  cppu::UnoType<bool>::get(),
+                  beans::PropertyAttribute::BOUND
+                  | beans::PropertyAttribute::MAYBEDEFAULT );
+    // weboffice: passed through to chart2 Title "Overlay" (c:title/c:overlay)
+    rOutProperties.emplace_back( "Overlay",
+                  PROP_TITLE_OVERLAY,
                   cppu::UnoType<bool>::get(),
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEDEFAULT );
