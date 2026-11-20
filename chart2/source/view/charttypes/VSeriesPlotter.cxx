@@ -811,7 +811,7 @@ rtl::Reference<SvxShapeText> VSeriesPlotter::createDataLabel( const rtl::Referen
 // weboffice: draw a "Data Callout" label (wedgeRectCallout) - one closed polygon around the label box
 // with a pointer whose tip is the data point; it takes over the label fill and border and lies below
 // the text, so the text shape itself is drawn without fill and border
-void VSeriesPlotter::createCalloutWedge( const rtl::Reference<SvxShapeGroup>& xTarget,
+void VSeriesPlotter::createCalloutWedge( const rtl::Reference<SvxShapeGroupAnyD>& xTarget,
                                          const rtl::Reference<SvxShapeText>& xTextShape,
                                          const awt::Point& rAnchor )
 {
