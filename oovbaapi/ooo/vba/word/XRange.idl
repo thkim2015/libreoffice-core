@@ -44,6 +44,8 @@ interface XRange
     [attribute] long Start;
     [attribute] long End;
     [attribute, readonly] XListFormat ListFormat;
+    // Word highlight colour (WdColorIndex: wdNoHighlight 0, wdYellow 7, ...)
+    [attribute] long HighlightColorIndex;
 
     void InsertBreak( [in] any Type ) raises (com::sun::star::script::BasicErrorException);
     void Select();

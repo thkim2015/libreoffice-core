@@ -132,6 +132,15 @@ static void addParagraphsToList(const Ref& a,
     }
 }
 
+// Word removes list numbering (and bullets) from the paragraphs of the range. NumberType
+// (wdNumberParagraph / wdNumberListNum / wdNumberAllNumbers) is accepted; Writer only has paragraph lists
+void SAL_CALL SwVbaListFormat::RemoveNumbers( const css::uno::Any& /*NumberType*/ )
+{
+    uno::Reference< beans::XPropertySet > xProps( mxTextRange, uno::UNO_QUERY_THROW );
+    // void NumberingRules = SwDoc::DelNumRules over the range (unocrsrhelper setNumberingProperty)
+    xProps->setPropertyValue(u"NumberingRules"_ustr, uno::Any());
+}
+
 void SAL_CALL SwVbaListFormat::ConvertNumbersToText(  )
 {
     rtl::Reference<SwXTextDocument> xModel(getThisWordDoc(mxContext));
