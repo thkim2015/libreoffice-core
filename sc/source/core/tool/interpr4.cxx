@@ -3125,7 +3125,7 @@ void ScInterpreter::ScDBGet()
     pQueryParam->mbSkipString = false;
     ScDBQueryDataIterator aValIter(mrDoc, mrContext, std::move(pQueryParam));
     ScDBQueryDataIterator::Value aValue;
-    if (!aValIter.GetFirst(aValue) || aValue.mnError != FormulaError::NONE)
+    if (!aValIter.GetFirst(aValue))
     {
         // No match found.
         PushNoValue();
@@ -3133,10 +3133,18 @@ void ScInterpreter::ScDBGet()
     }
 
     ScDBQueryDataIterator::Value aValNext;
-    if (aValIter.GetNext(aValNext) && aValNext.mnError == FormulaError::NONE)
+    if (aValIter.GetNext(aValNext))
     {
         // There should be only one unique match.
-        PushIllegalArgument();
+        // weboffice: Excel says #NUM! for more than one record, also when one is an error
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
+
+    // weboffice: like Excel, the one matching record's error value is the result
+    if (aValue.mnError != FormulaError::NONE)
+    {
+        PushError(aValue.mnError);
         return;
     }
 
