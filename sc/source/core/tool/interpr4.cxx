@@ -3504,7 +3504,8 @@ void ScInterpreter::ScExternal()
                                 ScRange aRange;
                                 PopDoubleRef( aRange );
                                 if (nGlobalError == FormulaError::NONE && lcl_ZetaRangeHasText(mrDoc, aRange))
-                                    SetError(FormulaError::NoValue); // weboffice: text in the numbers is #VALUE! like Excel
+                                    // weboffice: text in the numbers is #VALUE! like Excel (XNPV: #NUM!)
+                                    SetError(aUnoName.endsWith(".getXnpv") ? FormulaError::IllegalFPOperation : FormulaError::NoValue);
                                 else if (!ScRangeToSequence::FillDoubleArray( aParam, mrDoc, aRange ))
                                     SetError(FormulaError::IllegalParameter);
                             }
