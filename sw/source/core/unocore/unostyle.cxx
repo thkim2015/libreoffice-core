@@ -3191,7 +3191,7 @@ void SwXPageStyle::SetPropertyValues_Impl(const uno::Sequence<OUString>& rProper
     if(aBaseImpl.HasItemSet())
     {
         // weboffice: keep Undo for page style changes that do not touch header/footer properties
-        // (margins, size, orientation...) on pages without header/footer: SwUndoPageDesc handles
+        // (margins, size, orientation...), with or without header/footer: SwUndoPageDesc handles
         // those like the Page Style dialog does.
         // Fix i64460 still applies to Header*/Footer*/First* properties: Undo is off and the list is
         // cleared as before (creating and then deleting an SwUndoPageDesc there corrupts the
@@ -3200,13 +3200,10 @@ void SwXPageStyle::SetPropertyValues_Impl(const uno::Sequence<OUString>& rProper
         const bool bTouchesHeaderFooter = std::any_of(rPropertyNames.begin(), rPropertyNames.end(),
             [](const OUString& rName) { return rName.startsWith("Header") || rName.startsWith("Footer")
                                                || rName.startsWith("First"); });
-        // SwUndoPageDesc swaps the header/footer content nodes between the old and new page desc;
-        // through UNO that left a footer page number field empty, so pages with a header or footer
-        // keep the i64460 path too.
-        const SwPageDesc* pOldDesc = aBaseImpl.getNewBase()->GetPageDesc();
-        const bool bHasHeaderFooter = !pOldDesc || pOldDesc->GetMaster().GetHeader().IsActive()
-                                      || pOldDesc->GetMaster().GetFooter().IsActive();
-        if (!bTouchesHeaderFooter && !bHasHeaderFooter && rUndo.DoesUndo())
+        // Pages with a header or footer use the same path: SwUndoPageDesc's content node exchange
+        // no longer points the page desc at stale nodes (first page header fix), so the footer
+        // page number field survives Undo/Redo.
+        if (!bTouchesHeaderFooter && rUndo.DoesUndo())
         {
             aBaseImpl.getNewBase()->SetItemSet(aBaseImpl.GetItemSet());
             return;
