@@ -1055,6 +1055,10 @@ void SdrObject::SetGrabBagItem(const css::uno::Any& rVal)
     if (m_pGrabBagItem == nullptr)
         m_pGrabBagItem.reset(new SfxGrabBagItem);
 
+    // weboffice: effects drawn from the grab bag (reflection) change the drawn range - invalidate
+    // the old range while the old effects are still in place (Calc keeps no range cache, so
+    // after the change it would only repaint the new, smaller range and leave the reflection)
+    ActionChanged();
     m_pGrabBagItem->PutValue(rVal, 0);
 
     // weboffice: effects drawn from the grab bag (reflection) change the bound rect
