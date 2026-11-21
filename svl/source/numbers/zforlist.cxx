@@ -2664,6 +2664,10 @@ OUString SvNFFormatData::GetCalcCellReturn(sal_uInt32 nFormat) const
     bool        bThousand, bIsRed;
     pFormat->GetFormatSpecialInfo( bThousand, bIsRed, nPrec, nLeading );
 
+    // weboffice: like Excel, CELL("format") of the General format is "G"
+    if (SvNumberFormatter::GetIndexTableOffset(nFormat) == NF_NUMBER_STANDARD)
+        return u"G"_ustr;
+
     switch (pFormat->GetMaskedType())
     {
         case SvNumFormatType::NUMBER:
