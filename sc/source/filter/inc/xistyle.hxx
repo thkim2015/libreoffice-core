@@ -313,11 +313,22 @@ struct XclImpCellBorder : public XclCellBorder
     bool                HasAnyOuterBorder() const;
 
     /** Inserts a box item representing this border style into the item set.
-        @param bSkipPoolDefs  true = Do not put items equal to pool default; false = Put all items. */
+        @param bSkipPoolDefs  true = Do not put items equal to pool default; false = Put all items.
+        @param pExtColors  Optional XFEXT colors (left, right, top, bottom, diagonal) that
+        override the palette colors. */
     void                FillToItemSet(
                             SfxItemSet& rItemSet,
                             const XclImpPalette& rPalette,
-                            bool bSkipPoolDefs = false ) const;
+                            bool bSkipPoolDefs = false,
+                            const std::optional<Color>* pExtColors = nullptr ) const;
+};
+
+/** A color from an XFEXT record (Excel 2007+): auto, indexed, RGB or theme with tint. */
+struct XclImpExtColor
+{
+    sal_uInt16          mnType = 0;     /// EXC_XCLRTYPE_*.
+    sal_uInt32          mnValue = 0;    /// Palette index, RGBA bytes or theme index.
+    sal_Int16           mnTint = 0;     /// Tint/shade, -32767 (black) .. 32767 (white).
 };
 
 /** Extends the XclCellArea struct for import.
@@ -350,7 +361,9 @@ struct XclImpCellArea : public XclCellArea
     void                FillToItemSet(
                             SfxItemSet& rItemSet,
                             const XclImpPalette& rPalette,
-                            bool bSkipPoolDefs = false ) const;
+                            bool bSkipPoolDefs = false,
+                            const std::optional<Color>& rExtFore = std::nullopt,
+                            const std::optional<Color>& rExtBack = std::nullopt ) const;
 };
 
 /** Represents an XF record index with additional information. */
@@ -387,6 +400,9 @@ public:
 
     /** Reads an XF record. */
     void                ReadXF( XclImpStream& rStrm );
+
+    /** Stores one color property of an XFEXT record (EXC_XFEXT_* type). */
+    void                SetExtColor( sal_uInt16 nExtType, const XclImpExtColor& rColor );
 
     bool         GetLineBreak() const { return maAlignment.mbLineBreak; }
     sal_uInt8    GetHorAlign() const { return maAlignment.mnHorAlign; }
@@ -426,8 +442,17 @@ private:
         Therefore mbCellXF must be set correctly before calling this method. */
     void                SetUsedFlags( sal_uInt8 nUsedFlags );
 
+    /** Resolves an optional XFEXT color to a final color (nullopt = keep palette color). */
+    std::optional<Color> ResolveExtColor( const std::optional<XclImpExtColor>& roColor ) const;
+
 private:
     typedef ::std::unique_ptr< ScPatternAttr > ScPatternAttrPtr;
+
+    // XFEXT colors (Excel 2007+), override the palette colors of the XF record
+    std::optional<XclImpExtColor> moExtFillFore;
+    std::optional<XclImpExtColor> moExtFillBack;
+    std::optional<XclImpExtColor> moExtText;
+    std::optional<XclImpExtColor> moExtBorder[ 5 ];   /// left, right, top, bottom, diagonal
 
     ScPatternAttrPtr    mpPattern;          /// Calc item set.
     ScStyleSheet*       mpStyleSheet;       /// Calc cell style sheet.
@@ -492,6 +517,13 @@ public:
     void                ReadXF( XclImpStream& rStrm );
     /** Reads a STYLE record. */
     void                ReadStyle( XclImpStream& rStrm );
+    /** Reads an XFEXT record (Excel 2007+ extended XF colors). */
+    void                ReadXFExt( XclImpStream& rStrm );
+    /** Reads a THEME record (Excel 2007+ theme, zipped theme XML). */
+    void                ReadTheme( XclImpStream& rStrm );
+
+    /** Converts an XFEXT color to a final color, or returns false for "automatic". */
+    bool                ConvertExtColor( const XclImpExtColor& rExtColor, Color& rColor ) const;
 
     /** Returns the object that stores all contents of an XF record. */
     XclImpXF*    GetXF( sal_uInt16 nXFIndex )
@@ -519,6 +551,7 @@ private:
     XclImpStyleList     maBuiltinStyles;    /// List of built-in cell styles.
     XclImpStyleList     maUserStyles;       /// List of user defined cell styles.
     XclImpStyleMap      maStylesByXf;       /// Maps XF records to cell styles.
+    std::vector<Color>  maThemeColors;      /// Theme colors in Excel order (lt1, dk1, lt2, dk2, accent1-6, hlink, folHlink).
 };
 
 // Buffer for XF indexes in cells =============================================

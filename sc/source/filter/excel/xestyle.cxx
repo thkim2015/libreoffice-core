@@ -1656,7 +1656,7 @@ void lclGetBorderLine(
     //   EXC_BORDER_HAIR                EXC_BORDER_THIN                EXC_BORDER_MEDIUM              EXC_BORDER_THICK        MS Width
         {EXC_LINE_NONE                , EXC_LINE_NONE                , EXC_LINE_NONE                , EXC_LINE_NONE                }, //  0    BorderLineStyle::NONE
         {EXC_LINE_HAIR                , EXC_LINE_THIN                , EXC_LINE_MEDIUM              , EXC_LINE_THICK               }, //  1    BorderLineStyle::SOLID
-        {EXC_LINE_DOTTED              , EXC_LINE_DOTTED              , EXC_LINE_MEDIUM_SLANT_DASHDOT, EXC_LINE_MEDIUM_SLANT_DASHDOT}, //  2    BorderLineStyle::DOTTED
+        {EXC_LINE_HAIR                , EXC_LINE_DOTTED              , EXC_LINE_MEDIUM_SLANT_DASHDOT, EXC_LINE_MEDIUM_SLANT_DASHDOT}, //  2    BorderLineStyle::DOTTED
         {EXC_LINE_DOTTED              , EXC_LINE_DASHED              , EXC_LINE_MEDIUM_DASHED       , EXC_LINE_MEDIUM_DASHED       }, //  3    BorderLineStyle::DASHED
         {EXC_LINE_DASHED              , EXC_LINE_DASHED              , EXC_LINE_MEDIUM_SLANT_DASHDOT, EXC_LINE_MEDIUM_SLANT_DASHDOT}, //  4    BorderLineStyle::FINE_DASHED
         {EXC_LINE_DASHED              , EXC_LINE_THIN_DASHDOT        , EXC_LINE_MEDIUM_DASHDOT      , EXC_LINE_MEDIUM_DASHDOT      }, //  5    BorderLineStyle::DASH_DOT

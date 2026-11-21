@@ -1069,6 +1069,8 @@ ErrCode ImportExcel8::Read()
                     case EXC_ID2_FONT:          rFontBfr.ReadFont( maStrm );        break;
                     case EXC_ID4_FORMAT:        rNumFmtBfr.ReadFormat( maStrm );    break;
                     case EXC_ID5_XF:            rXFBfr.ReadXF( maStrm );            break;
+                    case EXC_ID_XFEXT:          rXFBfr.ReadXFExt( maStrm );         break;
+                    case EXC_ID_THEME:          rXFBfr.ReadTheme( maStrm );         break;
                     case EXC_ID_STYLE:          rXFBfr.ReadStyle( maStrm );         break;
 
                     case EXC_ID_SST:            rSst.ReadSst( maStrm );             break;

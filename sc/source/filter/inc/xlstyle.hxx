@@ -199,6 +199,26 @@ const sal_uInt16 EXC_ID_EFONT               = 0x0045;
 
 const sal_uInt16 EXC_ID_PALETTE             = 0x0092;
 
+// (0x087D) XFEXT, (0x0896) THEME - Excel 2007+ extended colors ---------------
+
+const sal_uInt16 EXC_ID_XFEXT               = 0x087D;
+const sal_uInt16 EXC_ID_THEME               = 0x0896;
+const sal_uInt16 EXC_ID_CONTINUEFRT12       = 0x087F;
+
+const sal_uInt16 EXC_XFEXT_FILL_FORE        = 0x0004;   /// Cell interior foreground color.
+const sal_uInt16 EXC_XFEXT_FILL_BACK        = 0x0005;   /// Cell interior background color.
+const sal_uInt16 EXC_XFEXT_BORDER_TOP       = 0x0007;
+const sal_uInt16 EXC_XFEXT_BORDER_BOTTOM    = 0x0008;
+const sal_uInt16 EXC_XFEXT_BORDER_LEFT      = 0x0009;
+const sal_uInt16 EXC_XFEXT_BORDER_RIGHT     = 0x000A;
+const sal_uInt16 EXC_XFEXT_BORDER_DIAG      = 0x000B;
+const sal_uInt16 EXC_XFEXT_TEXT             = 0x000D;   /// Text color.
+
+const sal_uInt16 EXC_XCLRTYPE_AUTO          = 0;
+const sal_uInt16 EXC_XCLRTYPE_INDEXED       = 1;
+const sal_uInt16 EXC_XCLRTYPE_RGB           = 2;
+const sal_uInt16 EXC_XCLRTYPE_THEME         = 3;
+
 const sal_uInt16 EXC_COLOR_BIFF2_BLACK      = 0;
 const sal_uInt16 EXC_COLOR_BIFF2_WHITE      = 1;
 

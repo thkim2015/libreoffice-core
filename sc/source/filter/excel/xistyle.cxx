@@ -80,6 +80,15 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <svl/numformat.hxx>
 #include <o3tl/string_view.hxx>
+#include <com/sun/star/container/XNameAccess.hpp>
+#include <com/sun/star/io/XInputStream.hpp>
+#include <com/sun/star/lang/XMultiServiceFactory.hpp>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/processfactory.hxx>
+#include <comphelper/seqstream.hxx>
+#include <rtl/strbuf.hxx>
+#include <cmath>
+#include <string>
 
 using namespace ::com::sun::star;
 
@@ -960,8 +969,12 @@ bool XclImpCellBorder::HasAnyOuterBorder() const
 namespace {
 
 /** Converts the passed line style to a ::editeng::SvxBorderLine, or returns false, if style is "no line". */
-bool lclConvertBorderLine( ::editeng::SvxBorderLine& rLine, const XclImpPalette& rPalette, sal_uInt8 nXclLine, sal_uInt16 nXclColor )
+bool lclConvertBorderLine( ::editeng::SvxBorderLine& rLine, const XclImpPalette& rPalette, sal_uInt8 nXclLine, sal_uInt16 nXclColor,
+                           const std::optional<Color>* pExtColor = nullptr )
 {
+    /*  Excel draws "hair" lines as a fine dotted line (every other pixel).
+        Import them as hair-width DOTTED lines, the export maps hair-width
+        DOTTED back to EXC_LINE_HAIR (see xestyle.cxx lclGetBorderLine). */
     static const sal_uInt16 ppnLineParam[][ 4 ] =
     {
         //  outer width,        type
@@ -972,7 +985,7 @@ bool lclConvertBorderLine( ::editeng::SvxBorderLine& rLine, const XclImpPalette&
         {   EXC_BORDER_THIN,    table::BorderLineStyle::DOTTED       }, // 4 = dotted
         {   EXC_BORDER_THICK,   table::BorderLineStyle::SOLID        }, // 5 = thick
         {   EXC_BORDER_THICK,   table::BorderLineStyle::DOUBLE_THIN  }, // 6 = double
-        {   EXC_BORDER_HAIR,    table::BorderLineStyle::SOLID        }, // 7 = hair
+        {   EXC_BORDER_HAIR,    table::BorderLineStyle::DOTTED       }, // 7 = hair
         {   EXC_BORDER_MEDIUM,  table::BorderLineStyle::DASHED       }, // 8 = med dash
         {   EXC_BORDER_THIN,    table::BorderLineStyle::DASH_DOT     }, // 9 = thin dashdot
         {   EXC_BORDER_MEDIUM,  table::BorderLineStyle::DASH_DOT     }, // A = med dashdot
@@ -986,7 +999,7 @@ bool lclConvertBorderLine( ::editeng::SvxBorderLine& rLine, const XclImpPalette&
     if( nXclLine >= std::size( ppnLineParam ) )
         nXclLine = EXC_LINE_THIN;
 
-    rLine.SetColor( rPalette.GetColor( nXclColor ) );
+    rLine.SetColor( (pExtColor && pExtColor->has_value()) ? **pExtColor : rPalette.GetColor( nXclColor ) );
     rLine.SetWidth( ppnLineParam[ nXclLine ][ 0 ] );
     rLine.SetBorderLineStyle( static_cast< SvxBorderLineStyle>(
                 ppnLineParam[ nXclLine ][ 1 ]) );
@@ -995,19 +1008,21 @@ bool lclConvertBorderLine( ::editeng::SvxBorderLine& rLine, const XclImpPalette&
 
 } // namespace
 
-void XclImpCellBorder::FillToItemSet( SfxItemSet& rItemSet, const XclImpPalette& rPalette, bool bSkipPoolDefs ) const
+void XclImpCellBorder::FillToItemSet( SfxItemSet& rItemSet, const XclImpPalette& rPalette, bool bSkipPoolDefs,
+                                      const std::optional<Color>* pExtColors ) const
 {
+    auto lclExt = [pExtColors]( int nIdx ) { return pExtColors ? pExtColors + nIdx : nullptr; };
     if( mbLeftUsed || mbRightUsed || mbTopUsed || mbBottomUsed )
     {
         SvxBoxItem aBoxItem( ATTR_BORDER );
         ::editeng::SvxBorderLine aLine;
-        if( mbLeftUsed && lclConvertBorderLine( aLine, rPalette, mnLeftLine, mnLeftColor ) )
+        if( mbLeftUsed && lclConvertBorderLine( aLine, rPalette, mnLeftLine, mnLeftColor, lclExt( 0 ) ) )
             aBoxItem.SetLine( &aLine, SvxBoxItemLine::LEFT );
-        if( mbRightUsed && lclConvertBorderLine( aLine, rPalette, mnRightLine, mnRightColor ) )
+        if( mbRightUsed && lclConvertBorderLine( aLine, rPalette, mnRightLine, mnRightColor, lclExt( 1 ) ) )
             aBoxItem.SetLine( &aLine, SvxBoxItemLine::RIGHT );
-        if( mbTopUsed && lclConvertBorderLine( aLine, rPalette, mnTopLine, mnTopColor ) )
+        if( mbTopUsed && lclConvertBorderLine( aLine, rPalette, mnTopLine, mnTopColor, lclExt( 2 ) ) )
             aBoxItem.SetLine( &aLine, SvxBoxItemLine::TOP );
-        if( mbBottomUsed && lclConvertBorderLine( aLine, rPalette, mnBottomLine, mnBottomColor ) )
+        if( mbBottomUsed && lclConvertBorderLine( aLine, rPalette, mnBottomLine, mnBottomColor, lclExt( 3 ) ) )
             aBoxItem.SetLine( &aLine, SvxBoxItemLine::BOTTOM );
         ScfTools::PutItem( rItemSet, aBoxItem, bSkipPoolDefs );
     }
@@ -1017,7 +1032,7 @@ void XclImpCellBorder::FillToItemSet( SfxItemSet& rItemSet, const XclImpPalette&
     SvxLineItem aTLBRItem( ATTR_BORDER_TLBR );
     SvxLineItem aBLTRItem( ATTR_BORDER_BLTR );
     ::editeng::SvxBorderLine aLine;
-    if( lclConvertBorderLine( aLine, rPalette, mnDiagLine, mnDiagColor ) )
+    if( lclConvertBorderLine( aLine, rPalette, mnDiagLine, mnDiagColor, lclExt( 4 ) ) )
     {
         if( mbDiagTLtoBR )
             aTLBRItem.SetLine( &aLine );
@@ -1091,7 +1106,8 @@ void XclImpCellArea::FillFromCF8( sal_uInt16 nPattern, sal_uInt16 nColor, sal_uI
     }
 }
 
-void XclImpCellArea::FillToItemSet( SfxItemSet& rItemSet, const XclImpPalette& rPalette, bool bSkipPoolDefs ) const
+void XclImpCellArea::FillToItemSet( SfxItemSet& rItemSet, const XclImpPalette& rPalette, bool bSkipPoolDefs,
+                                    const std::optional<Color>& rExtFore, const std::optional<Color>& rExtBack ) const
 {
     if( !mbPattUsed )    // colors may be both unused in cond. formats
         return;
@@ -1105,8 +1121,10 @@ void XclImpCellArea::FillToItemSet( SfxItemSet& rItemSet, const XclImpPalette& r
     }
     else
     {
-        Color aFore( rPalette.GetColor( mbForeUsed ? mnForeColor : EXC_COLOR_WINDOWTEXT ) );
-        Color aBack( rPalette.GetColor( mbBackUsed ? mnBackColor : EXC_COLOR_WINDOWBACK ) );
+        Color aFore( (mbForeUsed && rExtFore) ? *rExtFore :
+                     rPalette.GetColor( mbForeUsed ? mnForeColor : EXC_COLOR_WINDOWTEXT ) );
+        Color aBack( (mbBackUsed && rExtBack) ? *rExtBack :
+                     rPalette.GetColor( mbBackUsed ? mnBackColor : EXC_COLOR_WINDOWBACK ) );
         aBrushItem.SetColor( XclTools::GetPatternColor( aFore, aBack, mnPattern ) );
     }
 
@@ -1259,6 +1277,30 @@ void XclImpXF::ReadXF( XclImpStream& rStrm )
     }
 }
 
+void XclImpXF::SetExtColor( sal_uInt16 nExtType, const XclImpExtColor& rColor )
+{
+    switch( nExtType )
+    {
+        case EXC_XFEXT_FILL_FORE:       moExtFillFore = rColor;     break;
+        case EXC_XFEXT_FILL_BACK:       moExtFillBack = rColor;     break;
+        case EXC_XFEXT_TEXT:            moExtText = rColor;         break;
+        case EXC_XFEXT_BORDER_LEFT:     moExtBorder[ 0 ] = rColor;  break;
+        case EXC_XFEXT_BORDER_RIGHT:    moExtBorder[ 1 ] = rColor;  break;
+        case EXC_XFEXT_BORDER_TOP:      moExtBorder[ 2 ] = rColor;  break;
+        case EXC_XFEXT_BORDER_BOTTOM:   moExtBorder[ 3 ] = rColor;  break;
+        case EXC_XFEXT_BORDER_DIAG:     moExtBorder[ 4 ] = rColor;  break;
+        default:;
+    }
+}
+
+std::optional<Color> XclImpXF::ResolveExtColor( const std::optional<XclImpExtColor>& roColor ) const
+{
+    Color aColor;
+    if( roColor && GetXFBuffer().ConvertExtColor( *roColor, aColor ) )
+        return aColor;
+    return std::nullopt;
+}
+
 const ScPatternAttr& XclImpXF::CreatePattern( bool bSkipPoolDefs )
 {
     if( mpPattern )
@@ -1295,6 +1337,22 @@ const ScPatternAttr& XclImpXF::CreatePattern( bool bSkipPoolDefs )
         }
     }
 
+    // XFEXT colors (Excel 2007+) belong to this XF, they always need to be applied
+    const std::optional<Color> oExtText = ResolveExtColor( moExtText );
+    const std::optional<Color> oExtFillFore = ResolveExtColor( moExtFillFore );
+    const std::optional<Color> oExtFillBack = ResolveExtColor( moExtFillBack );
+    std::optional<Color> aExtBorder[ 5 ];
+    bool bAnyExtBorder = false;
+    for( int nIdx = 0; nIdx < 5; ++nIdx )
+    {
+        aExtBorder[ nIdx ] = ResolveExtColor( moExtBorder[ nIdx ] );
+        bAnyExtBorder = bAnyExtBorder || aExtBorder[ nIdx ].has_value();
+    }
+    if( oExtFillFore || oExtFillBack )
+        mbAreaUsed = true;
+    if( bAnyExtBorder )
+        mbBorderUsed = true;
+
     // cell protection
     if( mbProtUsed )
         maProtection.FillToItemSet( rItemSet, bSkipPoolDefs );
@@ -1302,6 +1360,8 @@ const ScPatternAttr& XclImpXF::CreatePattern( bool bSkipPoolDefs )
     // font
     if( mbFontUsed )
         GetFontBuffer().FillToItemSet( rItemSet, XclFontItemType::Cell, mnXclFont, bSkipPoolDefs );
+    if( oExtText )
+        rItemSet.Put( SvxColorItem( *oExtText, ATTR_FONT_COLOR ) );
 
     // value format
     if( mbFmtUsed )
@@ -1318,7 +1378,7 @@ const ScPatternAttr& XclImpXF::CreatePattern( bool bSkipPoolDefs )
     // border
     if( mbBorderUsed )
     {
-        maBorder.FillToItemSet( rItemSet, GetPalette(), bSkipPoolDefs );
+        maBorder.FillToItemSet( rItemSet, GetPalette(), bSkipPoolDefs, aExtBorder );
         GetTracer().TraceBorderLineStyle(maBorder.mnLeftLine > EXC_LINE_HAIR ||
             maBorder.mnRightLine > EXC_LINE_HAIR || maBorder.mnTopLine > EXC_LINE_HAIR ||
             maBorder.mnBottomLine > EXC_LINE_HAIR );
@@ -1327,7 +1387,7 @@ const ScPatternAttr& XclImpXF::CreatePattern( bool bSkipPoolDefs )
     // area
     if( mbAreaUsed )
     {
-        maArea.FillToItemSet( rItemSet, GetPalette(), bSkipPoolDefs );
+        maArea.FillToItemSet( rItemSet, GetPalette(), bSkipPoolDefs, oExtFillFore, oExtFillBack );
         GetTracer().TraceFillPattern(maArea.mnPattern != EXC_PATT_NONE &&
             maArea.mnPattern != EXC_PATT_SOLID);
     }
@@ -1603,6 +1663,186 @@ void XclImpXFBuffer::ReadStyle( XclImpStream& rStrm )
     XclImpStyle* pStyle = rStyleList.back().get();
     OSL_ENSURE( maStylesByXf.count( pStyle->GetXfId() ) == 0, "XclImpXFBuffer::ReadStyle - multiple styles with equal XF identifier" );
     maStylesByXf[ pStyle->GetXfId() ] = pStyle;
+}
+
+void XclImpXFBuffer::ReadXFExt( XclImpStream& rStrm )
+{
+    // FrtHeader (12), reserved (2), ixfe (2), reserved (2), cexts (2), then ExtProp array
+    if( rStrm.GetRecLeft() < 20 )
+        return;
+    rStrm.Ignore( 14 );
+    sal_uInt16 nXFIndex = rStrm.ReaduInt16();
+    rStrm.Ignore( 2 );
+    sal_uInt16 nCount = rStrm.ReaduInt16();
+    XclImpXF* pXF = GetXF( nXFIndex );
+    if( !pXF )
+        return;
+
+    for( sal_uInt16 nExt = 0; (nExt < nCount) && (rStrm.GetRecLeft() >= 4); ++nExt )
+    {
+        sal_uInt16 nExtType = rStrm.ReaduInt16();
+        sal_uInt16 nSize = rStrm.ReaduInt16();     // includes the 4 bytes of type and size
+        if( (nSize < 4) || (std::size_t( nSize - 4 ) > rStrm.GetRecLeft()) )
+            break;
+        std::size_t nDataSize = nSize - 4;
+        switch( nExtType )
+        {
+            case EXC_XFEXT_FILL_FORE:
+            case EXC_XFEXT_FILL_BACK:
+            case EXC_XFEXT_BORDER_TOP:
+            case EXC_XFEXT_BORDER_BOTTOM:
+            case EXC_XFEXT_BORDER_LEFT:
+            case EXC_XFEXT_BORDER_RIGHT:
+            case EXC_XFEXT_BORDER_DIAG:
+            case EXC_XFEXT_TEXT:
+                if( nDataSize >= 8 )
+                {
+                    // FullColorExt: xclrType (2), nTintShade (2), xclrValue (4), reserved (8)
+                    XclImpExtColor aColor;
+                    aColor.mnType = rStrm.ReaduInt16();
+                    aColor.mnTint = rStrm.ReadInt16();
+                    aColor.mnValue = rStrm.ReaduInt32();
+                    pXF->SetExtColor( nExtType, aColor );
+                    nDataSize -= 8;
+                }
+            break;
+            default:;
+        }
+        rStrm.Ignore( nDataSize );
+    }
+}
+
+namespace {
+
+/** Returns the color of the theme color scheme element rName (e.g. "accent1") in rXml. */
+std::optional<Color> lclFindThemeColor( std::string_view aXml, std::string_view aName )
+{
+    const std::string aOpen = ":" + std::string( aName ) + ">";
+    std::size_t nStart = aXml.find( aOpen );
+    if( nStart == std::string_view::npos )
+        return std::nullopt;
+    nStart += aOpen.size();
+    std::size_t nEnd = aXml.find( aOpen, nStart );     // closing tag "</a:name>"
+    if( nEnd == std::string_view::npos )
+        return std::nullopt;
+    std::string_view aElem = aXml.substr( nStart, nEnd - nStart );
+    for( std::string_view aAttr : { std::string_view( "srgbClr val=\"" ), std::string_view( "lastClr=\"" ) } )
+    {
+        std::size_t nPos = aElem.find( aAttr );
+        if( (nPos != std::string_view::npos) && (nPos + aAttr.size() + 6 <= aElem.size()) )
+        {
+            std::string_view aHex = aElem.substr( nPos + aAttr.size(), 6 );
+            if( aHex.find_first_not_of( "0123456789ABCDEFabcdef" ) == std::string_view::npos )
+                return Color( ColorTransparency, std::stoul( std::string( aHex ), nullptr, 16 ) );
+        }
+    }
+    return std::nullopt;
+}
+
+} // namespace
+
+void XclImpXFBuffer::ReadTheme( XclImpStream& rStrm )
+{
+    // FrtHeader (12), dwThemeVersion (4); version 0 = custom theme, zipped theme package follows
+    if( rStrm.GetRecLeft() < 16 )
+        return;
+    rStrm.Ignore( 12 );
+    if( rStrm.ReaduInt32() != 0 )
+        return;     // built-in default theme, use the default colors
+
+    std::vector< sal_Int8 > aData;
+    auto lclAppend = [&aData]( XclImpStream& rS )
+    {
+        std::size_t nSize = rS.GetRecLeft();
+        std::size_t nOld = aData.size();
+        aData.resize( nOld + nSize );
+        aData.resize( nOld + rS.Read( aData.data() + nOld, nSize ) );
+    };
+    lclAppend( rStrm );
+    while( rStrm.GetNextRecId() == EXC_ID_CONTINUEFRT12 )
+    {
+        if( !rStrm.StartNextRecord() || (rStrm.GetRecLeft() < 12) )
+            break;
+        rStrm.Ignore( 12 );
+        lclAppend( rStrm );
+    }
+
+    try
+    {
+        uno::Reference< io::XInputStream > xInStrm( new comphelper::SequenceInputStream(
+            uno::Sequence< sal_Int8 >( aData.data(), static_cast< sal_Int32 >( aData.size() ) ) ) );
+        uno::Reference< container::XNameAccess > xZip(
+            comphelper::getProcessServiceFactory()->createInstanceWithArguments(
+                u"com.sun.star.packages.zip.ZipFileAccess"_ustr, { uno::Any( xInStrm ) } ),
+            uno::UNO_QUERY_THROW );
+        for( const OUString& rName : xZip->getElementNames() )
+        {
+            if( !rName.startsWith( "theme/theme/theme" ) || !rName.endsWith( ".xml" ) )
+                continue;
+            uno::Reference< io::XInputStream > xEntry( xZip->getByName( rName ), uno::UNO_QUERY_THROW );
+            OStringBuffer aXml;
+            uno::Sequence< sal_Int8 > aBuf;
+            while( xEntry->readBytes( aBuf, 65536 ) > 0 )
+                aXml.append( reinterpret_cast< const char* >( aBuf.getConstArray() ), aBuf.getLength() );
+
+            // theme color indexes used by Excel: lt1, dk1, lt2, dk2, accent1-6, hlink, folHlink
+            static const std::string_view spcNames[] = { "lt1", "dk1", "lt2", "dk2",
+                "accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "hlink", "folHlink" };
+            std::vector< Color > aColors;
+            std::string_view aXmlView( aXml.getStr(), aXml.getLength() );
+            for( std::string_view aName : spcNames )
+            {
+                std::optional< Color > oColor = lclFindThemeColor( aXmlView, aName );
+                if( !oColor )
+                    break;
+                aColors.push_back( *oColor );
+            }
+            if( aColors.size() == std::size( spcNames ) )
+                maThemeColors = std::move( aColors );
+            break;
+        }
+    }
+    catch( const uno::Exception& )
+    {
+        TOOLS_WARN_EXCEPTION( "sc.filter", "XclImpXFBuffer::ReadTheme - cannot read theme" );
+    }
+}
+
+bool XclImpXFBuffer::ConvertExtColor( const XclImpExtColor& rExtColor, Color& rColor ) const
+{
+    // default Office theme (2013-2022), used if the file has no own theme
+    static const Color spaDefaultTheme[] = {
+        Color( ColorTransparency, 0xFFFFFF ), Color( ColorTransparency, 0x000000 ), Color( ColorTransparency, 0xE7E6E6 ), Color( ColorTransparency, 0x44546A ),
+        Color( ColorTransparency, 0x4472C4 ), Color( ColorTransparency, 0xED7D31 ), Color( ColorTransparency, 0xA5A5A5 ), Color( ColorTransparency, 0xFFC000 ),
+        Color( ColorTransparency, 0x5B9BD5 ), Color( ColorTransparency, 0x70AD47 ), Color( ColorTransparency, 0x0563C1 ), Color( ColorTransparency, 0x954F72 ) };
+
+    switch( rExtColor.mnType )
+    {
+        case EXC_XCLRTYPE_INDEXED:
+            rColor = GetPalette().GetColor( static_cast< sal_uInt16 >( rExtColor.mnValue ) );
+            if( rColor == COL_AUTO )
+                return false;
+        break;
+        case EXC_XCLRTYPE_RGB:
+            // xclrValue is a LongRGBA structure: red, green, blue, alpha bytes
+            rColor = Color( static_cast< sal_uInt8 >( rExtColor.mnValue ),
+                            static_cast< sal_uInt8 >( rExtColor.mnValue >> 8 ),
+                            static_cast< sal_uInt8 >( rExtColor.mnValue >> 16 ) );
+        break;
+        case EXC_XCLRTYPE_THEME:
+            if( rExtColor.mnValue >= std::size( spaDefaultTheme ) )
+                return false;
+            rColor = ( maThemeColors.size() == std::size( spaDefaultTheme ) ) ?
+                maThemeColors[ rExtColor.mnValue ] : spaDefaultTheme[ rExtColor.mnValue ];
+        break;
+        default:
+            return false;   // automatic or not set: keep the color of the XF record
+    }
+
+    // tint/shade: -32767 = black ... 0 = unchanged ... 32767 = white (HSL luminance)
+    if( rExtColor.mnTint != 0 )
+        rColor.ApplyTintOrShade( static_cast< sal_Int16 >( std::round( rExtColor.mnTint * 10000.0 / 32767.0 ) ) );
+    return true;
 }
 
 sal_uInt16 XclImpXFBuffer::GetFontIndex( sal_uInt16 nXFIndex ) const
