@@ -4034,6 +4034,8 @@ void ImpEditEngine::StripAllPortions( OutputDevice& rOutDev, tools::Rectangle aC
                                     *rParaPortion.GetNode(), nIndex, u"ZetaTextOutline"_ustr, u"ZO1 ");
                                 aInfo.maZetaTextShadow = lcl_ZetaCharSpec(
                                     *rParaPortion.GetNode(), nIndex, u"ZetaTextShadow"_ustr, u"ZS1 ");
+                                aInfo.maZetaTextReflection = lcl_ZetaCharSpec(
+                                    *rParaPortion.GetNode(), nIndex, u"ZetaTextReflection"_ustr, u"ZR1 ");
                                 rStripPortionsHelper.processDrawPortionInfo(aInfo);
 
                                 // #108052# remember that EOP is written already for this ParaPortion

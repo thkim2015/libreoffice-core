@@ -19,6 +19,10 @@
 
 #include <editeng/StripPortionsHelper.hxx>
 #include <optional>
+#include <functional>
+#include <drawinglayer/primitive2d/PolygonStrokePrimitive2D.hxx>
+#include <basegfx/polygon/b2dlinegeometry.hxx>
+#include <drawinglayer/primitive2d/textdecoratedprimitive2d.hxx>
 #include <drawinglayer/attribute/fontattribute.hxx>
 #include <drawinglayer/primitive2d/textlayoutdevice.hxx>
 #include <editeng/escapementitem.hxx>
@@ -779,6 +783,38 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
     }
     if (!aAll.count())
         return;
+    // underline/strikeout of the portion: Excel outlines them too and draws them over the glyphs
+    // (filled bar with the outline around it)
+    std::vector<std::pair<basegfx::B2DPolyPolygon, basegfx::BColor>> aDecos;
+    {
+        const drawinglayer::geometry::ViewInformation2D aViewInfo;
+        std::function<void(const drawinglayer::primitive2d::BasePrimitive2D*, int)> lcl_Deco
+            = [&](const drawinglayer::primitive2d::BasePrimitive2D* pPrim, int nDepth) {
+                  if (!pPrim || nDepth > 6)
+                      return;
+                  if (auto pStroke = dynamic_cast<const drawinglayer::primitive2d::PolygonStrokePrimitive2D*>(pPrim))
+                  {
+                      const double fHalf = pStroke->getLineAttribute().getWidth() / 2.0;
+                      if (fHalf > 0.0 && pStroke->getB2DPolygon().count() > 1)
+                          aDecos.emplace_back(basegfx::utils::createAreaGeometry(
+                                                  pStroke->getB2DPolygon(), fHalf,
+                                                  basegfx::B2DLineJoin::Miter,
+                                                  css::drawing::LineCap_BUTT),
+                                              pStroke->getLineAttribute().getColor());
+                      return;
+                  }
+                  if (dynamic_cast<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*>(pPrim)
+                      && !dynamic_cast<const drawinglayer::primitive2d::TextDecoratedPortionPrimitive2D*>(pPrim))
+                      return;
+                  drawinglayer::primitive2d::Primitive2DContainer aSub;
+                  pPrim->get2DDecomposition(aSub, aViewInfo);
+                  for (const auto& rSub : aSub)
+                      lcl_Deco(rSub.get(), nDepth + 1);
+              };
+        for (const auto* pText : aTexts)
+            if (dynamic_cast<const drawinglayer::primitive2d::TextDecoratedPortionPrimitive2D*>(pText))
+                lcl_Deco(pText, 0);
+    }
     if (aUnder.count() && aFill != u"-" && !aFill.empty()
         && (sal_uInt32(rFontColor.GetRGBColor()) & 0xFFFFFF) == (nAt & 0xFFFFFF))
     {
@@ -800,15 +836,172 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
         xStroke = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
             drawinglayer::primitive2d::Primitive2DContainer{ xStroke }, nTrans / 100.0);
     rPortions.push_back(xStroke);
+    for (const auto& [rArea, rColor] : aDecos)
+    {
+        rPortions.push_back(new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(rArea, rColor));
+        drawinglayer::primitive2d::Primitive2DReference xDeco(
+            new drawinglayer::primitive2d::PolyPolygonStrokePrimitive2D(
+                rArea, drawinglayer::attribute::LineAttribute(aLine.getBColor(), fWidth,
+                                                              basegfx::B2DLineJoin::Round)));
+        if (nTrans > 0)
+            xDeco = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
+                drawinglayer::primitive2d::Primitive2DContainer{ xDeco }, nTrans / 100.0);
+        rPortions.push_back(xDeco);
+    }
+}
+
+// weboffice: the Office effect transform of a text line (sx/sy/kx/ky around the algn point of the
+// portion's line box: glyph ink across, ascent to descent down), in final coordinates.
+// rB is the shape transform (rotation) applied after the local text layout; fDx/fDy move in the
+// local text direction when bLocalMove, else on the page
+basegfx::B2DHomMatrix zetaLineEffectTransform(const basegfx::B2DRange& rLocalBox,
+                                              const basegfx::B2DHomMatrix& rB, double fSx,
+                                              double fSy, sal_Int32 nKx, sal_Int32 nKy,
+                                              std::u16string_view aAlgn, double fDx, double fDy,
+                                              bool bLocalMove)
+{
+    double fAx = rLocalBox.getCenterX(), fAy = rLocalBox.getCenterY();
+    if (o3tl::starts_with(aAlgn, u"t"))
+        fAy = rLocalBox.getMinY();
+    else if (o3tl::starts_with(aAlgn, u"b"))
+        fAy = rLocalBox.getMaxY();
+    if (aAlgn == u"l" || aAlgn == u"tl" || aAlgn == u"bl")
+        fAx = rLocalBox.getMinX();
+    else if (aAlgn == u"r" || aAlgn == u"tr" || aAlgn == u"br")
+        fAx = rLocalBox.getMaxX();
+    basegfx::B2DHomMatrix aInvB(rB);
+    aInvB.invert();
+    basegfx::B2DHomMatrix aMat(aInvB);
+    aMat *= basegfx::utils::createTranslateB2DHomMatrix(-fAx, -fAy);
+    aMat.scale(fSx, fSy);
+    if (nKx != 0)
+        aMat.shearX(std::tan(basegfx::deg2rad(nKx / 60000.0)));
+    if (nKy != 0)
+        aMat.shearY(std::tan(basegfx::deg2rad(nKy / 60000.0)));
+    aMat.translate(fAx + (bLocalMove ? fDx : 0.0), fAy + (bLocalMove ? fDy : 0.0));
+    aMat *= rB;
+    if (!bLocalMove)
+        aMat.translate(fDx, fDy);
+    return aMat;
+}
+
+// weboffice: the local (unrotated) line box of the portion primitives from nBefore
+basegfx::B2DRange zetaPortionLocalBox(const drawinglayer::primitive2d::Primitive2DContainer& rPortions,
+                                      size_t nBefore, const basegfx::B2DRange& rLocalVertical,
+                                      const basegfx::B2DHomMatrix& rB)
+{
+    basegfx::B2DHomMatrix aInvB(rB);
+    aInvB.invert();
+    const drawinglayer::geometry::ViewInformation2D aViewInfo;
+    basegfx::B2DRange aInk;
+    for (size_t i = nBefore; i < rPortions.size(); ++i)
+        if (rPortions[i])
+            aInk.expand(rPortions[i]->getB2DRange(aViewInfo));
+    if (aInk.isEmpty())
+        return aInk;
+    aInk.transform(aInvB);
+    if (rLocalVertical.isEmpty())
+        return aInk;
+    return basegfx::B2DRange(aInk.getMinX(), rLocalVertical.getMinY(), aInk.getMaxX(),
+                             rLocalVertical.getMaxY());
+}
+
+// weboffice: Office text reflection (a:reflection in a:rPr), per line like Excel 2021 -
+// 'ZR1 <stA> <stPos> <endA> <endPos> <dist> <dir> <fadeDir> <sx> <sy> <blur> <kx> <ky> <algn>'
+// (DrawingML units): the portion mirrored around its line box (algn), faded from stA to endA
+// over stPos..endPos of the reflection height. Blur is not drawn (Office presets use 0.5pt)
+void zetaAddTextReflection(drawinglayer::primitive2d::Primitive2DContainer& rPortions,
+                           size_t nBefore, const OUString& rSpec,
+                           const basegfx::B2DRange& rLocalVertical, const basegfx::B2DHomMatrix& rB)
+{
+    sal_Int32 nIdx = 0;
+    if (o3tl::getToken(rSpec, 0, ' ', nIdx) != u"ZR1" || nIdx < 0 || rPortions.size() <= nBefore)
+        return;
+    sal_Int32 aN[12] = {};
+    for (sal_Int32& n : aN)
+    {
+        if (nIdx < 0)
+            return;
+        n = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx));
+    }
+    const std::u16string_view aAlgn = nIdx >= 0 ? o3tl::getToken(rSpec, 0, ' ', nIdx) : std::u16string_view(u"b");
+    const double fStA = aN[0] / 100000.0, fStPos = std::clamp(aN[1] / 100000.0, 0.0, 1.0);
+    const double fEndA = aN[2] / 100000.0;
+    const double fEndPos = std::clamp(aN[3] / 100000.0, fStPos, 1.0);
+    const double fSx = aN[7] / 100000.0, fSy = aN[8] / 100000.0;
+    if ((fStA <= 0.0 && fEndA <= 0.0) || fSx == 0.0 || fSy == 0.0)
+        return;
+    const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, rLocalVertical, rB));
+    if (aBox.isEmpty() || aBox.getHeight() <= 0.0)
+        return;
+    const double fDirRad = basegfx::deg2rad(aN[5] / 60000.0);
+    const double fDist = aN[4] / 360.0;
+    const basegfx::B2DHomMatrix aMat(zetaLineEffectTransform(
+        aBox, rB, fSx, fSy, aN[10], aN[11], aAlgn, fDist * std::cos(fDirRad),
+        fDist * std::sin(fDirRad), true));
+    drawinglayer::primitive2d::Primitive2DContainer aCopy;
+    for (size_t i = nBefore; i < rPortions.size(); ++i)
+        aCopy.push_back(rPortions[i]);
+
+    // the reflected line box in local coordinates (aMat without the shape transform)
+    basegfx::B2DHomMatrix aInvB(rB);
+    aInvB.invert();
+    basegfx::B2DHomMatrix aLocalMat(rB);
+    aLocalMat *= aMat;
+    aLocalMat *= aInvB;
+    basegfx::B2DRange aRefl(aBox);
+    aRefl.transform(aLocalMat);
+    // fade direction, nearest of right/down/left/up, from the reflection's start edge
+    const sal_Int32 nQuarter = ((aN[6] + 2700000) / 5400000 % 4 + 4) % 4;
+    const bool bVert = nQuarter == 1 || nQuarter == 3;
+    const double fStart = nQuarter == 0 ? aRefl.getMinX() : nQuarter == 1 ? aRefl.getMinY()
+                        : nQuarter == 2 ? aRefl.getMaxX() : aRefl.getMaxY();
+    const double fSign = (nQuarter == 0 || nQuarter == 1) ? 1.0 : -1.0;
+    const double fSize = bVert ? aRefl.getHeight() : aRefl.getWidth();
+    if (fSize <= 0.0)
+        return;
+    basegfx::B2DRange aAll(aRefl);
+    aAll.grow(fSize * 2.0 + aBox.getWidth() + aBox.getHeight());
+    auto band = [&](double fFrom, double fTo, double fAlpha) {
+        const double f1 = fStart + fSign * fFrom * fSize, f2 = fStart + fSign * fTo * fSize;
+        const basegfx::B2DRange aBand = bVert
+            ? basegfx::B2DRange(aAll.getMinX(), std::min(f1, f2), aAll.getMaxX(), std::max(f1, f2))
+            : basegfx::B2DRange(std::min(f1, f2), aAll.getMinY(), std::max(f1, f2), aAll.getMaxY());
+        const double fGray = 1.0 - std::clamp(fAlpha, 0.0, 1.0);
+        return drawinglayer::primitive2d::Primitive2DReference(
+            new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
+                basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(aBand)),
+                basegfx::BColor(fGray, fGray, fGray)));
+    };
+    const double fFarPos = 4.0;
+    drawinglayer::primitive2d::Primitive2DContainer aMask;
+    aMask.push_back(band(-fFarPos, fStPos, fStA));
+    const int nSteps = 32;
+    for (int i = 0; i < nSteps && fEndPos > fStPos; ++i)
+    {
+        const double fA = fStPos + (fEndPos - fStPos) * i / nSteps;
+        const double fZ = fStPos + (fEndPos - fStPos) * (i + 1) / nSteps;
+        aMask.push_back(band(fA, fZ, fStA + (fEndA - fStA) * (i + 0.5) / nSteps));
+    }
+    aMask.push_back(band(fEndPos, fFarPos, fEndA > 0.0 ? fEndA : 0.0));
+    drawinglayer::primitive2d::Primitive2DContainer aMaskFinal{
+        new drawinglayer::primitive2d::TransformPrimitive2D(rB, std::move(aMask)) };
+    drawinglayer::primitive2d::Primitive2DContainer aMirrored{
+        new drawinglayer::primitive2d::TransformPrimitive2D(aMat, std::move(aCopy)) };
+    rPortions.insert(rPortions.begin() + nBefore,
+                     new drawinglayer::primitive2d::TransparencePrimitive2D(
+                         std::move(aMirrored), std::move(aMaskFinal)));
 }
 }
 
 namespace
 {
 // weboffice: Office outer text shadow - 'ZS1 <dx EMU> <dy EMU> <blur EMU> <RGB hex> <opacity %>':
-// a blurred, colored copy of the portion's glyphs under them
+// a blurred, colored copy of the portion's glyphs under them. Optional tail ' i' = inner shadow,
+// ' t <sx> <sy> <kx> <ky> <algn>' = scale/skew (perspective) around the line box
 void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortions, size_t nBefore,
-                       const OUString& rSpec)
+                       const OUString& rSpec, const basegfx::B2DRange& rLocalVertical,
+                       const basegfx::B2DHomMatrix& rB)
 {
     sal_Int32 nIdx = 0;
     if (o3tl::getToken(rSpec, 0, ' ', nIdx) != u"ZS1" || nIdx < 0)
@@ -818,7 +1011,26 @@ void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortion
     const double fBlur = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 360.0;
     const Color aColor(ColorTransparency, o3tl::toUInt32(o3tl::getToken(rSpec, 0, ' ', nIdx), 16));
     const sal_Int32 nOpacity = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx));
-    const bool bInner = nIdx >= 0 && o3tl::getToken(rSpec, 0, ' ', nIdx) == u"i";
+    bool bInner = false, bTransform = false;
+    double fSx = 1.0, fSy = 1.0;
+    sal_Int32 nKx = 0, nKy = 0;
+    std::u16string_view aAlgn = u"b";
+    while (nIdx >= 0)
+    {
+        const std::u16string_view aTok = o3tl::getToken(rSpec, 0, ' ', nIdx);
+        if (aTok == u"i")
+            bInner = true;
+        else if (aTok == u"t" && nIdx >= 0)
+        {
+            fSx = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 100000.0;
+            fSy = nIdx >= 0 ? o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 100000.0 : 1.0;
+            nKx = nIdx >= 0 ? o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) : 0;
+            nKy = nIdx >= 0 ? o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) : 0;
+            if (nIdx >= 0)
+                aAlgn = o3tl::getToken(rSpec, 0, ' ', nIdx);
+            bTransform = fSx != 0.0 && fSy != 0.0;
+        }
+    }
     if (nOpacity <= 0 || rPortions.size() <= nBefore)
         return;
     if (bInner)
@@ -859,13 +1071,20 @@ void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortion
             aGlyphs, drawinglayer::primitive2d::Primitive2DContainer{ xInner }));
         return;
     }
+    // perspective/scaled outer shadow (Excel 2021: per line around the algn point of the line box)
+    basegfx::B2DHomMatrix aShadowMat(basegfx::utils::createTranslateB2DHomMatrix(fDx, fDy));
+    if (bTransform && !(fSx == 1.0 && fSy == 1.0 && nKx == 0 && nKy == 0))
+    {
+        const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, rLocalVertical, rB));
+        if (!aBox.isEmpty())
+            aShadowMat = zetaLineEffectTransform(aBox, rB, fSx, fSy, nKx, nKy, aAlgn, fDx, fDy, false);
+    }
     drawinglayer::primitive2d::Primitive2DContainer aCopy;
     for (size_t i = nBefore; i < rPortions.size(); ++i)
         aCopy.push_back(rPortions[i]);
     drawinglayer::primitive2d::Primitive2DReference xShadow(
         new drawinglayer::primitive2d::ShadowPrimitive2D(
-            basegfx::utils::createTranslateB2DHomMatrix(fDx, fDy), aColor.getBColor(), fBlur,
-            std::move(aCopy)));
+            aShadowMat, aColor.getBColor(), fBlur, std::move(aCopy)));
     if (nOpacity < 100)
         xShadow = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
             drawinglayer::primitive2d::Primitive2DContainer{ xShadow }, 1.0 - nOpacity / 100.0);
@@ -1061,7 +1280,27 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
         && maTextPortionPrimitives.size() > nBefore)
     {
         const size_t nOld = maTextPortionPrimitives.size();
-        zetaAddTextShadow(maTextPortionPrimitives, nBefore, rDrawPortionInfo.maZetaTextShadow);
+        zetaAddTextShadow(maTextPortionPrimitives, nBefore, rDrawPortionInfo.maZetaTextShadow,
+                          zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA,
+                                                   basegfx::B2DHomMatrix()),
+                          maNewTransformB);
+        if (maTextPortionPrimitives.size() > nOld && !rDrawPortionInfo.maZetaTextGradient.isEmpty()
+            && !maZetaGradientPortions.empty() && maZetaGradientPortions.back().mnStart == nBefore)
+        {
+            ++maZetaGradientPortions.back().mnStart;
+            ++maZetaGradientPortions.back().mnEnd;
+        }
+    }
+    // weboffice: text reflection under the portion (with its outline and shadow)
+    if (!rDrawPortionInfo.maZetaTextReflection.isEmpty()
+        && maTextPortionPrimitives.size() > nBefore)
+    {
+        const size_t nOld = maTextPortionPrimitives.size();
+        zetaAddTextReflection(maTextPortionPrimitives, nBefore,
+                              rDrawPortionInfo.maZetaTextReflection,
+                              zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA,
+                                                       basegfx::B2DHomMatrix()),
+                              maNewTransformB);
         if (maTextPortionPrimitives.size() > nOld && !rDrawPortionInfo.maZetaTextGradient.isEmpty()
             && !maZetaGradientPortions.empty() && maZetaGradientPortions.back().mnStart == nBefore)
         {

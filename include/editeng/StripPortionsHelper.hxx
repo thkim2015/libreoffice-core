@@ -68,6 +68,8 @@ public:
     OUString maZetaTextOutline;
     // weboffice: soft text shadow (CharInteropGrabBag 'ZetaTextShadow') - used with the shadowed font only
     OUString maZetaTextShadow;
+    // weboffice: text reflection per line (CharInteropGrabBag 'ZetaTextReflection') - empty if none
+    OUString maZetaTextReflection;
 
     bool IsRTL() const { return mnBiDiLevel % 2 == 1; }
 
