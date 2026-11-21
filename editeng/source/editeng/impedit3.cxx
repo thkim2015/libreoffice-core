@@ -548,8 +548,10 @@ static OUString lcl_ZetaTextGradient(const ContentNode& rNode, sal_Int32 nPos, c
     return aSpec;
 }
 
-// weboffice: the text outline spec ('ZO1 ...') of the char grab bag at nPos, or empty
-static OUString lcl_ZetaTextOutline(const ContentNode& rNode, sal_Int32 nPos)
+// weboffice: a spec string of the char grab bag at nPos ('ZetaTextOutline' 'ZO1 ...',
+// 'ZetaTextShadow' 'ZS1 ...'), or empty
+static OUString lcl_ZetaCharSpec(const ContentNode& rNode, sal_Int32 nPos, const OUString& rName,
+                                 std::u16string_view aPrefix)
 {
     const SfxGrabBagItem* pItem = nullptr;
     for (const auto& rAttr : rNode.GetCharAttribs().GetAttribs())
@@ -561,12 +563,12 @@ static OUString lcl_ZetaTextOutline(const ContentNode& rNode, sal_Int32 nPos)
         pItem = &rNode.GetContentAttribs().GetItem(EE_CHAR_GRABBAG);
     if (!pItem)
         return OUString();
-    const auto it = pItem->GetGrabBag().find(u"ZetaTextOutline"_ustr);
+    const auto it = pItem->GetGrabBag().find(rName);
     if (it == pItem->GetGrabBag().end())
         return OUString();
     OUString aSpec;
     it->second >>= aSpec;
-    return aSpec.startsWith("ZO1 ") ? aSpec : OUString();
+    return aSpec.startsWith(aPrefix) ? aSpec : OUString();
 }
 
 static sal_Int32 ImplCalculateFontIndependentLineSpacing( const sal_Int32 nFontHeight )
@@ -4028,8 +4030,10 @@ void ImpEditEngine::StripAllPortions( OutputDevice& rOutDev, tools::Rectangle aC
                                     aTextLineColor);
                                 aInfo.maZetaTextGradient = lcl_ZetaTextGradient(
                                     *rParaPortion.GetNode(), nIndex, aTmpFont.GetColor());
-                                aInfo.maZetaTextOutline = lcl_ZetaTextOutline(
-                                    *rParaPortion.GetNode(), nIndex);
+                                aInfo.maZetaTextOutline = lcl_ZetaCharSpec(
+                                    *rParaPortion.GetNode(), nIndex, u"ZetaTextOutline"_ustr, u"ZO1 ");
+                                aInfo.maZetaTextShadow = lcl_ZetaCharSpec(
+                                    *rParaPortion.GetNode(), nIndex, u"ZetaTextShadow"_ustr, u"ZS1 ");
                                 rStripPortionsHelper.processDrawPortionInfo(aInfo);
 
                                 // #108052# remember that EOP is written already for this ParaPortion

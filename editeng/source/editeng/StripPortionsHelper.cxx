@@ -40,6 +40,8 @@
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 #include <drawinglayer/primitive2d/PolyPolygonStrokePrimitive2D.hxx>
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
+#include <drawinglayer/primitive2d/shadowprimitive2d.hxx>
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <drawinglayer/attribute/lineattribute.hxx>
 #include <o3tl/string_view.hxx>
@@ -212,7 +214,8 @@ buildTextPortionPrimitive(const DrawPortionInfo& rInfo, const OUString& rText,
         }
 
         // prepare shadow/outline data
-        const bool bShadow(rInfo.mrFont.IsShadow());
+        // weboffice: a soft shadow spec replaces the hard font shadow (drawn in processDrawPortionInfo)
+        const bool bShadow(rInfo.mrFont.IsShadow() && rInfo.maZetaTextShadow.isEmpty());
 
         // TextDecoratedPortionPrimitive2D is needed, create one
         pNewPrimitive = new drawinglayer::primitive2d::TextDecoratedPortionPrimitive2D(
@@ -765,6 +768,37 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
 }
 }
 
+namespace
+{
+// weboffice: Office outer text shadow - 'ZS1 <dx EMU> <dy EMU> <blur EMU> <RGB hex> <opacity %>':
+// a blurred, colored copy of the portion's glyphs under them
+void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortions, size_t nBefore,
+                       const OUString& rSpec)
+{
+    sal_Int32 nIdx = 0;
+    if (o3tl::getToken(rSpec, 0, ' ', nIdx) != u"ZS1" || nIdx < 0)
+        return;
+    const double fDx = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 360.0;
+    const double fDy = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 360.0;
+    const double fBlur = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 360.0;
+    const Color aColor(ColorTransparency, o3tl::toUInt32(o3tl::getToken(rSpec, 0, ' ', nIdx), 16));
+    const sal_Int32 nOpacity = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx));
+    if (nOpacity <= 0 || rPortions.size() <= nBefore)
+        return;
+    drawinglayer::primitive2d::Primitive2DContainer aCopy;
+    for (size_t i = nBefore; i < rPortions.size(); ++i)
+        aCopy.push_back(rPortions[i]);
+    drawinglayer::primitive2d::Primitive2DReference xShadow(
+        new drawinglayer::primitive2d::ShadowPrimitive2D(
+            basegfx::utils::createTranslateB2DHomMatrix(fDx, fDy), aColor.getBColor(), fBlur,
+            std::move(aCopy)));
+    if (nOpacity < 100)
+        xShadow = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
+            drawinglayer::primitive2d::Primitive2DContainer{ xShadow }, 1.0 - nOpacity / 100.0);
+    rPortions.insert(rPortions.begin() + nBefore, xShadow);
+}
+}
+
 void TextHierarchyBreakup::zetaApplyTextGradients()
 {
     // PowerPoint 2021 실측(창 없이 COM Export): 글자 그라데이션은 줄마다 처음부터 다시 — 가로는 그 줄 글자 전체
@@ -947,6 +981,19 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
         zetaAddTextOutline(maTextPortionPrimitives, nBefore, rDrawPortionInfo.maZetaTextOutline,
                            rDrawPortionInfo.mrFont.GetColor(),
                            !rDrawPortionInfo.maZetaTextGradient.isEmpty());
+    }
+    // weboffice: soft text shadow under the portion (and its outline); shift the gradient range
+    if (!rDrawPortionInfo.maZetaTextShadow.isEmpty() && rDrawPortionInfo.mrFont.IsShadow()
+        && maTextPortionPrimitives.size() > nBefore)
+    {
+        const size_t nOld = maTextPortionPrimitives.size();
+        zetaAddTextShadow(maTextPortionPrimitives, nBefore, rDrawPortionInfo.maZetaTextShadow);
+        if (maTextPortionPrimitives.size() > nOld && !rDrawPortionInfo.maZetaTextGradient.isEmpty()
+            && !maZetaGradientPortions.empty() && maZetaGradientPortions.back().mnStart == nBefore)
+        {
+            ++maZetaGradientPortions.back().mnStart;
+            ++maZetaGradientPortions.back().mnEnd;
+        }
     }
 
     if (rDrawPortionInfo.mbEndOfLine || rDrawPortionInfo.mbEndOfParagraph)
