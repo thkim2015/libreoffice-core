@@ -41,6 +41,8 @@
 #include <vcl/bitmap.hxx>
 #include <vcl/alpha.hxx>
 #include <vcl/bitmap/BitmapFilterStackBlur.hxx>
+#include <vcl/BitmapReadAccess.hxx>
+#include <vcl/BitmapWriteAccess.hxx>
 #include <algorithm>
 #include <cmath>
 
@@ -51,13 +53,13 @@ namespace {
 // weboffice: Office shape and picture reflection (a:reflection). LibreOffice has no reflection
 // attribute; oox keeps it in the object's InteropGrabBag "EffectProperties" and writes it back
 // on export. Draw it from there only: a mirrored copy of the object, faded by a transparence
-// mask. Blur (blurRad) from 1pt is drawn as a blurred bitmap; skew (kx/ky) is not drawn.
+// mask. Blur (blurRad) from 1pt is drawn as a blurred bitmap; skew (kx/ky) shears around the anchor.
 // The reflection sits in an ObjectInfoPrimitive2D named "ZetaReflection" that hit tests skip.
 struct ZetaReflection
 {
     double fStA = 1.0, fStPos = 0.0, fEndA = 0.0, fEndPos = 1.0;
     sal_Int32 nDist = 0, nDir = 0, nFadeDir = 5400000, nSx = 100000, nSy = 100000;
-    sal_Int32 nBlur = 0;
+    sal_Int32 nBlur = 0, nKx = 0, nKy = 0;
     OUString aAlgn = u"b"_ustr;
 };
 
@@ -103,6 +105,8 @@ bool lcl_ZetaGetReflection(const SdrObject& rObj, ZetaReflection& rRefl)
         else if (rAttr.Name == "endPos") rRefl.fEndPos = n / 100000.0;
         else if (rAttr.Name == "dist") rRefl.nDist = n;
         else if (rAttr.Name == "blurRad") rRefl.nBlur = n;
+        else if (rAttr.Name == "kx") rRefl.nKx = n;
+        else if (rAttr.Name == "ky") rRefl.nKy = n;
         else if (rAttr.Name == "dir") rRefl.nDir = n;
         else if (rAttr.Name == "fadeDir") rRefl.nFadeDir = n;
         else if (rAttr.Name == "sx") rRefl.nSx = n;
@@ -138,6 +142,11 @@ drawinglayer::primitive2d::Primitive2DContainer lcl_ZetaAddReflection(
         return aSource;
     basegfx::B2DHomMatrix aMat(basegfx::utils::createTranslateB2DHomMatrix(-fAx, -fAy));
     aMat.scale(fSx, fSy);
+    // skew (DrawingML kx/ky, 1/60000 degree): x += tan(kx) * y, y += tan(ky) * x around the anchor
+    if (aRefl.nKx != 0)
+        aMat.shearX(std::tan(basegfx::deg2rad(aRefl.nKx / 60000.0)));
+    if (aRefl.nKy != 0)
+        aMat.shearY(std::tan(basegfx::deg2rad(aRefl.nKy / 60000.0)));
     aMat.translate(fAx + fDx, fAy + fDy);
 
     drawinglayer::primitive2d::Primitive2DContainer aMirrored{
@@ -214,8 +223,35 @@ drawinglayer::primitive2d::Primitive2DContainer lcl_ZetaAddReflection(
             const sal_Int32 nRadius = std::max<sal_Int32>(2, std::lround(fBlurPt * 2.0 * fScale));
             Bitmap aColor(aBmp.CreateColorBitmap());
             Bitmap aAlpha(aBmp.CreateAlphaMask().GetBitmap());
+            // blur premultiplied color, else the (undefined) color of transparent pixels bleeds
+            // into the edges as a fringe; alpha mask values are opacity (255 = opaque)
+            auto premultiply = [&](bool bUndo) {
+                BitmapScopedWriteAccess pColor(aColor);
+                BitmapScopedReadAccess pAlpha(aAlpha);
+                if (!pColor || !pAlpha)
+                    return;
+                const tools::Long nH = std::min(pColor->Height(), pAlpha->Height());
+                const tools::Long nWd = std::min(pColor->Width(), pAlpha->Width());
+                for (tools::Long y = 0; y < nH; ++y)
+                    for (tools::Long x = 0; x < nWd; ++x)
+                    {
+                        const sal_uInt32 a = pAlpha->GetPixelIndex(y, x);
+                        BitmapColor c(pColor->GetColor(y, x));
+                        auto f = [&](sal_uInt8 v) -> sal_uInt8 {
+                            if (!bUndo)
+                                return sal_uInt8(v * a / 255);
+                            return a ? sal_uInt8(std::min<sal_uInt32>(255, (v * 255 + a / 2) / a)) : 0;
+                        };
+                        c.SetRed(f(c.GetRed()));
+                        c.SetGreen(f(c.GetGreen()));
+                        c.SetBlue(f(c.GetBlue()));
+                        pColor->SetPixel(y, x, c);
+                    }
+            };
+            premultiply(false);
             BitmapFilter::Filter(aColor, BitmapFilterStackBlur(nRadius));
             BitmapFilter::Filter(aAlpha, BitmapFilterStackBlur(nRadius));
+            premultiply(true);
             xRefl = new drawinglayer::primitive2d::BitmapPrimitive2D(
                 Bitmap(aColor, AlphaMask(aAlpha)),
                 basegfx::utils::createScaleTranslateB2DHomMatrix(aRange.getWidth(), aRange.getHeight(),
