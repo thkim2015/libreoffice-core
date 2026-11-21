@@ -976,7 +976,7 @@ const std::pair<const char *, int> RID_STRLIST_FUNCTION_NAMES_ENGLISH_OOXML[] =
     { "_xlfn.ARABIC" , ocArabic },
     { "HYPERLINK" , ocHyperLink },
     { "INFO" , ocInfo },
-    { "_xlfn.BAHTTEXT" , ocBahtText },
+    { "BAHTTEXT" , ocBahtText }, // weboffice: Excel writes it without the _xlfn. prefix
     { "GETPIVOTDATA" , ocGetPivotData },
     { "EUROCONVERT" , ocEuroConvert },
     { "_xlfn.NUMBERVALUE" , ocNumberValue },

@@ -403,7 +403,7 @@ void ScInterpreter::ScGetWeekOfYear()
         return;
     }
     // weboffice: Excel's own 1900 calendar for the serials 0..60 (measured, tests/tmp/fnprobe cases57)
-    if (bExcel1900 && nSerial >= 0 && nSerial <= 60)
+    if (bExcel1900 && nSerial >= 0 && nSerial <= 366)
     {
         int nStart = -1; // first day of the week, Sunday = 0
         if (nFlag == 1 || nFlag == 17)
@@ -424,7 +424,7 @@ void ScInterpreter::ScGetWeekOfYear()
         {
             const int nIsoWeekday = ((nSerial + 5) % 7) + 1; // Monday = 1
             const int nThursday = nSerial - nIsoWeekday + 4;
-            PushInt(nThursday < 1 ? 52 : (nThursday - 1) / 7 + 1);
+            PushInt(nThursday < 1 ? 52 : (nThursday > 366 ? 1 : (nThursday - 1) / 7 + 1));
             return;
         }
     }
@@ -704,6 +704,11 @@ void ScInterpreter::ScNetWorkdays( bool bOOXML_Version )
             PushIllegalArgument();
             return;
         }
+        if (nDate1 < 0 || nDate2 < 0)
+        {
+            PushError(FormulaError::IllegalFPOperation); // weboffice: like Excel
+            return;
+        }
         nDate2 += nNullDate;
         nDate1 += nNullDate;
 
@@ -750,6 +755,11 @@ void ScInterpreter::ScWorkday_MS()
         if (nGlobalError != FormulaError::NONE || (nDate > SAL_MAX_INT32 - nNullDate))
         {
             PushIllegalArgument();
+            return;
+        }
+        if (nDate < 0)
+        {
+            PushError(FormulaError::IllegalFPOperation); // weboffice: like Excel
             return;
         }
         nDate += nNullDate;

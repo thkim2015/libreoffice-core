@@ -3093,6 +3093,9 @@ bool ScCompiler::ParseOpCode( const OUString& rName, bool bInArray )
     // weboffice: Excel writes some of them plainly (BAHTTEXT), so try the prefix for any OOXML name
     if (iLook == mxSymbols->getHashMap().end() && (aName != rName || mxSymbols->isOOXML()))
         iLook = mxSymbols->getHashMap().find( u"_xlfn." + aName);
+    // weboffice: and older files that wrote a plain Excel function with the prefix (_xlfn.BAHTTEXT)
+    if (iLook == mxSymbols->getHashMap().end() && mxSymbols->isOOXML() && aName.startsWithIgnoreAsciiCase(u"_xlfn."))
+        iLook = mxSymbols->getHashMap().find( aName.copy(6));
     bool bFound = (iLook != mxSymbols->getHashMap().end());
     if (bFound)
     {

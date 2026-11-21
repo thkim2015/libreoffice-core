@@ -15248,6 +15248,16 @@ static sal_Int32 ByteLen(sal_Unicode currentChar)
         {
             if (currentChar < 0x80 || rtl::isSurrogate(currentChar))
                 return 1;
+            switch (currentChar)
+            {
+                case 0x00A2: currentChar = 0xFFE0; break; // cent
+                case 0x00A3: currentChar = 0xFFE1; break; // pound
+                case 0x00AC: currentChar = 0xFFE2; break; // not
+                case 0x00AF: currentChar = 0xFFE3; break; // macron
+                case 0x00A6: currentChar = 0xFFE4; break; // broken bar
+                case 0x00A5: currentChar = 0xFFE5; break; // yen
+                default: break;
+            }
             OString aBytes;
             if (!OUString(&currentChar, 1).convertToString(&aBytes, eEnc,
                     RTL_UNICODETOTEXT_FLAGS_UNDEFINED_ERROR | RTL_UNICODETOTEXT_FLAGS_INVALID_ERROR))
