@@ -3893,50 +3893,102 @@ sal_Int32 lcl_ExcelEnglishMonth( std::u16string_view aWord )
 
 bool lcl_ExcelEnglishMonthDate( OUString& rString )
 {
+    // weboffice: the forms Excel reads (any locale), measured against Excel 365:
+    //   "Jan 5, 2015"  "Jan 5"  "Jan-5"  "5 Jan 2015"  "5-Jan-24"  "5/Jan"  "5 Jan"
+    // a missing year is the current year, a two-digit year is 2000..2029 or 1930..1999,
+    // and a time may follow the year ("5 Jan 2024 3:00")
     const sal_Int32 nLen = rString.getLength();
     sal_Int32 i = 0;
     auto skipSpaces = [&]() { sal_Int32 n = 0; while (i < nLen && rString[i] == ' ') { ++i; ++n; } return n; };
     auto readDigits = [&]() { sal_Int32 nStart = i; while (i < nLen && rtl::isAsciiDigit(rString[i])) ++i; return i - nStart; };
     auto readLetters = [&]() { sal_Int32 nStart = i; while (i < nLen && rString[i] >= 'A' && rString[i] <= 'Z') ++i; return i - nStart; };
+    // a separator: spaces, or one '-' or '/' (no spaces around)
+    auto readSep = [&]() -> sal_Unicode {
+        if (i < nLen && (rString[i] == '-' || rString[i] == '/'))
+            return rString[i++];
+        return skipSpaces() ? ' ' : 0;
+    };
 
     skipSpaces();
-    sal_Int32 nMonth = 0, nDay = 0, nYear = 0;
+    sal_Int32 nMonth = 0, nDay = 0, nYear = -1;
     sal_Int32 nStart = i;
+    sal_Unicode cSep = 0;
     if (sal_Int32 nLetters = readLetters())
     {
-        // Month [spaces] Day "," spaces Year
+        // Month sep Day [ "," spaces Year ]
         nMonth = lcl_ExcelEnglishMonth(rString.subView(nStart, nLetters));
-        skipSpaces();
+        if (!nMonth)
+            return false;
+        cSep = readSep();
+        if (!cSep)
+            return false;
         nStart = i;
         const sal_Int32 nDayDigits = readDigits();
-        if (!nMonth || nDayDigits < 1 || nDayDigits > 2)
+        if (nDayDigits < 1 || nDayDigits > 2)
             return false;
         nDay = o3tl::toInt32(rString.subView(nStart, nDayDigits));
-        if (i >= nLen || rString[i] != ',')
-            return false;
-        ++i;
-        if (skipSpaces() < 1)
-            return false;
+        skipSpaces();
+        if (i < nLen)
+        {
+            if (cSep != ' ' || rString[i] != ',')
+                return false;
+            ++i;
+            if (skipSpaces() < 1)
+                return false;
+            nStart = i;
+            if (readDigits() != 4)
+                return false;
+            nYear = o3tl::toInt32(rString.subView(nStart, 4));
+        }
     }
     else
     {
-        // Day spaces Month spaces Year
+        // Day sep Month [ sep Year ]
         const sal_Int32 nDayDigits = readDigits();
-        if (nDayDigits < 1 || nDayDigits > 2 || skipSpaces() < 1)
+        if (nDayDigits < 1 || nDayDigits > 2)
             return false;
         nDay = o3tl::toInt32(rString.subView(nStart, nDayDigits));
+        cSep = readSep();
+        if (!cSep)
+            return false;
         nStart = i;
         const sal_Int32 nLetters2 = readLetters();
         nMonth = nLetters2 ? lcl_ExcelEnglishMonth(rString.subView(nStart, nLetters2)) : 0;
-        if (!nMonth || skipSpaces() < 1)
+        if (!nMonth)
+            return false;
+        const sal_Int32 nAfterMonth = i;
+        if (readSep() == cSep)
+        {
+            nStart = i;
+            const sal_Int32 nYearDigits = readDigits();
+            if (nYearDigits == 4)
+                nYear = o3tl::toInt32(rString.subView(nStart, 4));
+            else if (nYearDigits == 2)
+            {
+                nYear = o3tl::toInt32(rString.subView(nStart, 2));
+                nYear += nYear < 30 ? 2000 : 1900;
+            }
+            else
+                return false;
+        }
+        else
+            i = nAfterMonth;
+    }
+    // what follows: nothing, or spaces and a time
+    OUString aTime;
+    const sal_Int32 nBeforeRest = i;
+    if (skipSpaces() && i < nLen && nYear >= 0 && rtl::isAsciiDigit(rString[i]))
+        aTime = OUString::Concat(" ") + rString.subView(i);
+    else
+    {
+        i = nBeforeRest;
+        skipSpaces();
+        if (i != nLen)
             return false;
     }
-    nStart = i;
-    if (readDigits() != 4)
-        return false;
-    nYear = o3tl::toInt32(rString.subView(nStart, 4));
-    skipSpaces();
-    if (i != nLen || nDay < 1 || nDay > 31 || nYear < 1900)
+    if (nYear < 0)
+        nYear = Date(Date::SYSTEM).GetYear();
+    if (nDay < 1 || nDay > 31 || nYear < 1900)
         return false;
     OUStringBuffer aBuf(10);
     aBuf.append(OUString::number(nYear) + "-");
@@ -3946,6 +3998,7 @@ bool lcl_ExcelEnglishMonthDate( OUString& rString )
     if (nDay < 10)
         aBuf.append('0');
     aBuf.append(nDay);
+    aBuf.append(aTime);
     rString = aBuf.makeStringAndClear();
     return true;
 }
