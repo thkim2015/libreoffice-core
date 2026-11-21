@@ -3957,7 +3957,7 @@ bool lcl_ExcelEnglishMonthDate( OUString& rString )
         if (!nMonth)
             return false;
         const sal_Int32 nAfterMonth = i;
-        if (readSep() == cSep)
+        if (readSep()) // Excel also reads "5-Jan 2024"
         {
             nStart = i;
             const sal_Int32 nYearDigits = readDigits();
