@@ -760,7 +760,7 @@ void ScInterpreter::ScChiSqDist_MS()
     else
     {
         double fX = GetDouble();
-        if ( fX < 0 )
+        if ( fX < 0 || ( !bCumulative && fX == 0.0 && fDF == 1.0 ) ) // weboffice: like Excel
             PushIllegalArgument();
         else
         {
@@ -1292,7 +1292,7 @@ void ScInterpreter::ScB()
         double p = GetDouble();
         double n = ::rtl::math::approxFloor(GetDouble());
         if (n < 0.0 || x < 0.0 || x > n || p < 0.0 || p > 1.0)
-            PushIllegalArgument();
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         else if (p == 0.0)
             PushDouble( (x == 0.0) ? 1.0 : 0.0 );
         else if ( p == 1.0)
@@ -1340,10 +1340,10 @@ void ScInterpreter::ScB()
                 else if ( p == 1.0 )
                     PushDouble( (xe == n) ? 1.0 : 0.0 );
                 else
-                    PushIllegalArgument();
+                    PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
             }
             else
-                PushIllegalArgument();
+                PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         }
     }
 }
@@ -1587,7 +1587,7 @@ void ScInterpreter::ScLogNormDist( int nMinParamCount ) //expanded, see #i100119
     if (bCumulative)
     { // cumulative
         if (x <= 0.0)
-            PushDouble(0.0);
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         else
             PushDouble(integralPhi((log(x)-mue)/sigma));
     }
@@ -1629,6 +1629,8 @@ void ScInterpreter::ScExpDist()
     double x      = GetDouble();                    // x
     if (lambda <= 0.0)
         PushIllegalArgument();
+    else if (x < 0.0)
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
     else if (kum == 0.0)                        // density
     {
         if (x >= 0.0)
@@ -1752,8 +1754,9 @@ void ScInterpreter::ScChiDist( bool bODFF )
         return;
     double fDF  = ::rtl::math::approxFloor(GetDouble());
     double fChi = GetDouble();
-    if ( fDF < 1.0 // x<=0 returns 1, see ODFF1.2 6.18.11
-       || ( !bODFF && fChi < 0 ) ) // Excel does not accept negative fChi
+    (void)bODFF;
+    if ( fDF < 1.0
+       || fChi < 0 ) // weboffice: Excel does not accept negative fChi (CHIDIST too)
     {
         PushIllegalArgument();
         return;
@@ -2233,7 +2236,7 @@ void ScInterpreter::ScBetaInv()
     fBeta  = GetDouble();
     fAlpha = GetDouble();
     fP     = GetDouble();
-    if (fP < 0.0 || fP > 1.0 || fA >= fB || fAlpha <= 0.0 || fBeta <= 0.0)
+    if (fP < 0.0 || fP >= 1.0 || fA >= fB || fAlpha <= 0.0 || fBeta <= 0.0) // weboffice: 1 too, like Excel
     {
         PushIllegalArgument();
         return;
@@ -3210,10 +3213,8 @@ void ScInterpreter::ScStandard()
         double sigma = GetDouble();
         double mue   = GetDouble();
         double x     = GetDouble();
-        if (sigma < 0.0)
-            PushError( FormulaError::IllegalArgument);
-        else if (sigma == 0.0)
-            PushError( FormulaError::DivisionByZero);
+        if (sigma <= 0.0)
+            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         else
             PushDouble((x-mue)/sigma);
     }
@@ -3452,7 +3453,7 @@ double ScInterpreter::GetPercentileExclusive(std::vector<double> & rArray, doubl
     }
     if ( fPercentile * nSize1 < 1.0 || fPercentile * nSize1 > static_cast<double>( nSize1 - 1 ) )
     {
-        SetError( FormulaError::IllegalParameter );
+        SetError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         return 0.0;
     }
 
@@ -4981,7 +4982,7 @@ void ScInterpreter::ScProbability()
                 }
             }
             if (bStop || std::abs((fSum -1.0).get()) > 1.0E-7)
-                PushNoValue();
+                PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
             else
                 PushDouble(fRes.get());
         }
@@ -5051,7 +5052,7 @@ void ScInterpreter::CalculatePearsonCovar( bool _bPearson, bool _bStexy, bool _b
         }
     }
     if (fCount < (_bStexy ? 3.0 : (_bSample ? 2.0 : 1.0)))
-        PushNoValue();
+        PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
     else
     {
         KahanSum fSumDeltaXDeltaY = 0.0; // sum of (ValX-MeanX)*(ValY-MeanY)
@@ -5161,7 +5162,7 @@ void ScInterpreter::CalculateSlopeIntercept(bool bSlope)
         }
     }
     if (fCount < 1.0)
-        PushNoValue();
+        PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
     else
     {
         KahanSum fSumDeltaXDeltaY = 0.0; // sum of (ValX-MeanX)*(ValY-MeanY)
@@ -5242,7 +5243,7 @@ void ScInterpreter::ScForecast()
         }
     }
     if (fCount < 1.0)
-        PushNoValue();
+        PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
     else
     {
         KahanSum fSumDeltaXDeltaY = 0.0; // sum of (ValX-MeanX)*(ValY-MeanY)
