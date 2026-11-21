@@ -3937,6 +3937,17 @@ void ScInterpreter::ScValue()
 
     sal_uInt32 nFIndex = 0;     // 0 for default locale
     OUString aNoDollar;
+    {
+        // weboffice: like Excel, a trailing sign is not read ("5-", "5 +")
+        sal_Int32 nEnd = aInputString.getLength();
+        while (nEnd > 0 && aInputString[nEnd - 1] == ' ')
+            --nEnd;
+        if (nEnd > 1 && (aInputString[nEnd - 1] == '-' || aInputString[nEnd - 1] == '+'))
+        {
+            PushNoValue();
+            return;
+        }
+    }
     if (mrContext.NFIsNumberFormat(aInputString, nFIndex, fVal))
         PushDouble(fVal);
     else if (ScStripTextDollar(aInputString, aNoDollar) && mrContext.NFIsNumberFormat(aNoDollar, nFIndex = 0, fVal))
@@ -15476,7 +15487,9 @@ void ScInterpreter::ScSearch()
     OUString SearchStr = GetString().getString();
     sal_Int32 nPos = nStart - 1;
     sal_Int32 nEndPos = sStr.getLength();
-    if( nPos >= nEndPos )
+    if (SearchStr.isEmpty() && nStart <= nEndPos + 1)
+        PushDouble( static_cast<double>(nStart) ); // weboffice: like Excel
+    else if( nPos >= nEndPos )
         PushNoValue();
     else
     {

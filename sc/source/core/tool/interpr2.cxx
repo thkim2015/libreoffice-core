@@ -1670,6 +1670,18 @@ void ScInterpreter::ScIRR()
     const sal_uInt16 nIterationsMax = 20;
     sal_uInt16 nItCount = 0;
     FormulaError nIterError = FormulaError::NONE;
+    for (int nTry = 0; nTry < 2; ++nTry) // weboffice: like Excel, a bad guess falls back to 10%
+    {
+    if (nTry == 1)
+    {
+        if (fEps < SCdEpsilon && std::isfinite(x) && x > -1.0)
+            break;
+        if (fEstimated == 0.1 || nGlobalError != FormulaError::NONE)
+            break;
+        x = 0.1;
+        fEps = 1.0;
+        nItCount = 0;
+    }
     while (fEps > SCdEpsilon && nItCount < nIterationsMax && nGlobalError == FormulaError::NONE)
     {                                       // Newtons method:
         KahanSum fNom = 0.0;
@@ -1712,6 +1724,7 @@ void ScInterpreter::ScIRR()
         nItCount++;
         fEps = std::abs(xNew - x);
         x = xNew;
+    }
     }
     if (fEstimated == 0.0 && std::abs(x) < SCdEpsilon)
         x = 0.0;                        // adjust to zero
@@ -1969,7 +1982,7 @@ void ScInterpreter::ScDB()
     if ( !MustHaveParamCount( nParamCount, 4, 5 ) )
         return ;
     double fMonths = nParamCount == 4 ? 12.0 : ::rtl::math::approxFloor(GetDouble());
-    double fPeriod = GetDouble();
+    double fPeriod = ::rtl::math::approxFloor(GetDouble()); // weboffice: Excel truncates the period
     double fLife = GetDouble();
     double fSalvage = GetDouble();
     double fCost = GetDouble();

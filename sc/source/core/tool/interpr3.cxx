@@ -766,6 +766,8 @@ void ScInterpreter::ScChiSqDist_MS()
         {
             if ( bCumulative )
                 PushDouble( GetChiSqDistCDF( fX, fDF ) );
+            else if ( fX == 0.0 && fDF == 2.0 )
+                PushDouble( 0.5 ); // weboffice: the density at 0, like Excel
             else
                 PushDouble( GetChiSqDistPDF( fX, fDF ) );
         }
@@ -1165,8 +1167,9 @@ void ScInterpreter::ScFisherInv()
 void ScInterpreter::ScFact()
 {
     double nVal = GetDouble();
-    const double fFact = nVal < 0.0 ? 0.0 : Fakultaet(nVal);
-    if (nVal < 0.0 || !std::isfinite(fFact))
+    const bool bOverflow = ::rtl::math::approxFloor(nVal) > 170.0; // weboffice: like Excel
+    const double fFact = (nVal < 0.0 || bOverflow) ? 0.0 : Fakultaet(nVal);
+    if (nVal < 0.0 || bOverflow || !std::isfinite(fFact))
         PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error and an overflow
     else
         PushDouble(fFact);
@@ -2238,7 +2241,7 @@ void ScInterpreter::ScBetaInv()
     fBeta  = GetDouble();
     fAlpha = GetDouble();
     fP     = GetDouble();
-    if (fP < 0.0 || fP >= 1.0 || fA >= fB || fAlpha <= 0.0 || fBeta <= 0.0) // weboffice: 1 too, like Excel
+    if (fP <= 0.0 || fP >= 1.0 || fA >= fB || fAlpha <= 0.0 || fBeta <= 0.0) // weboffice: 0 and 1 too, like Excel
     {
         PushIllegalArgument();
         return;
@@ -3061,7 +3064,7 @@ void ScInterpreter::ScGeoMean()
                     // value of 0 means that function result will be 0
                     while ( nParamCount-- > 0 )
                         PopError();
-                    PushDouble( 0.0 );
+                    PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
                     return;
                 }
                 else
@@ -3085,7 +3088,7 @@ void ScInterpreter::ScGeoMean()
                         // value of 0 means that function result will be 0
                         while ( nParamCount-- > 0 )
                             PopError();
-                        PushDouble( 0.0 );
+                        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
                         return;
                     }
                     else
@@ -3113,7 +3116,7 @@ void ScInterpreter::ScGeoMean()
                         // value of 0 means that function result will be 0
                         while ( nParamCount-- > 0 )
                             PopError();
-                        PushDouble( 0.0 );
+                        PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
                         return;
                     }
                     else
@@ -3131,7 +3134,7 @@ void ScInterpreter::ScGeoMean()
                             // value of 0 means that function result will be 0
                             while ( nParamCount-- > 0 )
                                 PopError();
-                            PushDouble( 0.0 );
+                            PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
                             return;
                         }
                         else
@@ -3164,7 +3167,7 @@ void ScInterpreter::ScGeoMean()
                                 // value of 0 means that function result will be 0
                                 while ( nParamCount-- > 0 )
                                     PopError();
-                                PushDouble( 0.0 );
+                                PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
                                 return;
                             }
                             else
@@ -3188,7 +3191,7 @@ void ScInterpreter::ScGeoMean()
                                     // value of 0 means that function result will be 0
                                     while ( nParamCount-- > 0 )
                                         PopError();
-                                    PushDouble( 0.0 );
+                                    PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
                                     return;
                                 }
                                 else

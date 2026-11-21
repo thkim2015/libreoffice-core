@@ -398,17 +398,12 @@ double SAL_CALL AnalysisAddIn::getTbilleq( const css::uno::Reference< css::beans
 double SAL_CALL AnalysisAddIn::getTbillprice( const css::uno::Reference< css::beans::XPropertySet >& xOpt,
     sal_Int32 nSettle, sal_Int32 nMat, double fDisc )
 {
-    if( fDisc <= 0.0 || nSettle > nMat || nMat - nSettle > 365 ) // weboffice: like Excel, at most a year
+    (void) xOpt;
+    if( fDisc <= 0.0 || nSettle >= nMat || nMat - nSettle > 365 ) // weboffice: like Excel, at most a year
         throw css::lang::IllegalArgumentException();
 
-    nMat++;
-
-    double  fFraction = GetYearFrac( xOpt, nSettle, nMat, 0 );  // method: USA 30/360
-
-    if( modf( fFraction, &o3tl::temporary(double()) ) == 0.0 )
-        throw css::lang::IllegalArgumentException();
-
-    double fRet = 100.0 * ( 1.0 - fDisc * fFraction );
+    // weboffice: like Excel, 100 * (1 - rate * DSM / 360) with the actual days DSM
+    double fRet = 100.0 * ( 1.0 - fDisc * double( nMat - nSettle ) / 360.0 );
     return finiteOrThrow( fRet );
 }
 

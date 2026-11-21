@@ -3891,6 +3891,26 @@ sal_Int32 lcl_ExcelEnglishMonth( std::u16string_view aWord )
     return 0;
 }
 
+bool lcl_HasEnglishMonthWord( const OUString& rString )
+{
+    sal_Int32 i = 0;
+    const sal_Int32 nLen = rString.getLength();
+    while (i < nLen)
+    {
+        if (rString[i] >= 'A' && rString[i] <= 'Z')
+        {
+            const sal_Int32 nStart = i;
+            while (i < nLen && rString[i] >= 'A' && rString[i] <= 'Z')
+                ++i;
+            if (lcl_ExcelEnglishMonth(rString.subView(nStart, i - nStart)))
+                return true;
+        }
+        else
+            ++i;
+    }
+    return false;
+}
+
 bool lcl_ExcelEnglishMonthDate( OUString& rString )
 {
     // weboffice: the forms Excel reads (any locale), measured against Excel 365:
@@ -3920,6 +3940,8 @@ bool lcl_ExcelEnglishMonthDate( OUString& rString )
         if (!nMonth)
             return false;
         cSep = readSep();
+        if (!cSep && i < nLen && rtl::isAsciiDigit(rString[i]))
+            cSep = ' '; // weboffice: Excel reads "Jan1, 2015" too
         if (!cSep)
             return false;
         nStart = i;
@@ -4030,8 +4052,11 @@ bool ImpSvNumberInputScan::IsNumberFormat( const OUString& rString,         // s
         OUString aString = mrCurrentLanguageData.GetCharClass()->uppercase( rString );
         // convert native number to ASCII if necessary
         TransformInput(rNatNum, mrCurrentLanguageData, aString);
-        lcl_ExcelEnglishMonthDate( aString );
-        res = IsNumberFormatMain( aString, pFormat );
+        // weboffice: an English month word outside Excel's date forms is not a number in Excel
+        if (!lcl_ExcelEnglishMonthDate( aString ) && lcl_HasEnglishMonthWord( aString ))
+            res = false;
+        else
+            res = IsNumberFormatMain( aString, pFormat );
     }
 
     if (res)
