@@ -3470,7 +3470,9 @@ void ScInterpreter::ScExternal()
                             {
                                 ScRange aRange;
                                 PopDoubleRef( aRange );
-                                if (!ScRangeToSequence::FillLongArray( aParam, mrDoc, aRange ))
+                                if (nGlobalError == FormulaError::NONE && lcl_ZetaRangeHasText(mrDoc, aRange))
+                                    SetError(FormulaError::NoValue); // weboffice: text in the numbers is #VALUE! like Excel (MULTINOMIAL)
+                                else if (!ScRangeToSequence::FillLongArray( aParam, mrDoc, aRange ))
                                     SetError(FormulaError::IllegalParameter);
                             }
                             break;
