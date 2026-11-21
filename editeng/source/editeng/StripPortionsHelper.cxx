@@ -18,6 +18,7 @@
  */
 
 #include <editeng/StripPortionsHelper.hxx>
+#include <optional>
 #include <drawinglayer/attribute/fontattribute.hxx>
 #include <drawinglayer/primitive2d/textlayoutdevice.hxx>
 #include <editeng/escapementitem.hxx>
@@ -41,6 +42,7 @@
 #include <drawinglayer/primitive2d/PolyPolygonStrokePrimitive2D.hxx>
 #include <drawinglayer/primitive2d/groupprimitive2d.hxx>
 #include <drawinglayer/primitive2d/shadowprimitive2d.hxx>
+#include <drawinglayer/primitive2d/maskprimitive2d.hxx>
 #include <basegfx/matrix/b2dhommatrixtools.hxx>
 #include <drawinglayer/primitive2d/textprimitive2d.hxx>
 #include <drawinglayer/attribute/lineattribute.hxx>
@@ -107,12 +109,45 @@ CheckFieldPrimitive(drawinglayer::primitive2d::BasePrimitive2D* pPrimitive,
     return xRet;
 }
 
+// weboffice: contoured (white) text with a text outline 'ZO1 <char color> <w> <line> <trans> <fill>'
+// whose char color is still the imported one: the fill color to draw it with instead of LO's contour
+// effect (glyph moved 8 ways in the outline color - it covers the fill and thickens the outline)
+std::optional<Color> zetaOutlineFill(const DrawPortionInfo& rInfo)
+{
+    if (rInfo.maZetaTextOutline.isEmpty() || !rInfo.maZetaTextGradient.isEmpty()
+        || !rInfo.mrFont.IsOutline())
+        return std::nullopt;
+    sal_Int32 nIdx = 0;
+    if (o3tl::getToken(rInfo.maZetaTextOutline, 0, ' ', nIdx) != u"ZO1" || nIdx < 0)
+        return std::nullopt;
+    const sal_uInt32 nAt = o3tl::toUInt32(o3tl::getToken(rInfo.maZetaTextOutline, 0, ' ', nIdx), 16);
+    for (int i = 0; i < 3 && nIdx >= 0; ++i)
+        o3tl::getToken(rInfo.maZetaTextOutline, 0, ' ', nIdx);
+    if (nIdx < 0)
+        return std::nullopt;
+    const std::u16string_view aFill = o3tl::getToken(rInfo.maZetaTextOutline, 0, ' ', nIdx);
+    if (aFill.empty() || aFill == u"-"
+        || (sal_uInt32(rInfo.mrFont.GetColor().GetRGBColor()) & 0xFFFFFF) != (nAt & 0xFFFFFF))
+        return std::nullopt;
+    return Color(ColorTransparency, o3tl::toUInt32(aFill, 16) & 0xFFFFFF);
+}
+
 rtl::Reference<drawinglayer::primitive2d::BasePrimitive2D>
 buildTextPortionPrimitive(const DrawPortionInfo& rInfo, const OUString& rText,
-                          const drawinglayer::attribute::FontAttribute& rFontAttribute,
+                          const drawinglayer::attribute::FontAttribute& rZetaFontAttribute,
                           const std::vector<double>& rDXArray,
                           const basegfx::B2DHomMatrix& rNewTransform)
 {
+    // weboffice: outlined contoured text is drawn filled (underline/strikeout stay; auto colors = fill)
+    const std::optional<Color> oZetaFill(zetaOutlineFill(rInfo));
+    const drawinglayer::attribute::FontAttribute rFontAttribute
+        = oZetaFill ? drawinglayer::attribute::FontAttribute(
+              rZetaFontAttribute.getFamilyName(), rZetaFontAttribute.getStyleName(),
+              rZetaFontAttribute.getWeight(), rZetaFontAttribute.getSymbol(),
+              rZetaFontAttribute.getVertical(), rZetaFontAttribute.getItalic(),
+              rZetaFontAttribute.getMonospaced(), false, rZetaFontAttribute.getRTL(),
+              rZetaFontAttribute.getBiDiStrong())
+                    : rZetaFontAttribute;
     ::std::vector<sal_Bool> aKashidaArray;
 
     if (!rInfo.mpKashidaArray.empty() && rInfo.mnTextLen)
@@ -126,7 +161,7 @@ buildTextPortionPrimitive(const DrawPortionInfo& rInfo, const OUString& rText,
     }
 
     // create complex text primitive and append
-    const Color aFontColor(rInfo.mrFont.GetColor());
+    const Color aFontColor(oZetaFill ? *oZetaFill : rInfo.mrFont.GetColor());
     const basegfx::BColor aBFontColor(aFontColor.getBColor());
 
     const Color aTextFillColor(rInfo.mrFont.GetFillColor());
@@ -728,14 +763,12 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
     for (size_t i = nBefore; i < rPortions.size(); ++i)
         zetaCollectText(rPortions[i].get(), aTexts, 0);
     basegfx::B2DPolyPolygon aAll, aUnder;
-    bool bAllUnder = !aTexts.empty();
     for (const auto* pText : aTexts)
     {
         basegfx::B2DPolyPolygonVector aOutlines;
         basegfx::B2DHomMatrix aTransform;
         pText->getTextOutlinesAndTransformation(aOutlines, aTransform);
         const bool bUnder = !bNoUnderlay && pText->getFontAttribute().getOutline();
-        bAllUnder = bAllUnder && bUnder;
         for (auto& rPoly : aOutlines)
         {
             rPoly.transform(aTransform);
@@ -755,11 +788,8 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
             aNew.push_back(rPortions[i]);
         aNew.push_back(new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
             aUnder, aFillColor.getBColor()));
-        // all glyphs contoured: the fill replaces them - LO's contour effect (glyph moved 8 ways in
-        // the outline color) would cover the fill and thicken the outline into a blob at small sizes
-        if (!bAllUnder)
-            for (size_t i = nBefore; i < rPortions.size(); ++i)
-                aNew.push_back(rPortions[i]);
+        for (size_t i = nBefore; i < rPortions.size(); ++i)
+            aNew.push_back(rPortions[i]);
         rPortions = std::move(aNew);
     }
     drawinglayer::primitive2d::Primitive2DReference xStroke(
@@ -788,8 +818,47 @@ void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortion
     const double fBlur = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 360.0;
     const Color aColor(ColorTransparency, o3tl::toUInt32(o3tl::getToken(rSpec, 0, ' ', nIdx), 16));
     const sal_Int32 nOpacity = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx));
+    const bool bInner = nIdx >= 0 && o3tl::getToken(rSpec, 0, ' ', nIdx) == u"i";
     if (nOpacity <= 0 || rPortions.size() <= nBefore)
         return;
+    if (bInner)
+    {
+        // inner shadow (a:innerShdw): the blurred, shifted outside of the glyphs (a frame around
+        // them minus the glyphs) masked by the glyphs, drawn over the portion
+        std::vector<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*> aTexts;
+        for (size_t i = nBefore; i < rPortions.size(); ++i)
+            zetaCollectText(rPortions[i].get(), aTexts, 0);
+        basegfx::B2DPolyPolygon aGlyphs;
+        for (const auto* pText : aTexts)
+        {
+            basegfx::B2DPolyPolygonVector aOutlines;
+            basegfx::B2DHomMatrix aTransform;
+            pText->getTextOutlinesAndTransformation(aOutlines, aTransform);
+            for (auto& rPoly : aOutlines)
+            {
+                rPoly.transform(aTransform);
+                aGlyphs.append(rPoly);
+            }
+        }
+        if (!aGlyphs.count())
+            return;
+        basegfx::B2DRange aFrame(aGlyphs.getB2DRange());
+        aFrame.grow(2.0 * fBlur + std::abs(fDx) + std::abs(fDy) + 100.0);
+        basegfx::B2DPolyPolygon aOutside(basegfx::utils::createPolygonFromRect(aFrame));
+        aOutside.append(aGlyphs);
+        drawinglayer::primitive2d::Primitive2DReference xInner(
+            new drawinglayer::primitive2d::ShadowPrimitive2D(
+                basegfx::utils::createTranslateB2DHomMatrix(fDx, fDy), aColor.getBColor(), fBlur,
+                drawinglayer::primitive2d::Primitive2DContainer{
+                    new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
+                        aOutside, aColor.getBColor()) }));
+        if (nOpacity < 100)
+            xInner = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
+                drawinglayer::primitive2d::Primitive2DContainer{ xInner }, 1.0 - nOpacity / 100.0);
+        rPortions.push_back(new drawinglayer::primitive2d::MaskPrimitive2D(
+            aGlyphs, drawinglayer::primitive2d::Primitive2DContainer{ xInner }));
+        return;
+    }
     drawinglayer::primitive2d::Primitive2DContainer aCopy;
     for (size_t i = nBefore; i < rPortions.size(); ++i)
         aCopy.push_back(rPortions[i]);
