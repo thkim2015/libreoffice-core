@@ -14393,6 +14393,17 @@ void ScInterpreter::ScOffset()
         PushError( nGlobalError);
         return;
     }
+    // weboffice: like Excel, a negative height or width reaches up or left from the moved corner
+    if (nRowNew < 0 && nRowNew > SAL_MIN_INT32)
+    {
+        nRowPlus += nRowNew + 1;
+        nRowNew = -nRowNew;
+    }
+    if (nColNew < 0 && nColNew > SAL_MIN_INT32)
+    {
+        nColPlus += nColNew + 1;
+        nColNew = -nColNew;
+    }
     if (nColNew <= 0 || nRowNew <= 0)
     {
         PushError( FormulaError::NoRef ); // weboffice: #REF! like Excel
