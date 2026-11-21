@@ -14259,8 +14259,14 @@ void ScInterpreter::ScAddressFunc()
     if( !MustHaveParamCount( nParamCount, 2, 5 ) )
         return;
 
+    // weboffice: like Excel, an empty (not omitted) sheet name gives "!A1"
+    bool bEmptyTabGiven = false;
     if( nParamCount >= 5 )
+    {
+        bEmptyTabGiven = !IsMissing();
         sTabStr = GetString().getString();
+        bEmptyTabGiven = bEmptyTabGiven && sTabStr.isEmpty();
+    }
 
     FormulaGrammar::AddressConvention eConv = FormulaGrammar::CONV_OOO;      // default
     if (nParamCount >= 4 && 0.0 == GetDoubleWithDefault( 1.0))
@@ -14353,6 +14359,9 @@ void ScInterpreter::ScAddressFunc()
         sTabStr += aRefStr;
         PushString( sTabStr );
     }
+    else if (bEmptyTabGiven
+             && (eConv == FormulaGrammar::CONV_XL_R1C1 || eConv == FormulaGrammar::CONV_XL_A1))
+        PushString( OUString(u"!" + aRefStr) );
     else
         PushString( aRefStr );
 }
