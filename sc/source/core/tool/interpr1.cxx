@@ -3723,15 +3723,20 @@ void ScInterpreter::ScN()
 void ScInterpreter::ScTrim()
 {
     // Doesn't only trim but also removes duplicated blanks within!
-    OUString aVal = comphelper::string::strip(GetString().getString(), ' ');
-    OUStringBuffer aStr;
-    const sal_Unicode* p = aVal.getStr();
-    const sal_Unicode* const pEnd = p + aVal.getLength();
-    while ( p < pEnd )
+    // weboffice: like Excel (Korean), the ideographic space U+3000 is a blank too; a run of
+    // blanks keeps its first character
+    auto isBlank = [](sal_Unicode c) { return c == ' ' || c == 0x3000; };
+    const OUString aIn = GetString().getString();
+    sal_Int32 nStart = 0, nEnd = aIn.getLength();
+    while (nStart < nEnd && isBlank(aIn[nStart]))
+        ++nStart;
+    while (nEnd > nStart && isBlank(aIn[nEnd - 1]))
+        --nEnd;
+    OUStringBuffer aStr(nEnd - nStart);
+    for (sal_Int32 i = nStart; i < nEnd; ++i)
     {
-        if ( *p != ' ' || p[-1] != ' ' )    // first can't be ' ', so -1 is fine
-            aStr.append(*p);
-        p++;
+        if ( !isBlank(aIn[i]) || !isBlank(aIn[i - 1]) )    // first can't be blank, so -1 is fine
+            aStr.append(aIn[i]);
     }
     PushString(aStr.makeStringAndClear());
 }
@@ -3979,6 +3984,17 @@ void ScInterpreter::ScNumberValue()
         return; // leave on stack
         default:
         aInputString = GetString().getString();
+    }
+    // weboffice: like Excel, full-width digits, signs and separators are read as ASCII
+    {
+        OUStringBuffer aHalf(aInputString.getLength());
+        for (sal_Int32 i = 0; i < aInputString.getLength(); ++i)
+        {
+            const sal_Unicode c = aInputString[i];
+            aHalf.append((c >= 0xFF01 && c <= 0xFF5E) ? static_cast<sal_Unicode>(c - 0xFEE0)
+                         : (c == 0x3000 ? u' ' : c));
+        }
+        aInputString = aHalf.makeStringAndClear();
     }
     if ( nGlobalError != FormulaError::NONE )
     {
