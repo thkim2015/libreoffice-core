@@ -36,6 +36,11 @@
 #include <basegfx/polygon/b2dpolygontools.hxx>
 #include <com/sun/star/beans/PropertyValue.hpp>
 #include <basegfx/numeric/ftools.hxx>
+#include <drawinglayer/primitive2d/bitmapprimitive2d.hxx>
+#include <drawinglayer/converters.hxx>
+#include <vcl/bitmap.hxx>
+#include <vcl/alpha.hxx>
+#include <vcl/bitmap/BitmapFilterStackBlur.hxx>
 #include <algorithm>
 #include <cmath>
 
@@ -46,11 +51,13 @@ namespace {
 // weboffice: Office shape and picture reflection (a:reflection). LibreOffice has no reflection
 // attribute; oox keeps it in the object's InteropGrabBag "EffectProperties" and writes it back
 // on export. Draw it from there only: a mirrored copy of the object, faded by a transparence
-// mask. Blur (blurRad) and skew (kx/ky) are not drawn.
+// mask. Blur (blurRad) from 1pt is drawn as a blurred bitmap; skew (kx/ky) is not drawn.
+// The reflection sits in an ObjectInfoPrimitive2D named "ZetaReflection" that hit tests skip.
 struct ZetaReflection
 {
     double fStA = 1.0, fStPos = 0.0, fEndA = 0.0, fEndPos = 1.0;
     sal_Int32 nDist = 0, nDir = 0, nFadeDir = 5400000, nSx = 100000, nSy = 100000;
+    sal_Int32 nBlur = 0;
     OUString aAlgn = u"b"_ustr;
 };
 
@@ -95,6 +102,7 @@ bool lcl_ZetaGetReflection(const SdrObject& rObj, ZetaReflection& rRefl)
         else if (rAttr.Name == "endA") rRefl.fEndA = n / 100000.0;
         else if (rAttr.Name == "endPos") rRefl.fEndPos = n / 100000.0;
         else if (rAttr.Name == "dist") rRefl.nDist = n;
+        else if (rAttr.Name == "blurRad") rRefl.nBlur = n;
         else if (rAttr.Name == "dir") rRefl.nDir = n;
         else if (rAttr.Name == "fadeDir") rRefl.nFadeDir = n;
         else if (rAttr.Name == "sx") rRefl.nSx = n;
@@ -180,8 +188,44 @@ drawinglayer::primitive2d::Primitive2DContainer lcl_ZetaAddReflection(
     else
         aMask.push_back(band(fEndPos, fFarPos, 0.0));
 
+    drawinglayer::primitive2d::Primitive2DReference xRefl(
+        new drawinglayer::primitive2d::TransparencePrimitive2D(std::move(aMirrored), std::move(aMask)));
+
+    // blur: render the faded reflection at 2 px per pt and blur color and alpha (stack blur);
+    // below 1pt (Office presets use 0.5pt) the difference is under a pixel, keep it vector
+    const double fBlurPt = aRefl.nBlur / 12700.0;
+    if (fBlurPt >= 1.0)
+    {
+        const double fUnitsPerPt = fEmu * 12700.0;
+        basegfx::B2DRange aRange(aAll);
+        aRange.grow(fBlurPt * fUnitsPerPt);
+        const double fPxPerUnit = 2.0 / fUnitsPerPt;
+        const sal_uInt32 nW = std::max<sal_uInt32>(1, std::ceil(aRange.getWidth() * fPxPerUnit));
+        const sal_uInt32 nH = std::max<sal_uInt32>(1, std::ceil(aRange.getHeight() * fPxPerUnit));
+        basegfx::B2DHomMatrix aEmbed(basegfx::utils::createTranslateB2DHomMatrix(-aRange.getMinX(), -aRange.getMinY()));
+        aEmbed.scale(nW / aRange.getWidth(), nH / aRange.getHeight());
+        drawinglayer::primitive2d::Primitive2DContainer aSeq{
+            new drawinglayer::primitive2d::TransformPrimitive2D(aEmbed, drawinglayer::primitive2d::Primitive2DContainer{ xRefl }) };
+        const Bitmap aBmp(drawinglayer::convertToBitmap(std::move(aSeq), drawinglayer::geometry::ViewInformation2D(),
+                                                        nW, nH, 1000000, true));
+        if (!aBmp.IsEmpty() && aBmp.GetSizePixel().Width() > 0)
+        {
+            const double fScale = double(aBmp.GetSizePixel().Width()) / nW;
+            const sal_Int32 nRadius = std::max<sal_Int32>(2, std::lround(fBlurPt * 2.0 * fScale));
+            Bitmap aColor(aBmp.CreateColorBitmap());
+            Bitmap aAlpha(aBmp.CreateAlphaMask().GetBitmap());
+            BitmapFilter::Filter(aColor, BitmapFilterStackBlur(nRadius));
+            BitmapFilter::Filter(aAlpha, BitmapFilterStackBlur(nRadius));
+            xRefl = new drawinglayer::primitive2d::BitmapPrimitive2D(
+                Bitmap(aColor, AlphaMask(aAlpha)),
+                basegfx::utils::createScaleTranslateB2DHomMatrix(aRange.getWidth(), aRange.getHeight(),
+                                                                 aRange.getMinX(), aRange.getMinY()));
+        }
+    }
+
     drawinglayer::primitive2d::Primitive2DContainer aRet;
-    aRet.push_back(new drawinglayer::primitive2d::TransparencePrimitive2D(std::move(aMirrored), std::move(aMask)));
+    aRet.push_back(new drawinglayer::primitive2d::ObjectInfoPrimitive2D(
+        drawinglayer::primitive2d::Primitive2DContainer{ xRefl }, u"ZetaReflection"_ustr, OUString(), OUString()));
     aRet.append(std::move(aSource));
     return aRet;
 }

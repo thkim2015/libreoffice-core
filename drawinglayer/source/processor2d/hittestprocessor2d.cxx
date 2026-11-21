@@ -18,6 +18,7 @@
  */
 
 #include <drawinglayer/processor2d/hittestprocessor2d.hxx>
+#include <drawinglayer/primitive2d/objectinfoprimitive2d.hxx>
 #include <drawinglayer/primitive2d/drawinglayer_primitivetypes2d.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
 #include <drawinglayer/primitive2d/PolygonHairlinePrimitive2D.hxx>
@@ -444,6 +445,15 @@ namespace drawinglayer::processor2d
                 case PRIMITIVE2D_ID_HELPLINEPRIMITIVE2D :
                 {
                     // ignorable primitives
+                    break;
+                }
+                case PRIMITIVE2D_ID_OBJECTINFOPRIMITIVE2D :
+                {
+                    // weboffice: the reflection drawn by svx (ViewContactOfSdrObj) is not hittable,
+                    // like shadows - a click there goes to what is underneath
+                    if (static_cast<const primitive2d::ObjectInfoPrimitive2D&>(rCandidate).getName()
+                        != u"ZetaReflection")
+                        process(rCandidate);
                     break;
                 }
                 case PRIMITIVE2D_ID_SHADOWPRIMITIVE2D :
