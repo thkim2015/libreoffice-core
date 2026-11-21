@@ -726,6 +726,20 @@ basegfx::B2DRange zetaPortionVerticalRange(const DrawPortionInfo& rInfo,
     aRange.expand(aTransform * basegfx::B2DPoint(0.0, aLayouter.getFontDescent()));
     return aRange;
 }
+
+// weboffice: the unrotated ascent part of the portion's line (top to baseline) - Excel 2021
+// mirrors a text reflection around the baseline
+basegfx::B2DRange zetaPortionAscentRange(const DrawPortionInfo& rInfo,
+                                         const basegfx::B2DHomMatrix& rTransformA)
+{
+    drawinglayer::primitive2d::TextLayouterDevice aLayouter;
+    aLayouter.setFont(rInfo.mrFont);
+    basegfx::B2DHomMatrix aTransform(rTransformA);
+    aTransform.translate(rInfo.mrStartPos.X(), rInfo.mrStartPos.Y());
+    basegfx::B2DRange aRange(aTransform * basegfx::B2DPoint(0.0, -aLayouter.getFontAscent()));
+    aRange.expand(aTransform * basegfx::B2DPoint(0.0, 0.0));
+    return aRange;
+}
 }
 
 namespace
@@ -912,7 +926,8 @@ basegfx::B2DRange zetaPortionLocalBox(const drawinglayer::primitive2d::Primitive
 // over stPos..endPos of the reflection height. Blur is not drawn (Office presets use 0.5pt)
 void zetaAddTextReflection(drawinglayer::primitive2d::Primitive2DContainer& rPortions,
                            size_t nBefore, const OUString& rSpec,
-                           const basegfx::B2DRange& rLocalVertical, const basegfx::B2DHomMatrix& rB)
+                           const basegfx::B2DRange& rLocalVertical, const basegfx::B2DHomMatrix& rB,
+                           double fDistScale)
 {
     sal_Int32 nIdx = 0;
     if (o3tl::getToken(rSpec, 0, ' ', nIdx) != u"ZR1" || nIdx < 0 || rPortions.size() <= nBefore)
@@ -935,7 +950,7 @@ void zetaAddTextReflection(drawinglayer::primitive2d::Primitive2DContainer& rPor
     if (aBox.isEmpty() || aBox.getHeight() <= 0.0)
         return;
     const double fDirRad = basegfx::deg2rad(aN[5] / 60000.0);
-    const double fDist = aN[4] / 360.0;
+    const double fDist = aN[4] / 360.0 * fDistScale;
     const basegfx::B2DHomMatrix aMat(zetaLineEffectTransform(
         aBox, rB, fSx, fSy, aN[10], aN[11], aAlgn, fDist * std::cos(fDirRad),
         fDist * std::sin(fDirRad), true));
@@ -1001,7 +1016,7 @@ namespace
 // ' t <sx> <sy> <kx> <ky> <algn>' = scale/skew (perspective) around the line box
 void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortions, size_t nBefore,
                        const OUString& rSpec, const basegfx::B2DRange& rLocalVertical,
-                       const basegfx::B2DHomMatrix& rB)
+                       const basegfx::B2DHomMatrix& rB, double fScale)
 {
     sal_Int32 nIdx = 0;
     if (o3tl::getToken(rSpec, 0, ' ', nIdx) != u"ZS1" || nIdx < 0)
@@ -1072,19 +1087,22 @@ void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortion
         return;
     }
     // perspective/scaled outer shadow (Excel 2021: per line around the algn point of the line box)
-    basegfx::B2DHomMatrix aShadowMat(basegfx::utils::createTranslateB2DHomMatrix(fDx, fDy));
+    // Excel 2021 draws the outer text shadow offset and blur smaller for smaller text (fScale)
+    const double fOuterDx = fDx * fScale, fOuterDy = fDy * fScale, fOuterBlur = fBlur * fScale;
+    basegfx::B2DHomMatrix aShadowMat(basegfx::utils::createTranslateB2DHomMatrix(fOuterDx, fOuterDy));
     if (bTransform && !(fSx == 1.0 && fSy == 1.0 && nKx == 0 && nKy == 0))
     {
         const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, rLocalVertical, rB));
         if (!aBox.isEmpty())
-            aShadowMat = zetaLineEffectTransform(aBox, rB, fSx, fSy, nKx, nKy, aAlgn, fDx, fDy, false);
+            aShadowMat = zetaLineEffectTransform(aBox, rB, fSx, fSy, nKx, nKy, aAlgn, fOuterDx,
+                                                 fOuterDy, false);
     }
     drawinglayer::primitive2d::Primitive2DContainer aCopy;
     for (size_t i = nBefore; i < rPortions.size(); ++i)
         aCopy.push_back(rPortions[i]);
     drawinglayer::primitive2d::Primitive2DReference xShadow(
         new drawinglayer::primitive2d::ShadowPrimitive2D(
-            aShadowMat, aColor.getBColor(), fBlur, std::move(aCopy)));
+            aShadowMat, aColor.getBColor(), fOuterBlur, std::move(aCopy)));
     if (nOpacity < 100)
         xShadow = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
             drawinglayer::primitive2d::Primitive2DContainer{ xShadow }, 1.0 - nOpacity / 100.0);
@@ -1267,6 +1285,10 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
                            : basegfx::B2DRange(),
               aLocalInk });
     }
+    // weboffice: font size in pt for the Excel text effect scale (Excel 2021 CopyPicture,
+    // tests/tmp/xltextfx: a 30pt shadow distance is 11px at 11pt text, 20px at 28pt, 33px at 56pt;
+    // a reflection distance is about size/15.2 times its nominal length)
+    const double fZetaFontPt = rDrawPortionInfo.mrFont.GetFontHeight() * 72.0 / 2540.0;
     // weboffice: text outline stroke (after the gradient range so the gradient leaves it alone)
     if (!rDrawPortionInfo.maZetaTextOutline.isEmpty()
         && maTextPortionPrimitives.size() > nBefore)
@@ -1283,7 +1305,7 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
         zetaAddTextShadow(maTextPortionPrimitives, nBefore, rDrawPortionInfo.maZetaTextShadow,
                           zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA,
                                                    basegfx::B2DHomMatrix()),
-                          maNewTransformB);
+                          maNewTransformB, std::clamp(0.13 + 0.0125 * fZetaFontPt, 0.1, 1.5));
         if (maTextPortionPrimitives.size() > nOld && !rDrawPortionInfo.maZetaTextGradient.isEmpty()
             && !maZetaGradientPortions.empty() && maZetaGradientPortions.back().mnStart == nBefore)
         {
@@ -1298,9 +1320,8 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
         const size_t nOld = maTextPortionPrimitives.size();
         zetaAddTextReflection(maTextPortionPrimitives, nBefore,
                               rDrawPortionInfo.maZetaTextReflection,
-                              zetaPortionVerticalRange(rDrawPortionInfo, maNewTransformA,
-                                                       basegfx::B2DHomMatrix()),
-                              maNewTransformB);
+                              zetaPortionAscentRange(rDrawPortionInfo, maNewTransformA),
+                              maNewTransformB, std::clamp(fZetaFontPt / 15.2, 0.1, 6.0));
         if (maTextPortionPrimitives.size() > nOld && !rDrawPortionInfo.maZetaTextGradient.isEmpty()
             && !maZetaGradientPortions.empty() && maZetaGradientPortions.back().mnStart == nBefore)
         {
