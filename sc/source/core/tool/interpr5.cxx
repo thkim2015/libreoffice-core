@@ -134,6 +134,19 @@ double ScInterpreter::ScGetGCD(double fx, double fy)
     }
 }
 
+
+// weboffice: Excel rejects text in a range of numbers for these functions (#VALUE!)
+static bool lcl_ZetaRangeHasText(ScDocument& rDoc, const ScRange& rRange)
+{
+    ScCellIterator aIter(rDoc, rRange);
+    for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+    {
+        if (aIter.getRefCellValue().hasString())
+            return true;
+    }
+    return false;
+}
+
 void ScInterpreter::ScGCD()
 {
     short nParamCount = GetByte();
@@ -165,6 +178,11 @@ void ScInterpreter::ScGCD()
             {
                 FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
+                if (nGlobalError == FormulaError::NONE && lcl_ZetaRangeHasText(mrDoc, aRange))
+                {
+                    PushNoValue(); // weboffice: like Excel
+                    return;
+                }
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
                 aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells
@@ -243,6 +261,11 @@ void ScInterpreter:: ScLCM()
             {
                 FormulaError nErr = FormulaError::NONE;
                 PopDoubleRef( aRange, nParamCount, nRefInList);
+                if (nGlobalError == FormulaError::NONE && lcl_ZetaRangeHasText(mrDoc, aRange))
+                {
+                    PushNoValue(); // weboffice: like Excel
+                    return;
+                }
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
                 aValIter.SetSkipLogical( true ); // weboffice: Excel ignores TRUE/FALSE cells

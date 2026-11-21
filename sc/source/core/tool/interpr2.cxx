@@ -394,11 +394,39 @@ void ScInterpreter::ScGetWeekOfYear()
     }
 
     Date aDate = mrContext.NFGetNullDate();
-    aDate.AddDays( GetFloor32());
+    const bool bExcel1900 = aDate == Date(30, 12, 1899);
+    const sal_Int32 nSerial = GetFloor32();
+    aDate.AddDays( nSerial );
     if (nGlobalError != FormulaError::NONE)
     {
         PushError( nGlobalError );
         return;
+    }
+    // weboffice: Excel's own 1900 calendar for the serials 0..60 (measured, tests/tmp/fnprobe cases57)
+    if (bExcel1900 && nSerial >= 0 && nSerial <= 60)
+    {
+        int nStart = -1; // first day of the week, Sunday = 0
+        if (nFlag == 1 || nFlag == 17)
+            nStart = 0;
+        else if (nFlag == 2 || nFlag == 11)
+            nStart = 1;
+        else if (nFlag >= 12 && nFlag <= 16)
+            nStart = nFlag - 10;
+        if (nStart >= 0)
+        {
+            // 1900-01-01 is a Sunday there; floor division also for the serial 0
+            const int nOffset = (7 - nStart) % 7;
+            const int nNum = nSerial - 1 + nOffset;
+            PushInt((nNum >= 0 ? nNum / 7 : -1) + 1);
+            return;
+        }
+        if (nFlag == 21 || nFlag == 150)
+        {
+            const int nIsoWeekday = ((nSerial + 5) % 7) + 1; // Monday = 1
+            const int nThursday = nSerial - nIsoWeekday + 4;
+            PushInt(nThursday < 1 ? 52 : (nThursday - 1) / 7 + 1);
+            return;
+        }
     }
 
     sal_Int32 nMinimumNumberOfDaysInWeek;

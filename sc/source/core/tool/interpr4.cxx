@@ -58,6 +58,20 @@
 #include <cellsuno.hxx>
 #include <optuno.hxx>
 #include <rangeseq.hxx>
+
+namespace {
+// weboffice: Excel rejects text in a range of numbers for the add-in array arguments (#VALUE!)
+bool lcl_ZetaRangeHasText(ScDocument& rDoc, const ScRange& rRange)
+{
+    ScCellIterator aIter(rDoc, rRange);
+    for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+    {
+        if (aIter.getRefCellValue().hasString())
+            return true;
+    }
+    return false;
+}
+}
 #include <addinlis.hxx>
 #include <jumpmatrix.hxx>
 #include <parclass.hxx>
@@ -3401,7 +3415,25 @@ void ScInterpreter::ScExternal()
             {
                 case SC_ADDINARG_INTEGER:
                     {
-                        sal_Int32 nVal = GetInt32();
+                        const bool bDateArg = (nPar == 0 && (aUnoName.endsWith(".getEdate") || aUnoName.endsWith(".getEomonth")
+                                                             || aUnoName.endsWith(".getWorkday") || aUnoName.endsWith(".getNetworkdays")))
+                                              || (nPar == 1 && aUnoName.endsWith(".getNetworkdays"));
+                        sal_Int32 nVal;
+                        if (bDateArg)
+                        {
+                            const double fVal = GetDouble();
+                            if (fVal < 0.0)
+                                nVal = -1; // weboffice: like Excel, the add-in reports #NUM!
+                            else if (fVal >= 2147483648.0)
+                            {
+                                SetError(FormulaError::IllegalArgument);
+                                nVal = 0;
+                            }
+                            else
+                                nVal = static_cast<sal_Int32>(fVal);
+                        }
+                        else
+                            nVal = GetInt32();
                         if (nGlobalError == FormulaError::NONE)
                             aParam <<= nVal;
                     }
@@ -3466,7 +3498,9 @@ void ScInterpreter::ScExternal()
                             {
                                 ScRange aRange;
                                 PopDoubleRef( aRange );
-                                if (!ScRangeToSequence::FillDoubleArray( aParam, mrDoc, aRange ))
+                                if (nGlobalError == FormulaError::NONE && lcl_ZetaRangeHasText(mrDoc, aRange))
+                                    SetError(FormulaError::NoValue); // weboffice: text in the numbers is #VALUE! like Excel
+                                else if (!ScRangeToSequence::FillDoubleArray( aParam, mrDoc, aRange ))
                                     SetError(FormulaError::IllegalParameter);
                             }
                             break;

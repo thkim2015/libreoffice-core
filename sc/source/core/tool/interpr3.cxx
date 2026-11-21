@@ -1880,9 +1880,14 @@ void ScInterpreter::ScHypGeomDist( int nMinParamCount )
     double n = ::rtl::math::approxFloor(GetDouble());
     double x = ::rtl::math::approxFloor(GetDouble());
 
-    if ( (x < 0.0) || (n < x) || (N < n) || (N < M) || (M < 0.0) )
+    if ( (x < 0.0) || (N < n) || (N < M) || (M < 0.0) || (n < 0.0) )
     {
         PushIllegalArgument();
+        return;
+    }
+    if ( n < x )
+    {
+        PushDouble( bCumulative ? 1.0 : 0.0 ); // weboffice: like Excel
         return;
     }
 
@@ -2282,6 +2287,11 @@ void ScInterpreter::ScTInv( int nType )
         return;
     double fDF  = ::rtl::math::approxFloor(GetDouble());
     double fP = GetDouble();
+    if ( nType == 2 && fDF >= 1.0 && fP > 1.0 && fP < 2.0 )
+    {
+        PushDouble( -GetTInv( 2.0 - fP, fDF, nType ) ); // weboffice: like Excel
+        return;
+    }
     if (fDF < 1.0 || fP <= 0.0 || fP > 1.0 )
     {
         PushIllegalArgument();

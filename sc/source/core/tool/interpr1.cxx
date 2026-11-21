@@ -15232,6 +15232,29 @@ static_assert(std::ranges::is_sorted(scriptList,
                                      }));
 static sal_Int32 ByteLen(sal_Unicode currentChar)
 {
+    // weboffice: like Excel, the bytes in the DBCS code page of the system language
+    {
+        const LanguageType eLang = MsLangId::getConfiguredSystemLanguage();
+        rtl_TextEncoding eEnc = RTL_TEXTENCODING_DONTKNOW;
+        if (MsLangId::isKorean(eLang))
+            eEnc = RTL_TEXTENCODING_MS_949;
+        else if (MsLangId::getPrimaryLanguage(eLang) == MsLangId::getPrimaryLanguage(LANGUAGE_JAPANESE))
+            eEnc = RTL_TEXTENCODING_MS_932;
+        else if (MsLangId::isTraditionalChinese(eLang))
+            eEnc = RTL_TEXTENCODING_MS_950;
+        else if (MsLangId::isSimplifiedChinese(eLang))
+            eEnc = RTL_TEXTENCODING_MS_936;
+        if (eEnc != RTL_TEXTENCODING_DONTKNOW)
+        {
+            if (currentChar < 0x80 || rtl::isSurrogate(currentChar))
+                return 1;
+            OString aBytes;
+            if (!OUString(&currentChar, 1).convertToString(&aBytes, eEnc,
+                    RTL_UNICODETOTEXT_FLAGS_UNDEFINED_ERROR | RTL_UNICODETOTEXT_FLAGS_INVALID_ERROR))
+                return 1;
+            return aBytes.getLength() >= 2 ? 2 : 1;
+        }
+    }
     // for the locale of ja-JP, character U+0x005c and U+0x20ac should be ScriptType::Asian
     if( (currentChar == 0x005c || currentChar == 0x20ac) &&
           (MsLangId::getConfiguredSystemLanguage() == LANGUAGE_JAPANESE) )
@@ -16080,6 +16103,34 @@ void ScInterpreter::ScText()
         return;
 
     OUString sFormatString = GetString().getString();
+    {
+        // weboffice: like Excel, "0%%", "0%\%", "0% %" are #VALUE! ("0%""%""" is fine)
+        bool bQuote = false, bBad = false;
+        int nPercent = 0;
+        for (sal_Int32 i = 0; i < sFormatString.getLength() && !bBad; ++i)
+        {
+            const sal_Unicode c = sFormatString[i];
+            if (c == '"')
+                bQuote = !bQuote;
+            else if (bQuote)
+                continue;
+            else if (c == ';')
+                nPercent = 0;
+            else if (c == '\\' && i + 1 < sFormatString.getLength())
+            {
+                if (sFormatString[++i] == '%')
+                    bBad = ++nPercent > 1;
+            }
+            else if (c == '%')
+                bBad = ++nPercent > 1;
+        }
+        if (bBad)
+        {
+            Pop();
+            PushNoValue();
+            return;
+        }
+    }
     svl::SharedString aStr;
     bool bString = false;
     double fVal = 0.0;
