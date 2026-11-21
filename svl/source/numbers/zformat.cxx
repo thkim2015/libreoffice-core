@@ -3933,6 +3933,19 @@ static bool lcl_getValidDate( const DateTime& rNullDate, const DateTime& rEpochS
     return fMin <= fOff && fOff <= fMax;
 }
 
+// weboffice: Excel's 1900 calendar has a 29 February, so its weekdays before 1900-03-01 are one day
+// earlier than the real ones (1900-01-01 is a Sunday, 0 = 1900-01-00 a Saturday)
+static OUString lcl_ZetaDayName(CalendarWrapper& rCal, sal_Int16 nCode, sal_Int16 nNatNum, double fShift)
+{
+    if (fShift == 0.0)
+        return rCal.getDisplayString(nCode, nNatNum);
+    const double fNow = rCal.getLocalDateTime();
+    rCal.setLocalDateTime(fNow + fShift);
+    OUString aName = rCal.getDisplayString(nCode, nNatNum);
+    rCal.setLocalDateTime(fNow);
+    return aName;
+}
+
 bool SvNumberformat::ImpGetDateOutput(double fNumber,
                                       sal_uInt16 nIx,
                                       bool bStarFlag,
@@ -3946,6 +3959,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
     CalendarWrapper& rCal = *rCurrentLang.GetCalendar();
     // weboffice: Excel's 1900 date system (0 is 1900-01-00, 60 the fictitious 1900-02-29, 1..59 a day later)
     sal_Int32 nExcelDay = -1;
+    double fZetaDayShift = 0.0;
     if (rCurrentLang.GetNullDate() == Date(30, 12, 1899) && fNumber >= 0.0 && fNumber < 61.0)
     {
         const double fDay = floor(fNumber);
@@ -3953,11 +3967,15 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
         {
             fNumber += 2.0;
             nExcelDay = 0;
+            fZetaDayShift = -2.0;
         }
         else if (fDay == 60.0)
             nExcelDay = 29;
         else
+        {
             fNumber += 1.0;
+            fZetaDayShift = -1.0;
+        }
     }
     if (!lcl_getValidDate( DateTime( rCurrentLang.GetNullDate() ), rCal.getEpochStart(), fNumber))
     {
@@ -4095,7 +4113,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             {
                 SwitchToGregorianCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
             }
-            aStr = rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY_NAME, nNatNum );
+            aStr = lcl_ZetaDayName(rCal, CalendarDisplayCode::SHORT_DAY_NAME, nNatNum, fZetaDayShift);
             // NatNum12: support at least capitalize, upper, lower, title
             if ( bUseSpellout )
             {
@@ -4112,7 +4130,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             {
                 SwitchToGregorianCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
             }
-            aStr = rCal.getDisplayString( CalendarDisplayCode::LONG_DAY_NAME, nNatNum );
+            aStr = lcl_ZetaDayName(rCal, CalendarDisplayCode::LONG_DAY_NAME, nNatNum, fZetaDayShift);
             // NatNum12: support variants of preposition, suffixation or article
             if ( bUseSpellout )
             {
@@ -4185,7 +4203,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             break;
         case NF_KEY_NN:                 // NN
         case NF_KEY_AAA:                // AAA
-            aStr = rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY_NAME, nNatNum );
+            aStr = lcl_ZetaDayName(rCal, CalendarDisplayCode::SHORT_DAY_NAME, nNatNum, fZetaDayShift);
             // NatNum12: support at least capitalize, upper, lower, title
             if ( bUseSpellout )
             {
@@ -4195,7 +4213,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             break;
         case NF_KEY_NNN:                // NNN
         case NF_KEY_AAAA:               // AAAA
-            aStr = rCal.getDisplayString( CalendarDisplayCode::LONG_DAY_NAME, nNatNum );
+            aStr = lcl_ZetaDayName(rCal, CalendarDisplayCode::LONG_DAY_NAME, nNatNum, fZetaDayShift);
             // NatNum12: support variants of preposition, suffixation or article
             if ( bUseSpellout )
             {
@@ -4204,7 +4222,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             sBuff.append(aStr);
             break;
         case NF_KEY_NNNN:               // NNNN
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY_NAME, nNatNum ));
+            sBuff.append(lcl_ZetaDayName(rCal, CalendarDisplayCode::LONG_DAY_NAME, nNatNum, fZetaDayShift));
             sBuff.append(rCurrentLang.GetLocaleData()->getLongDateDayOfWeekSep());
             break;
         case NF_KEY_WW :                // WW
@@ -4296,6 +4314,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
         fNumber = floor( fNumber ) + fTime / 86400.0;
     // weboffice: Excel's 1900 date system, on the rounded value
     sal_Int32 nExcelDay = -1;
+    double fZetaDayShift = 0.0;
     {
         const double fSerial = fNumber - fEpochShift;
         if (bExcel1900 && fSerial >= 0.0 && fSerial < 61.0)
@@ -4305,11 +4324,15 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             {
                 fNumber += 2.0;
                 nExcelDay = 0;
+                fZetaDayShift = -2.0;
             }
             else if (fDay == 60.0)
                 nExcelDay = 29;
             else
+            {
                 fNumber += 1.0;
+                fZetaDayShift = -1.0;
+            }
         }
     }
     rCal.setLocalDateTime( fNumber );
@@ -4526,7 +4549,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             {
                 SwitchToGregorianCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
             }
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY_NAME, nNatNum ));
+            sBuff.append(lcl_ZetaDayName(rCal, CalendarDisplayCode::SHORT_DAY_NAME, nNatNum, fZetaDayShift));
             if ( bOtherCalendar )
             {
                 SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -4537,7 +4560,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             {
                 SwitchToGregorianCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
             }
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY_NAME, nNatNum ));
+            sBuff.append(lcl_ZetaDayName(rCal, CalendarDisplayCode::LONG_DAY_NAME, nNatNum, fZetaDayShift));
             if ( bOtherCalendar )
             {
                 SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -4602,14 +4625,14 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             break;
         case NF_KEY_NN:                 // NN
         case NF_KEY_AAA:                // AAA
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_DAY_NAME, nNatNum ));
+            sBuff.append(lcl_ZetaDayName(rCal, CalendarDisplayCode::SHORT_DAY_NAME, nNatNum, fZetaDayShift));
             break;
         case NF_KEY_NNN:                // NNN
         case NF_KEY_AAAA:               // AAAA
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY_NAME, nNatNum ));
+            sBuff.append(lcl_ZetaDayName(rCal, CalendarDisplayCode::LONG_DAY_NAME, nNatNum, fZetaDayShift));
             break;
         case NF_KEY_NNNN:               // NNNN
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_DAY_NAME, nNatNum ));
+            sBuff.append(lcl_ZetaDayName(rCal, CalendarDisplayCode::LONG_DAY_NAME, nNatNum, fZetaDayShift));
             sBuff.append(rCurrentLang.GetLocaleData()->getLongDateDayOfWeekSep());
             break;
         case NF_KEY_WW :                // WW
