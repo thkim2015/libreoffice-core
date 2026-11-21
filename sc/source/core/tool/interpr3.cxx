@@ -4968,14 +4968,10 @@ void ScInterpreter::ScProbability()
                     {
                         fP = pMatP->GetDouble(i,j);
                         fW = pMatW->GetDouble(i,j);
-                        if (fP < 0.0 || fP > 1.0)
-                            bStop = true;
-                        else
-                        {
-                            fSum += fP;
-                            if (fW >= fLo && fW <= fUp)
-                                fRes += fP;
-                        }
+                        // weboffice: like Excel, only the sum of the probabilities is checked
+                        fSum += fP;
+                        if (fW >= fLo && fW <= fUp)
+                            fRes += fP;
                     }
                     else
                         SetError( FormulaError::IllegalArgument);
