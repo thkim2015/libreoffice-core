@@ -4068,7 +4068,7 @@ void ScInterpreter::ScClean()
     while ( nIdx <  aStr.getLength() )
     {
         sal_uInt32 c = aStr.iterateCodePoints( &nIdx );
-        if ( c >= 32 ) // weboffice: like Excel, only the control characters 0..31 go
+        if ( c >= 32 && !(c >= 0x80 && c <= 0x9F) ) // weboffice: like Excel, C0 and C1 controls go, DEL stays
             aBuf.appendUtf32( c );
     }
     PushString( aBuf.makeStringAndClear() );
