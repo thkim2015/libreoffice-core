@@ -728,12 +728,14 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
     for (size_t i = nBefore; i < rPortions.size(); ++i)
         zetaCollectText(rPortions[i].get(), aTexts, 0);
     basegfx::B2DPolyPolygon aAll, aUnder;
+    bool bAllUnder = !aTexts.empty();
     for (const auto* pText : aTexts)
     {
         basegfx::B2DPolyPolygonVector aOutlines;
         basegfx::B2DHomMatrix aTransform;
         pText->getTextOutlinesAndTransformation(aOutlines, aTransform);
         const bool bUnder = !bNoUnderlay && pText->getFontAttribute().getOutline();
+        bAllUnder = bAllUnder && bUnder;
         for (auto& rPoly : aOutlines)
         {
             rPoly.transform(aTransform);
@@ -753,8 +755,11 @@ void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortio
             aNew.push_back(rPortions[i]);
         aNew.push_back(new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
             aUnder, aFillColor.getBColor()));
-        for (size_t i = nBefore; i < rPortions.size(); ++i)
-            aNew.push_back(rPortions[i]);
+        // all glyphs contoured: the fill replaces them - LO's contour effect (glyph moved 8 ways in
+        // the outline color) would cover the fill and thicken the outline into a blob at small sizes
+        if (!bAllUnder)
+            for (size_t i = nBefore; i < rPortions.size(); ++i)
+                aNew.push_back(rPortions[i]);
         rPortions = std::move(aNew);
     }
     drawinglayer::primitive2d::Primitive2DReference xStroke(
