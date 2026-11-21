@@ -3983,6 +3983,18 @@ void ScInterpreter::ScNumberValue()
         }
     }
 
+    // weboffice: like Excel, omitted separators are those of the locale ("1,234.5" in ko-KR)
+    if ( nParamCount < 2 )
+    {
+        const OUString& rDec = ScGlobal::getLocaleData().getNumDecimalSep();
+        cDecimalSeparator = rDec.isEmpty() ? '.' : rDec[0];
+    }
+    if ( nParamCount < 3 )
+    {
+        aGroupSeparator = ScGlobal::getLocaleData().getNumThousandSep();
+        if ( aGroupSeparator.indexOf( cDecimalSeparator ) != -1 )
+            aGroupSeparator.clear();
+    }
     if ( cDecimalSeparator && aGroupSeparator.indexOf( cDecimalSeparator ) != -1 )
     {
         PushIllegalArgument(); //decimal separator cannot appear in group separator
