@@ -64,6 +64,8 @@ public:
     const Color maTextLineColor;
     // zeta: 글자 그라데이션 채우기(CharInteropGrabBag 'ZetaTextGradient', 글자색이 열 때 그대로일 때만) — 비면 단색
     OUString maZetaTextGradient;
+    // weboffice: text outline stroke (CharInteropGrabBag 'ZetaTextOutline') - empty if none
+    OUString maZetaTextOutline;
 
     bool IsRTL() const { return mnBiDiLevel % 2 == 1; }
 

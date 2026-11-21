@@ -38,6 +38,11 @@
 #include <drawinglayer/primitive2d/PolyPolygonColorPrimitive2D.hxx>
 #include <drawinglayer/primitive2d/transparenceprimitive2d.hxx>
 #include <drawinglayer/primitive2d/transformprimitive2d.hxx>
+#include <drawinglayer/primitive2d/PolyPolygonStrokePrimitive2D.hxx>
+#include <drawinglayer/primitive2d/groupprimitive2d.hxx>
+#include <drawinglayer/primitive2d/textprimitive2d.hxx>
+#include <drawinglayer/attribute/lineattribute.hxx>
+#include <o3tl/string_view.hxx>
 #include <basegfx/color/bcolormodifier.hxx>
 #include <basegfx/numeric/ftools.hxx>
 #include <basegfx/polygon/b2dpolygontools.hxx>
@@ -681,6 +686,85 @@ basegfx::B2DRange zetaPortionVerticalRange(const DrawPortionInfo& rInfo,
 }
 }
 
+namespace
+{
+// weboffice: collect the text portion primitives (also inside groups such as fields)
+void zetaCollectText(const drawinglayer::primitive2d::BasePrimitive2D* pPrim,
+                     std::vector<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*>& rOut,
+                     int nDepth)
+{
+    if (!pPrim || nDepth > 4)
+        return;
+    if (auto pText = dynamic_cast<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*>(pPrim))
+    {
+        rOut.push_back(pText);
+        return;
+    }
+    if (auto pGroup = dynamic_cast<const drawinglayer::primitive2d::GroupPrimitive2D*>(pPrim))
+        for (const auto& rChild : pGroup->getChildren())
+            zetaCollectText(rChild.get(), rOut, nDepth + 1);
+}
+
+// weboffice: Office text outline (a:ln in a:rPr): stroke the glyph outlines with the line width
+// and color, and under contoured text (LibreOffice reads white text with an outline as contour)
+// fill the glyphs with the original fill while the char color is unchanged
+void zetaAddTextOutline(drawinglayer::primitive2d::Primitive2DContainer& rPortions, size_t nBefore,
+                        const OUString& rSpec, const Color& rFontColor, bool bNoUnderlay)
+{
+    sal_Int32 nIdx = 0;
+    if (o3tl::getToken(rSpec, 0, ' ', nIdx) != u"ZO1" || nIdx < 0)
+        return;
+    const sal_uInt32 nAt = o3tl::toUInt32(o3tl::getToken(rSpec, 0, ' ', nIdx), 16);
+    const double fWidth = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx)) / 360.0;
+    const Color aLine(ColorTransparency, o3tl::toUInt32(o3tl::getToken(rSpec, 0, ' ', nIdx), 16));
+    const sal_Int32 nTrans = o3tl::toInt32(o3tl::getToken(rSpec, 0, ' ', nIdx));
+    const std::u16string_view aFill = o3tl::getToken(rSpec, 0, ' ', nIdx);
+    if (nTrans >= 100)
+        return;
+    std::vector<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*> aTexts;
+    for (size_t i = nBefore; i < rPortions.size(); ++i)
+        zetaCollectText(rPortions[i].get(), aTexts, 0);
+    basegfx::B2DPolyPolygon aAll, aUnder;
+    for (const auto* pText : aTexts)
+    {
+        basegfx::B2DPolyPolygonVector aOutlines;
+        basegfx::B2DHomMatrix aTransform;
+        pText->getTextOutlinesAndTransformation(aOutlines, aTransform);
+        const bool bUnder = !bNoUnderlay && pText->getFontAttribute().getOutline();
+        for (auto& rPoly : aOutlines)
+        {
+            rPoly.transform(aTransform);
+            aAll.append(rPoly);
+            if (bUnder)
+                aUnder.append(rPoly);
+        }
+    }
+    if (!aAll.count())
+        return;
+    if (aUnder.count() && aFill != u"-" && !aFill.empty()
+        && (sal_uInt32(rFontColor.GetRGBColor()) & 0xFFFFFF) == (nAt & 0xFFFFFF))
+    {
+        const Color aFillColor(ColorTransparency, o3tl::toUInt32(aFill, 16));
+        drawinglayer::primitive2d::Primitive2DContainer aNew;
+        for (size_t i = 0; i < nBefore; ++i)
+            aNew.push_back(rPortions[i]);
+        aNew.push_back(new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
+            aUnder, aFillColor.getBColor()));
+        for (size_t i = nBefore; i < rPortions.size(); ++i)
+            aNew.push_back(rPortions[i]);
+        rPortions = std::move(aNew);
+    }
+    drawinglayer::primitive2d::Primitive2DReference xStroke(
+        new drawinglayer::primitive2d::PolyPolygonStrokePrimitive2D(
+            aAll, drawinglayer::attribute::LineAttribute(aLine.getBColor(), fWidth,
+                                                         basegfx::B2DLineJoin::Round)));
+    if (nTrans > 0)
+        xStroke = new drawinglayer::primitive2d::UnifiedTransparencePrimitive2D(
+            drawinglayer::primitive2d::Primitive2DContainer{ xStroke }, nTrans / 100.0);
+    rPortions.push_back(xStroke);
+}
+}
+
 void TextHierarchyBreakup::zetaApplyTextGradients()
 {
     // PowerPoint 2021 실측(창 없이 COM Export): 글자 그라데이션은 줄마다 처음부터 다시 — 가로는 그 줄 글자 전체
@@ -855,6 +939,14 @@ void TextHierarchyBreakup::processDrawPortionInfo(const DrawPortionInfo& rDrawPo
                                                       basegfx::B2DHomMatrix())
                            : basegfx::B2DRange(),
               aLocalInk });
+    }
+    // weboffice: text outline stroke (after the gradient range so the gradient leaves it alone)
+    if (!rDrawPortionInfo.maZetaTextOutline.isEmpty()
+        && maTextPortionPrimitives.size() > nBefore)
+    {
+        zetaAddTextOutline(maTextPortionPrimitives, nBefore, rDrawPortionInfo.maZetaTextOutline,
+                           rDrawPortionInfo.mrFont.GetColor(),
+                           !rDrawPortionInfo.maZetaTextGradient.isEmpty());
     }
 
     if (rDrawPortionInfo.mbEndOfLine || rDrawPortionInfo.mbEndOfParagraph)

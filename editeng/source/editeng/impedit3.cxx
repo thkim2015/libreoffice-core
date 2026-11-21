@@ -548,6 +548,27 @@ static OUString lcl_ZetaTextGradient(const ContentNode& rNode, sal_Int32 nPos, c
     return aSpec;
 }
 
+// weboffice: the text outline spec ('ZO1 ...') of the char grab bag at nPos, or empty
+static OUString lcl_ZetaTextOutline(const ContentNode& rNode, sal_Int32 nPos)
+{
+    const SfxGrabBagItem* pItem = nullptr;
+    for (const auto& rAttr : rNode.GetCharAttribs().GetAttribs())
+    {
+        if (rAttr->Which() == EE_CHAR_GRABBAG && rAttr->GetStart() <= nPos && rAttr->GetEnd() > nPos)
+            pItem = static_cast<const SfxGrabBagItem*>(rAttr->GetItem());
+    }
+    if (!pItem && rNode.GetContentAttribs().HasItem(EE_CHAR_GRABBAG))
+        pItem = &rNode.GetContentAttribs().GetItem(EE_CHAR_GRABBAG);
+    if (!pItem)
+        return OUString();
+    const auto it = pItem->GetGrabBag().find(u"ZetaTextOutline"_ustr);
+    if (it == pItem->GetGrabBag().end())
+        return OUString();
+    OUString aSpec;
+    it->second >>= aSpec;
+    return aSpec.startsWith("ZO1 ") ? aSpec : OUString();
+}
+
 static sal_Int32 ImplCalculateFontIndependentLineSpacing( const sal_Int32 nFontHeight )
 {
     constexpr const double f120Percent = 12.0 / 10.0;
@@ -4007,6 +4028,8 @@ void ImpEditEngine::StripAllPortions( OutputDevice& rOutDev, tools::Rectangle aC
                                     aTextLineColor);
                                 aInfo.maZetaTextGradient = lcl_ZetaTextGradient(
                                     *rParaPortion.GetNode(), nIndex, aTmpFont.GetColor());
+                                aInfo.maZetaTextOutline = lcl_ZetaTextOutline(
+                                    *rParaPortion.GetNode(), nIndex);
                                 rStripPortionsHelper.processDrawPortionInfo(aInfo);
 
                                 // #108052# remember that EOP is written already for this ParaPortion

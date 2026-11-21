@@ -321,7 +321,8 @@ void TextCharacterProperties::pushToPropSet( PropertySet& rPropSet, const XmlFil
     bool bChanged = false;
     for (const PropertyValue& rProp : aGrabBag)
     {
-        if (rProp.Name == "ZetaTextGradient" || rProp.Name == "ZetaNoProofLang")
+        if (rProp.Name == "ZetaTextGradient" || rProp.Name == "ZetaNoProofLang"
+            || rProp.Name == "ZetaTextOutline")
             bChanged = true;
         else
             aNew.push_back(rProp);
@@ -334,6 +335,29 @@ void TextCharacterProperties::pushToPropSet( PropertySet& rPropSet, const XmlFil
     if (!aSpec.isEmpty())
     {
         aNew.push_back(comphelper::makePropertyValue(u"ZetaTextGradient"_ustr, aSpec));
+        bChanged = true;
+    }
+    // weboffice: text outline (a:ln) for drawing only - 'ZO1 <char color now> <width EMU> <line RGB>
+    // <line transparency %> <fill RGB or ->'. editeng strokes the glyphs with it; the fill is drawn
+    // under contoured (white) text only while the char color is still the one set here.
+    if (moTextOutlineProperties.has_value()
+        && moTextOutlineProperties.value().maLineFill.moFillType.has_value()
+        && moTextOutlineProperties.value().maLineFill.moFillType.value() == XML_solidFill)
+    {
+        const LineProperties& rLine = moTextOutlineProperties.value();
+        Color aLineColor = rLine.maLineFill.getBestSolidColor();
+        sal_Int32 nCharColor = -1;
+        rPropSet.getAnyProperty(PROP_CharColor) >>= nCharColor;
+        OUString aFill(u"-"_ustr);
+        if (maFillProperties.moFillType.has_value() && maFillProperties.moFillType.value() == XML_solidFill)
+            aFill = OUString::number(
+                sal_uInt32(maFillProperties.getBestSolidColor().getColor(rFilter.getGraphicHelper()).GetRGBColor()), 16);
+        aNew.push_back(comphelper::makePropertyValue(u"ZetaTextOutline"_ustr,
+            "ZO1 " + OUString::number(sal_uInt32(nCharColor) & 0xFFFFFF, 16)
+            + " " + OUString::number(rLine.moLineWidth.value_or(0))
+            + " " + OUString::number(sal_uInt32(aLineColor.getColor(rFilter.getGraphicHelper()).GetRGBColor()), 16)
+            + " " + OUString::number(aLineColor.getTransparency())
+            + " " + aFill));
         bChanged = true;
     }
     if (bChanged)
