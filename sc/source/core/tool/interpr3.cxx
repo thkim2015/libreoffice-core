@@ -1191,8 +1191,11 @@ void ScInterpreter::ScCombinA()
     {
         double k = ::rtl::math::approxFloor(GetDouble());
         double n = ::rtl::math::approxFloor(GetDouble());
-        if (k < 0.0 || n < 0.0 || k > n)
+        // weboffice: like Excel, k may exceed n (repetitions)
+        if (k < 0.0 || n < 0.0 || (n == 0.0 && k > 0.0))
             PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
+        else if (k == 0.0)
+            PushDouble(1.0);
         else
             PushDouble(BinomCoeff(n + k - 1, k));
     }

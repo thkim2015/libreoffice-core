@@ -2247,7 +2247,13 @@ void ScInterpreter::ScTan()
 
 void ScInterpreter::ScCot()
 {
-    PushDouble(1.0 / ::rtl::math::tan(GetDouble()));
+    const double fVal = GetDouble();
+    if (lcl_ExcelTrigTooBig(fVal))
+        PushError(FormulaError::IllegalFPOperation);
+    else if (fVal == 0.0)
+        PushError(FormulaError::DivisionByZero); // weboffice: like Excel
+    else
+        PushDouble(1.0 / ::rtl::math::tan(fVal));
 }
 
 void ScInterpreter::ScArcSin()
@@ -2287,18 +2293,26 @@ void ScInterpreter::ScTanHyp()
 
 void ScInterpreter::ScCotHyp()
 {
-    PushDouble(1.0 / tanh(GetDouble()));
+    const double fVal = GetDouble();
+    if (fVal == 0.0)
+        PushError(FormulaError::DivisionByZero); // weboffice: like Excel
+    else
+        PushDouble(1.0 / tanh(fVal));
 }
 
 void ScInterpreter::ScArcSinHyp()
 {
-    PushDouble( ::rtl::math::asinh( GetDouble()));
+    const double fVal = GetDouble();
+    if (!std::isfinite(fVal * fVal + 1.0))
+        PushError(FormulaError::IllegalFPOperation); // weboffice: like Excel
+    else
+        PushDouble( ::rtl::math::asinh( fVal));
 }
 
 void ScInterpreter::ScArcCosHyp()
 {
     double fVal = GetDouble();
-    if (fVal < 1.0)
+    if (fVal < 1.0 || !std::isfinite(fVal * fVal))
         PushError( FormulaError::IllegalFPOperation ); // weboffice: Excel gives #NUM! for a domain error
     else
         PushDouble( ::rtl::math::acosh( fVal));
@@ -2324,17 +2338,31 @@ void ScInterpreter::ScArcCotHyp()
 
 void ScInterpreter::ScCosecant()
 {
-    PushDouble(1.0 / ::rtl::math::sin(GetDouble()));
+    const double fVal = GetDouble();
+    if (lcl_ExcelTrigTooBig(fVal))
+        PushError(FormulaError::IllegalFPOperation);
+    else if (fVal == 0.0)
+        PushError(FormulaError::DivisionByZero); // weboffice: like Excel
+    else
+        PushDouble(1.0 / ::rtl::math::sin(fVal));
 }
 
 void ScInterpreter::ScSecant()
 {
-    PushDouble(1.0 / ::rtl::math::cos(GetDouble()));
+    const double fVal = GetDouble();
+    if (lcl_ExcelTrigTooBig(fVal))
+        PushError(FormulaError::IllegalFPOperation);
+    else
+        PushDouble(1.0 / ::rtl::math::cos(fVal));
 }
 
 void ScInterpreter::ScCosecantHyp()
 {
-    PushDouble(1.0 / sinh(GetDouble()));
+    const double fVal = GetDouble();
+    if (fVal == 0.0)
+        PushError(FormulaError::DivisionByZero); // weboffice: like Excel
+    else
+        PushDouble(1.0 / sinh(fVal));
 }
 
 void ScInterpreter::ScSecantHyp()

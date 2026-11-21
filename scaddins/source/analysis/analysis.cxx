@@ -78,6 +78,8 @@ sal_Int32 AnalysisAddIn::getDateMode(
 
 double AnalysisAddIn::FactDouble( sal_Int32 nNum )
 {
+    if( nNum == -1 )
+        return 1.0; // weboffice: like Excel
     if( nNum < 0 || nNum > MAXFACTDOUBLE )
         throw lang::IllegalArgumentException();
 

@@ -1039,7 +1039,7 @@ void ScInterpreter::ScMatInv()
             std::vector< SCSIZE> P(nR);
             int nDetSign = lcl_LUP_decompose( xLU.get(), nR, P);
             if (!nDetSign)
-                PushIllegalArgument();
+                PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
             else
             {
                 // Solve equation for each column.

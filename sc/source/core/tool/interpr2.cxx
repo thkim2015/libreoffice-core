@@ -3119,7 +3119,7 @@ void ScInterpreter::ScBase()
     if ( nParamCount == 3 )
     {
         double fLen = ::rtl::math::approxFloor( GetDouble() );
-        if ( 1.0 <= fLen && fLen < SAL_MAX_UINT16 )
+        if ( 1.0 <= fLen && fLen <= 255.0 ) // weboffice: Excel allows up to 255
             nMinLen = static_cast<sal_Int32>(fLen);
         else
             nMinLen = fLen == 0.0 ? 1 : 0; // 0 means error
@@ -3131,7 +3131,7 @@ void ScInterpreter::ScBase()
     double fChars = ((fVal > 0.0 && fBase > 0.0) ?
         (ceil( log( fVal ) / log( fBase ) ) + 2.0) :
         2.0);
-    if ( fChars >= SAL_MAX_UINT16 )
+    if ( fChars >= SAL_MAX_UINT16 || fVal >= 9007199254740992.0 ) // weboffice: Excel stops at 2^53
         nMinLen = 0;    // Error
 
     if ( nGlobalError == FormulaError::NONE && nMinLen && 2 <= fBase && fBase <= nDigits && 0 <= fVal )
@@ -3396,7 +3396,19 @@ void ScInterpreter::ScArabic()
         PushError( nGlobalError);
     else
     {
-        aRoman = aRoman.toAsciiUpperCase();
+        aRoman = aRoman.toAsciiUpperCase().trim();
+        // weboffice: like Excel, one leading minus negates ("-" alone is #NUM!)
+        bool bNegative = false;
+        if (aRoman.startsWith("-"))
+        {
+            bNegative = true;
+            aRoman = aRoman.copy(1);
+            if (aRoman.isEmpty())
+            {
+                PushError( FormulaError::IllegalFPOperation );
+                return;
+            }
+        }
 
         sal_uInt16 nValue = 0;
         sal_uInt16 nValidRest = 3999;
@@ -3440,7 +3452,7 @@ void ScInterpreter::ScArabic()
             }
         }
         if( bValid )
-            PushInt( nValue );
+            PushInt( bNegative ? -static_cast<int>(nValue) : static_cast<int>(nValue) );
         else
             PushIllegalArgument();
     }
