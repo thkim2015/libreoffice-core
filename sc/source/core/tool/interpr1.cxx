@@ -14361,7 +14361,7 @@ void ScInterpreter::ScAddressFunc()
     }
     else if (bEmptyTabGiven
              && (eConv == FormulaGrammar::CONV_XL_R1C1 || eConv == FormulaGrammar::CONV_XL_A1))
-        PushString( OUString(u"!" + aRefStr) );
+        PushString( OUString("!" + aRefStr) );
     else
         PushString( aRefStr );
 }
