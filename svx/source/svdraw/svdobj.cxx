@@ -1057,6 +1057,8 @@ void SdrObject::SetGrabBagItem(const css::uno::Any& rVal)
 
     m_pGrabBagItem->PutValue(rVal, 0);
 
+    // weboffice: effects drawn from the grab bag (reflection) change the bound rect
+    SetBoundRectDirty();
     SetChanged();
     BroadcastObjectChange();
 }
