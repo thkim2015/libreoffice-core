@@ -3423,7 +3423,10 @@ void ScInterpreter::ScExternal()
                         {
                             const double fVal = GetDouble();
                             if (fVal < 0.0)
-                                nVal = -1; // weboffice: like Excel, the add-in reports #NUM!
+                            {
+                                SetError(FormulaError::IllegalFPOperation); // weboffice: a negative date is #NUM! like Excel
+                                nVal = 0;
+                            }
                             else if (fVal >= 2147483648.0)
                             {
                                 SetError(FormulaError::IllegalArgument);
