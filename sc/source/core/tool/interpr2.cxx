@@ -1524,6 +1524,8 @@ void ScInterpreter::ScNPV()
         double  fRate = GetDouble();
         if (fRate == -1.0 && nGlobalError == FormulaError::NONE)
         {
+            for (short n = nParamCount - 1; n > 0; --n)
+                Pop();
             PushError( FormulaError::DivisionByZero ); // weboffice: like Excel
             return;
         }
