@@ -901,23 +901,42 @@ basegfx::B2DHomMatrix zetaLineEffectTransform(const basegfx::B2DRange& rLocalBox
 
 // weboffice: the local (unrotated) line box of the portion primitives from nBefore
 basegfx::B2DRange zetaPortionLocalBox(const drawinglayer::primitive2d::Primitive2DContainer& rPortions,
-                                      size_t nBefore, const basegfx::B2DRange& rLocalVertical,
+                                      size_t nBefore, bool bAscentOnly,
                                       const basegfx::B2DHomMatrix& rB)
 {
+    // glyph ink across; the font's ascent and descent (Excel 2021: the Windows ascent/descent line
+    // box) around the baseline of the portion's text primitives, all unrotated (before rB)
     basegfx::B2DHomMatrix aInvB(rB);
     aInvB.invert();
-    const drawinglayer::geometry::ViewInformation2D aViewInfo;
-    basegfx::B2DRange aInk;
+    std::vector<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*> aTexts;
     for (size_t i = nBefore; i < rPortions.size(); ++i)
-        if (rPortions[i])
-            aInk.expand(rPortions[i]->getB2DRange(aViewInfo));
-    if (aInk.isEmpty())
-        return aInk;
-    aInk.transform(aInvB);
-    if (rLocalVertical.isEmpty())
-        return aInk;
-    return basegfx::B2DRange(aInk.getMinX(), rLocalVertical.getMinY(), aInk.getMaxX(),
-                             rLocalVertical.getMaxY());
+        zetaCollectText(rPortions[i].get(), aTexts, 0);
+    basegfx::B2DRange aInk, aVert;
+    for (const auto* pText : aTexts)
+    {
+        basegfx::B2DPolyPolygonVector aOutlines;
+        basegfx::B2DHomMatrix aTransform;
+        pText->getTextOutlinesAndTransformation(aOutlines, aTransform);
+        aTransform *= aInvB;
+        for (auto& rPoly : aOutlines)
+        {
+            rPoly.transform(aTransform);
+            aInk.expand(rPoly.getB2DRange());
+        }
+        basegfx::B2DTuple aScale, aTranslate;
+        double fRotate(0.0), fShearX(0.0);
+        pText->getTextTransform().decompose(aScale, aTranslate, fRotate, fShearX);
+        drawinglayer::primitive2d::TextLayouterDevice aLayouter;
+        aLayouter.setFontAttribute(pText->getFontAttribute(), std::abs(aScale.getX()),
+                                   std::abs(aScale.getY()), pText->getLocale());
+        const basegfx::B2DPoint aBase(aInvB * basegfx::B2DPoint(aTranslate));
+        aVert.expand(basegfx::B2DPoint(aBase.getX(), aBase.getY() - aLayouter.getFontAscent()));
+        aVert.expand(basegfx::B2DPoint(aBase.getX(), aBase.getY()
+                                       + (bAscentOnly ? 0.0 : aLayouter.getFontDescent())));
+    }
+    if (aInk.isEmpty() || aVert.isEmpty())
+        return basegfx::B2DRange();
+    return basegfx::B2DRange(aInk.getMinX(), aVert.getMinY(), aInk.getMaxX(), aVert.getMaxY());
 }
 
 // weboffice: Office text reflection (a:reflection in a:rPr), per line like Excel 2021 -
@@ -926,7 +945,7 @@ basegfx::B2DRange zetaPortionLocalBox(const drawinglayer::primitive2d::Primitive
 // over stPos..endPos of the reflection height. Blur is not drawn (Office presets use 0.5pt)
 void zetaAddTextReflection(drawinglayer::primitive2d::Primitive2DContainer& rPortions,
                            size_t nBefore, const OUString& rSpec,
-                           const basegfx::B2DRange& rLocalVertical, const basegfx::B2DHomMatrix& rB,
+                           const basegfx::B2DRange& /*rLocalVertical*/, const basegfx::B2DHomMatrix& rB,
                            double fDistScale)
 {
     sal_Int32 nIdx = 0;
@@ -946,7 +965,7 @@ void zetaAddTextReflection(drawinglayer::primitive2d::Primitive2DContainer& rPor
     const double fSx = aN[7] / 100000.0, fSy = aN[8] / 100000.0;
     if ((fStA <= 0.0 && fEndA <= 0.0) || fSx == 0.0 || fSy == 0.0)
         return;
-    const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, rLocalVertical, rB));
+    const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, true, rB));
     if (aBox.isEmpty() || aBox.getHeight() <= 0.0)
         return;
     const double fDirRad = basegfx::deg2rad(aN[5] / 60000.0);
@@ -1015,7 +1034,7 @@ namespace
 // a blurred, colored copy of the portion's glyphs under them. Optional tail ' i' = inner shadow,
 // ' t <sx> <sy> <kx> <ky> <algn>' = scale/skew (perspective) around the line box
 void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortions, size_t nBefore,
-                       const OUString& rSpec, const basegfx::B2DRange& rLocalVertical,
+                       const OUString& rSpec, const basegfx::B2DRange& /*rLocalVertical*/,
                        const basegfx::B2DHomMatrix& rB, double fScale)
 {
     sal_Int32 nIdx = 0;
@@ -1092,7 +1111,7 @@ void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortion
     basegfx::B2DHomMatrix aShadowMat(basegfx::utils::createTranslateB2DHomMatrix(fOuterDx, fOuterDy));
     if (bTransform && !(fSx == 1.0 && fSy == 1.0 && nKx == 0 && nKy == 0))
     {
-        const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, rLocalVertical, rB));
+        const basegfx::B2DRange aBox(zetaPortionLocalBox(rPortions, nBefore, false, rB));
         if (!aBox.isEmpty())
             aShadowMat = zetaLineEffectTransform(aBox, rB, fSx, fSy, nKx, nKy, aAlgn, fOuterDx,
                                                  fOuterDy, false);
