@@ -1797,8 +1797,10 @@ void ScInterpreter::ScPoissonDist( bool bODFF )
     bool bCumulative = nParamCount != 3 || GetBool();         // default cumulative
     double lambda    = GetDouble();                           // Mean
     double x         = ::rtl::math::approxFloor(GetDouble()); // discrete distribution
-    if (lambda <= 0.0 || x < 0.0)
+    if (lambda < 0.0 || x < 0.0)
         PushIllegalArgument();
+    else if (lambda == 0.0) // weboffice: like Excel, a mean of 0 is all mass at 0
+        PushDouble( (bCumulative || x == 0.0) ? 1.0 : 0.0 );
     else if (!bCumulative)                            // Probability mass function
     {
         if (lambda >712.0)    // underflow in exp(-lambda)
