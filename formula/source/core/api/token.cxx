@@ -95,7 +95,10 @@ bool FormulaToken::IsFunction() const
 
 sal_uInt8 FormulaToken::GetParamCount() const
 {
+    // weboffice: an unknown function called with arguments (ocBad with a parameter count,
+    // FOO(1)) takes them off the stack, so its #NAME? can be caught by IFERROR like Excel
     if (eOp < ocStopDiv && eOp != ocExternal && eOp != ocMacro && eOp != ocUDExternal
+        && eOp != ocBad
         && !FormulaCompiler::IsOpCodeJumpCommand(eOp) && eOp != ocPercentSign)
         return 0;       // parameters and specials
                         // ocIf... jump commands not for FAP, have cByte then
