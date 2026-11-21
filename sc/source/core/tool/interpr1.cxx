@@ -4052,7 +4052,7 @@ void ScInterpreter::ScNumberValue()
     PushNoValue();
 }
 
-static bool lcl_ScInterpreter_IsPrintable( sal_uInt32 nCodePoint )
+[[maybe_unused]] static bool lcl_ScInterpreter_IsPrintable( sal_uInt32 nCodePoint )
 {
     return ( !u_isISOControl(nCodePoint) /*not in Cc*/
              && u_isdefined(nCodePoint)  /*not in Cn*/ );
@@ -4068,7 +4068,7 @@ void ScInterpreter::ScClean()
     while ( nIdx <  aStr.getLength() )
     {
         sal_uInt32 c = aStr.iterateCodePoints( &nIdx );
-        if ( lcl_ScInterpreter_IsPrintable( c ) )
+        if ( c >= 32 ) // weboffice: like Excel, only the control characters 0..31 go
             aBuf.appendUtf32( c );
     }
     PushString( aBuf.makeStringAndClear() );
