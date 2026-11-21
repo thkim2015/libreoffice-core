@@ -3946,11 +3946,18 @@ bool lcl_ExcelEnglishMonthDate( OUString& rString )
             return false;
         nStart = i;
         const sal_Int32 nDayDigits = readDigits();
-        if (nDayDigits < 1 || nDayDigits > 2)
+        if (nDayDigits == 4)
+        {
+            // weboffice: "Jan 2015", "Feb-2020" are the first day of the month
+            nYear = o3tl::toInt32(rString.subView(nStart, 4));
+            nDay = 1;
+        }
+        else if (nDayDigits < 1 || nDayDigits > 2)
             return false;
-        nDay = o3tl::toInt32(rString.subView(nStart, nDayDigits));
+        else
+            nDay = o3tl::toInt32(rString.subView(nStart, nDayDigits));
         skipSpaces();
-        if (i < nLen)
+        if (i < nLen && nDayDigits != 4)
         {
             if (cSep != ' ' || rString[i] != ',')
                 return false;

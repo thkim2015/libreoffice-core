@@ -15499,7 +15499,7 @@ void ScInterpreter::ScSearch()
     OUString SearchStr = GetString().getString();
     sal_Int32 nPos = nStart - 1;
     sal_Int32 nEndPos = sStr.getLength();
-    if (SearchStr.isEmpty() && nStart <= nEndPos + 1)
+    if (SearchStr.isEmpty() && nStart <= nEndPos) // SEARCH (unlike FIND) stops at LEN
         PushDouble( static_cast<double>(nStart) ); // weboffice: like Excel
     else if( nPos >= nEndPos )
         PushNoValue();
