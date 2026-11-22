@@ -1346,6 +1346,10 @@ Reference< XShape > const & Shape::createAndInsert(
         fShapeRotateInclCamera, aExtrusionColor, bBlockExtrusion);
     // Currently the other places use unit 1/60000deg and MSO shape rotate orientation.
     sal_Int32 nShapeRotateInclCamera = -basegfx::rad2deg<60000>(fShapeRotateInclCamera);
+    // weboffice: PowerPoint draws a table graphicFrame unrotated even when its p:xfrm has rot
+    // (it cannot rotate tables); rotating the table here moved it and left skewed border lines.
+    if (mpTablePropertiesPtr && aServiceName == "com.sun.star.drawing.TableShape")
+        nShapeRotateInclCamera = 0;
     bool bIs3DGraphic = aServiceName == "com.sun.star.drawing.GraphicObjectShape" && bHas3DEffect;
     bIsCustomShape |= bIs3DGraphic;
 
