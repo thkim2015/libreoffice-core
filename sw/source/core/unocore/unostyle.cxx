@@ -77,6 +77,11 @@
 #include <docstyle.hxx>
 #include <unotextbodyhf.hxx>
 #include <fmthdft.hxx>
+#include <undobj.hxx>
+#include <UndoCore.hxx>
+#include <SwRewriter.hxx>
+#include <swundo.hxx>
+#include <svl/whiter.hxx>
 #include <fmtpdsc.hxx>
 #include <strings.hrc>
 #include <poolfmt.hxx>
@@ -2960,6 +2965,139 @@ void SwXStyle::Invalidate()
     m_xStyleFamily.clear();
 }
 
+namespace
+{
+// weboffice: Undo for page style attribute changes through UNO (margins, size, orientation,
+// header/footer spacing...) on pages with a header or footer. SwUndoPageDesc exchanges the
+// header/footer content nodes between the old and new page desc, which through UNO left a footer
+// page number field empty, so this action only stores the attributes of the page formats and of
+// the live header/footer formats (never RES_HEADER/RES_FOOTER/RES_CNTNT, the content stays where
+// it is) and applies them like the Page Style dialog does: SwDoc::ChgPageDesc with a copy.
+SwFrameFormat& lcl_PageFormat(SwPageDesc& rDesc, int i)
+{
+    switch (i)
+    {
+        case 0: return rDesc.GetMaster();
+        case 1: return rDesc.GetLeft();
+        case 2: return rDesc.GetFirstMaster();
+        default: return rDesc.GetFirstLeft();
+    }
+}
+
+SwFrameFormat* lcl_HeaderFooterFormat(SwFrameFormat& rPage, bool bFooter)
+{
+    return bFooter ? const_cast<SwFrameFormat*>(rPage.GetFooter().GetFooterFormat())
+                   : const_cast<SwFrameFormat*>(rPage.GetHeader().GetHeaderFormat());
+}
+
+void lcl_ApplyFormatAttrs(SwFrameFormat& rFormat, const SfxItemSet& rWant)
+{
+    const SfxItemSet& rHave = rFormat.GetAttrSet();
+    SfxItemSet aPut(*rHave.GetPool(), rHave.GetRanges());
+    std::vector<sal_uInt16> aReset;
+    SfxWhichIter aIter(rHave);
+    for (sal_uInt16 nWhich = aIter.FirstWhich(); nWhich; nWhich = aIter.NextWhich())
+    {
+        if (nWhich == RES_HEADER || nWhich == RES_FOOTER || nWhich == RES_CNTNT)
+            continue;
+        const SfxPoolItem* pWant = nullptr;
+        const SfxPoolItem* pHave = nullptr;
+        const bool bWant = rWant.GetItemState(nWhich, false, &pWant) == SfxItemState::SET;
+        const bool bHave = rHave.GetItemState(nWhich, false, &pHave) == SfxItemState::SET;
+        if (bWant && (!bHave || !(*pWant == *pHave)))
+            aPut.Put(*pWant);
+        else if (!bWant && bHave)
+            aReset.push_back(nWhich);
+    }
+    for (sal_uInt16 nWhich : aReset)
+        rFormat.ResetFormatAttr(nWhich);
+    if (aPut.Count())
+        rFormat.SetFormatAttr(aPut);
+}
+
+struct PageStyleAttrState
+{
+    std::unique_ptr<SfxItemSet> m_aPage[4];
+    std::unique_ptr<SfxItemSet> m_aHeader[4];
+    std::unique_ptr<SfxItemSet> m_aFooter[4];
+    bool m_bLandscape;
+    UseOnPage m_eUseOn;
+    SvxNumberType m_aNumType;
+    SwPageFootnoteInfo m_aFootnoteInfo;
+    drawing::TextVerticalAdjust m_eVertAdjust;
+
+    explicit PageStyleAttrState(SwPageDesc& rDesc)
+        : m_bLandscape(rDesc.GetLandscape())
+        , m_eUseOn(rDesc.GetUseOn())
+        , m_aNumType(rDesc.GetNumType())
+        , m_aFootnoteInfo(rDesc.GetFootnoteInfo())
+        , m_eVertAdjust(rDesc.GetVerticalAdjustment())
+    {
+        for (int i = 0; i < 4; ++i)
+        {
+            SwFrameFormat& rPage = lcl_PageFormat(rDesc, i);
+            m_aPage[i] = rPage.GetAttrSet().Clone(true);
+            if (SwFrameFormat* pHeader = lcl_HeaderFooterFormat(rPage, false))
+                m_aHeader[i] = pHeader->GetAttrSet().Clone(true);
+            if (SwFrameFormat* pFooter = lcl_HeaderFooterFormat(rPage, true))
+                m_aFooter[i] = pFooter->GetAttrSet().Clone(true);
+        }
+    }
+
+    void Apply(SwDoc& rDoc, const UIName& rName) const
+    {
+        SwPageDesc* pDesc = rDoc.FindPageDesc(rName);
+        if (!pDesc)
+            return;
+        // header/footer formats are shared with the copy: set their attributes on the live ones
+        for (int i = 0; i < 4; ++i)
+        {
+            SwFrameFormat& rPage = lcl_PageFormat(*pDesc, i);
+            if (SwFrameFormat* pHeader = lcl_HeaderFooterFormat(rPage, false); pHeader && m_aHeader[i])
+                lcl_ApplyFormatAttrs(*pHeader, *m_aHeader[i]);
+            if (SwFrameFormat* pFooter = lcl_HeaderFooterFormat(rPage, true); pFooter && m_aFooter[i])
+                lcl_ApplyFormatAttrs(*pFooter, *m_aFooter[i]);
+        }
+        SwPageDesc aDesc(*pDesc);
+        for (int i = 0; i < 4; ++i)
+            lcl_ApplyFormatAttrs(lcl_PageFormat(aDesc, i), *m_aPage[i]);
+        aDesc.SetLandscape(m_bLandscape);
+        aDesc.SetUseOn(m_eUseOn);
+        aDesc.SetNumType(m_aNumType);
+        aDesc.SetFootnoteInfo(m_aFootnoteInfo);
+        aDesc.SetVerticalAdjustment(m_eVertAdjust);
+        rDoc.ChgPageDesc(rName, aDesc);
+    }
+};
+
+class SwUndoPageStyleAttrs final : public SwUndo
+{
+    UIName m_aName;
+    std::unique_ptr<PageStyleAttrState> m_pOld;
+    std::unique_ptr<PageStyleAttrState> m_pNew;
+
+public:
+    SwUndoPageStyleAttrs(SwDoc& rDoc, UIName aName, std::unique_ptr<PageStyleAttrState> pOld,
+                         std::unique_ptr<PageStyleAttrState> pNew)
+        : SwUndo(SwUndoId::CHANGE_PAGEDESC, rDoc)
+        , m_aName(std::move(aName))
+        , m_pOld(std::move(pOld))
+        , m_pNew(std::move(pNew))
+    {
+    }
+    void UndoImpl(::sw::UndoRedoContext& rContext) override { m_pOld->Apply(rContext.GetDoc(), m_aName); }
+    void RedoImpl(::sw::UndoRedoContext& rContext) override { m_pNew->Apply(rContext.GetDoc(), m_aName); }
+    SwRewriter GetRewriter() const override
+    {
+        SwRewriter aResult;
+        aResult.AddRule(UndoArg1, m_aName.toString());
+        aResult.AddRule(UndoArg2, SwResId(STR_YIELDS));
+        aResult.AddRule(UndoArg3, m_aName.toString());
+        return aResult;
+    }
+};
+}
+
 SwXPageStyle::SwXPageStyle(SfxStyleSheetBasePool& rPool, SwDocShell* pDocSh, const UIName& rStyleName)
     : SwXStyle(&rPool, SfxStyleFamily::Page, pDocSh->GetDoc(), rStyleName)
 { }
@@ -3209,6 +3347,32 @@ void SwXPageStyle::SetPropertyValues_Impl(const uno::Sequence<OUString>& rProper
         if (!bTouchesHeaderFooter && !bHasHeaderFooter && rUndo.DoesUndo())
         {
             aBaseImpl.getNewBase()->SetItemSet(aBaseImpl.GetItemSet());
+            return;
+        }
+        // weboffice: pages with a header or footer, and header/footer attributes (height, spacing,
+        // margins...), get SwUndoPageStyleAttrs, which leaves the header/footer content alone.
+        // Switching a header/footer on/off, sharing and the header/footer text keep the i64460 path.
+        const bool bHeaderFooterStructure = std::any_of(rPropertyNames.begin(), rPropertyNames.end(),
+            [](const OUString& rName) { return (rName.startsWith("Header") || rName.startsWith("Footer")
+                                                || rName.startsWith("First"))
+                                               && (rName.endsWith("IsOn") || rName.indexOf("Shared") >= 0
+                                                   || rName.indexOf("Text") >= 0); });
+        if (!bHeaderFooterStructure && pOldDesc && rUndo.DoesUndo())
+        {
+            const UIName aDescName = pOldDesc->GetName();
+            auto pOld = std::make_unique<PageStyleAttrState>(*const_cast<SwPageDesc*>(pOldDesc));
+            // SwDoc::ChgPageDesc without Undo takes the first Redo action for the one being undone
+            // (header/footer insertion is then removed): there must be no Redo left
+            rUndo.ClearRedo();
+            {
+                ::sw::UndoGuard const undoGuard(rUndo);
+                aBaseImpl.getNewBase()->SetItemSet(aBaseImpl.GetItemSet());
+            }
+            if (SwPageDesc* pNewDesc = GetDoc()->FindPageDesc(aDescName))
+            {
+                rUndo.AppendUndo(std::make_unique<SwUndoPageStyleAttrs>(
+                    *GetDoc(), aDescName, std::move(pOld), std::make_unique<PageStyleAttrState>(*pNewDesc)));
+            }
             return;
         }
 
