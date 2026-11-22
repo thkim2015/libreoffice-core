@@ -1321,6 +1321,7 @@ private:
                                             const ScDataAreaExtras& rDataAreaExtras, ScProgress* pProgress );
 
     bool        CreateExcelQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, ScQueryParam& rQueryParam);
+    std::shared_ptr<const std::vector<bool>> zetaComputedCriterion(SCCOL nCol, SCROW nRow, SCROW nFirst, SCROW nLast);
     bool        CreateStarQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, ScQueryParam& rQueryParam);
     OUString    GetUpperCellString(SCCOL nCol, SCROW nRow);
 

@@ -2820,6 +2820,37 @@ SCSIZE ScTable::Query(const ScQueryParam& rParamOrg, bool bKeepSub, bool bKeepTo
     return nCount;
 }
 
+std::shared_ptr<const std::vector<bool>> ScTable::zetaComputedCriterion(SCCOL nCol, SCROW nRow,
+                                                                       SCROW nFirst, SCROW nLast)
+{
+    auto pMask = std::make_shared<std::vector<bool>>();
+    if (nLast < nFirst)
+        return pMask;
+    pMask->resize(nLast - nFirst + 1, false);
+    const ScRefCellValue aCell = GetCellValue(nCol, nRow);
+    if (aCell.getType() == CELLTYPE_FORMULA)
+    {
+        const ScFormulaCell& rSrc = *aCell.getFormula();
+        for (SCROW k = 0; k <= nLast - nFirst; ++k)
+        {
+            if (nRow + k > rDocument.MaxRow())
+                break;
+            ScFormulaCell aClone(rSrc, rDocument, ScAddress(nCol, nRow + k, nTab));
+            aClone.SetDirtyVar();
+            aClone.Interpret();
+            const FormulaError nErr = aClone.GetRawError();
+            (*pMask)[k] = nErr == FormulaError::NONE && aClone.IsValue()
+                          && aClone.GetRawValue() != 0.0;
+        }
+    }
+    else
+    {
+        const bool bOn = aCell.getType() == CELLTYPE_VALUE && aCell.getDouble() != 0.0;
+        std::fill(pMask->begin(), pMask->end(), bOn);
+    }
+    return pMask;
+}
+
 bool ScTable::CreateExcelQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, ScQueryParam& rQueryParam)
 {
     bool    bValid = true;
@@ -2848,7 +2879,7 @@ bool ScTable::CreateExcelQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow
         if (bFound)
             pFields[nCol - nCol1] = i;
         else
-            bValid = false;
+            pFields[nCol - nCol1] = -1; // weboffice: Excel computed criterion (header not a field)
         nCol++;
     }
     if (bValid)
@@ -2875,7 +2906,29 @@ bool ScTable::CreateExcelQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow
             while (nCol <= nCol2)
             {
                 aCellStr = GetInputString( nCol, nRow );
-                if (!aCellStr.isEmpty())
+                if (!aCellStr.isEmpty() && pFields[nCol - nCol1] < 0)
+                {
+                    // weboffice: Excel computed criterion — the cell (a formula written for the
+                    // first record, its relative references moved down per record, or a
+                    // constant) matches a record when it gives TRUE or a non-zero number
+                    if (nIndex < nNewEntries)
+                    {
+                        ScQueryEntry& rEntry = rQueryParam.GetEntry(nIndex);
+                        rEntry.bDoQuery = true;
+                        rEntry.nField = rQueryParam.nCol1;
+                        rEntry.eOp = SC_EQUAL;
+                        rEntry.GetQueryItem().meType = ScQueryEntry::ByValue;
+                        rEntry.mnZetaMaskRow = nDBRow1 + 1;
+                        rEntry.mpZetaRowMask = zetaComputedCriterion(nCol, nRow, nDBRow1 + 1,
+                                                                     rQueryParam.nRow2);
+                        nIndex++;
+                        if (nIndex < nNewEntries)
+                            rQueryParam.GetEntry(nIndex).eConnect = SC_AND;
+                    }
+                    else
+                        bValid = false;
+                }
+                else if (!aCellStr.isEmpty())
                 {
                     if (nIndex < nNewEntries)
                     {

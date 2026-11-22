@@ -52,6 +52,8 @@ ScQueryEntry::ScQueryEntry(const ScQueryEntry& r) :
     nField(r.nField),
     eOp(r.eOp),
     eConnect(r.eConnect),
+    mpZetaRowMask(r.mpZetaRowMask),
+    mnZetaMaskRow(r.mnZetaMaskRow),
     maQueryItems(r.maQueryItems)
 {
 }
@@ -61,6 +63,8 @@ ScQueryEntry::ScQueryEntry(ScQueryEntry&& r) noexcept :
     nField(r.nField),
     eOp(r.eOp),
     eConnect(r.eConnect),
+    mpZetaRowMask(std::move(r.mpZetaRowMask)),
+    mnZetaMaskRow(r.mnZetaMaskRow),
     maQueryItems(std::move(r.maQueryItems))
 {
 }
@@ -76,6 +80,8 @@ ScQueryEntry& ScQueryEntry::operator=( const ScQueryEntry& r )
     eConnect        = r.eConnect;
     nField          = r.nField;
     maQueryItems  = r.maQueryItems;
+    mpZetaRowMask   = r.mpZetaRowMask;
+    mnZetaMaskRow   = r.mnZetaMaskRow;
 
     pSearchParam.reset();
     pSearchText.reset();
@@ -183,6 +189,8 @@ void ScQueryEntry::Clear()
     eOp             = SC_EQUAL;
     eConnect        = SC_AND;
     nField          = 0;
+    mpZetaRowMask.reset();
+    mnZetaMaskRow   = 0;
     maQueryItems.clear();
     maQueryItems.emplace_back();
 
@@ -196,7 +204,9 @@ bool ScQueryEntry::operator==( const ScQueryEntry& r ) const
         && eOp              == r.eOp
         && eConnect         == r.eConnect
         && nField           == r.nField
-        && maQueryItems   == r.maQueryItems;
+        && maQueryItems   == r.maQueryItems
+        && mpZetaRowMask  == r.mpZetaRowMask
+        && mnZetaMaskRow  == r.mnZetaMaskRow;
     // do not compare pSearchParam and pSearchText!
 }
 

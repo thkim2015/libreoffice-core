@@ -3045,14 +3045,14 @@ bool ScInterpreter::CheckMatrix(bool _bLOG, sal_uInt8& nCase, SCSIZE& nCX,
         }
         else if (nCY != 1 && nRY != 1)
         {
-            PushIllegalArgument();
+            PushError(FormulaError::NoRef); // weboffice: Excel #REF! for known_y/known_x size mismatch
             return false;
         }
         else if (nCY == 1)
         {
             if (nRX != nRY)
             {
-                PushIllegalArgument();
+                PushError(FormulaError::NoRef); // weboffice: Excel #REF! for known_y/known_x size mismatch
                 return false;
             }
             else
@@ -3064,7 +3064,7 @@ bool ScInterpreter::CheckMatrix(bool _bLOG, sal_uInt8& nCase, SCSIZE& nCX,
         }
         else if (nCX != nCY)
         {
-            PushIllegalArgument();
+            PushError(FormulaError::NoRef); // weboffice: Excel #REF! for known_y/known_x size mismatch
             return false;
         }
         else

@@ -64,6 +64,10 @@ struct SC_DLLPUBLIC ScQueryEntry final
     ScQueryConnect  eConnect;
     mutable std::unique_ptr<utl::SearchParam> pSearchParam;       ///< if Wildcard or RegExp, not saved
     mutable std::unique_ptr<utl::TextSearch>  pSearchText;        ///< if Wildcard or RegExp, not saved
+    /// weboffice: Excel computed criterion (a database criteria column whose header is not a
+    /// field): the per-record result, record i at row mnZetaMaskRow + i (not saved)
+    std::shared_ptr<const std::vector<bool>> mpZetaRowMask;
+    SCROW           mnZetaMaskRow = 0;
 
     ScQueryEntry();
     ScQueryEntry(const ScQueryEntry& r);

@@ -876,7 +876,17 @@ bool ScQueryEvaluator::ValidQuery(SCROW nRow, const ScRefCellValue* pCell,
         else
             aCell = mrTab.GetCellValue(nCol, nRow);
 
-        std::pair<bool, bool> aRes = processEntry(nRow, nCol, aCell, rEntry, it - itBeg);
+        std::pair<bool, bool> aRes;
+        if (rEntry.mpZetaRowMask)
+        {
+            // weboffice: Excel computed criterion, evaluated per record beforehand
+            const SCROW nIdx = nRow - rEntry.mnZetaMaskRow;
+            const bool bOk = nIdx >= 0 && o3tl::make_unsigned(nIdx) < rEntry.mpZetaRowMask->size()
+                             && (*rEntry.mpZetaRowMask)[nIdx];
+            aRes = { bOk, bOk };
+        }
+        else
+            aRes = processEntry(nRow, nCol, aCell, rEntry, it - itBeg);
 
         if (nPos == -1)
         {

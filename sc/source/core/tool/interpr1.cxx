@@ -232,6 +232,16 @@ static void lcl_storeJumpMatResult(
     }
 }
 
+// weboffice: the error Excel gives a function value used as a value: #CALC! for an uncalled
+// lambda, #NAME? for a function or macro name without a call
+static FormulaError zetaCallableError(const formula::FormulaToken* pTok)
+{
+    if (auto pCallable = dynamic_cast<const formula::FormulaCallableToken*>(pTok))
+        if (pCallable->GetCallable() && pCallable->GetCallable()->GetOpCode() == ocLambda)
+            return FormulaError::NestedArray;
+    return FormulaError::NoName;
+}
+
 void ScInterpreter::ScIfError( bool bNAonly )
 {
     const short* pJump = static_cast<const FormulaJumpToken*>(pCur)->GetJump();
@@ -253,6 +263,13 @@ void ScInterpreter::ScIfError( bool bNAonly )
     MatrixJumpConditionToMatrix();
     switch (GetStackType())
     {
+        case svCallable:
+            // weboffice: like Excel, a function name without a call (=IFERROR(SUM,"e")) is
+            // #NAME? and an uncalled lambda #CALC! here, so IFERROR takes the second argument
+            Pop();
+            nGlobalError = zetaCallableError(xToken.get());
+            bError = true;
+            break;
         default:
             Pop();
             // Act on implicitly propagated error, if any.
@@ -3531,6 +3548,11 @@ void ScInterpreter::ScIsErr()
             }
         }
         break;
+        case svCallable:
+            // weboffice: a function name without a call is #NAME? (an uncalled lambda #CALC!)
+            Pop();
+            bRes = true;
+            break;
         default:
             PopError();
             if ( nGlobalError != FormulaError::NONE && nGlobalError != FormulaError::NotAvailable )
@@ -3590,6 +3612,11 @@ void ScInterpreter::ScIsError()
             }
         }
         break;
+        case svCallable:
+            // weboffice: a function name without a call is #NAME? (an uncalled lambda #CALC!)
+            Pop();
+            bRes = true;
+            break;
         default:
             PopError();
             if ( nGlobalError != FormulaError::NONE )
