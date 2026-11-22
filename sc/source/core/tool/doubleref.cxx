@@ -31,6 +31,8 @@
 #include <unotools/charclass.hxx>
 #include <unotools/transliterationwrapper.hxx>
 
+#include <formulacell.hxx>
+#include <cellvalue.hxx>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -144,6 +146,39 @@ bool lcl_createStarQuery(
     return bValid;
 }
 
+// weboffice: Excel computed criterion (criteria column whose header is not a field). The cell
+// is a formula written for the first record (relative references moved down per record) or a
+// constant; a record matches when it gives TRUE or a non-zero number.
+std::shared_ptr<const std::vector<bool>> lcl_zetaComputedCriterion(
+    ScDocument& rDoc, const ScAddress& rCrit, SCROW nFirst, SCROW nLast)
+{
+    auto pMask = std::make_shared<std::vector<bool>>();
+    if (nLast < nFirst)
+        return pMask;
+    pMask->resize(nLast - nFirst + 1, false);
+    const ScRefCellValue aCell = rDoc.GetRefCellValue(rCrit);
+    if (aCell.getType() == CELLTYPE_FORMULA)
+    {
+        const ScFormulaCell& rSrc = *aCell.getFormula();
+        for (SCROW k = 0; k <= nLast - nFirst; ++k)
+        {
+            if (rCrit.Row() + k > rDoc.MaxRow())
+                break;
+            ScFormulaCell aClone(rSrc, rDoc, ScAddress(rCrit.Col(), rCrit.Row() + k, rCrit.Tab()));
+            aClone.SetDirtyVar();
+            aClone.Interpret();
+            (*pMask)[k] = aClone.GetRawError() == FormulaError::NONE && aClone.IsValue()
+                          && aClone.GetRawValue() != 0.0;
+        }
+    }
+    else
+    {
+        const bool bOn = aCell.getType() == CELLTYPE_VALUE && aCell.getDouble() != 0.0;
+        std::fill(pMask->begin(), pMask->end(), bOn);
+    }
+    return pMask;
+}
+
 bool lcl_createExcelQuery(
     const ScDocument* pDoc,
     svl::SharedStringPool& rPool, ScQueryParamBase* pParam, const ScDBRangeBase* pDBRef, const ScDBRangeBase* pQueryRef)
@@ -152,6 +187,9 @@ bool lcl_createExcelQuery(
     SCCOL nCols = pQueryRef->getColSize();
     SCROW nRows = pQueryRef->getRowSize();
     std::vector<SCCOL> aFields(nCols);
+    // weboffice: computed criteria need both ranges on the sheet
+    const ScDBInternalRange* pDBInt = dynamic_cast<const ScDBInternalRange*>(pDBRef);
+    const ScDBInternalRange* pQueryInt = dynamic_cast<const ScDBInternalRange*>(pQueryRef);
     SCCOL nCol = 0;
     while (bValid && (nCol < nCols))
     {
@@ -159,6 +197,8 @@ bool lcl_createExcelQuery(
         SCCOL nField = pDBRef->findFieldColumn(aQueryStr);
         if (pDoc->ValidCol(nField))
             aFields[nCol] = nField;
+        else if (pDBInt && pQueryInt)
+            aFields[nCol] = -1; // weboffice: Excel computed criterion
         else
             bValid = false;
         ++nCol;
@@ -188,7 +228,29 @@ bool lcl_createExcelQuery(
             {
                 aCellStr = pQueryRef->getString(nCol, nRow);
                 aCellStr = ScGlobal::getCharClass().uppercase( aCellStr );
-                if (!aCellStr.isEmpty())
+                if (!aCellStr.isEmpty() && aFields[nCol] < 0)
+                {
+                    if (nIndex < nNewEntries)
+                    {
+                        const ScRange& rDB = pDBInt->getRange();
+                        const ScAddress& rQ = pQueryInt->getRange().aStart;
+                        ScQueryEntry& rEntry = pParam->GetEntry(nIndex);
+                        rEntry.bDoQuery = true;
+                        rEntry.nField = rDB.aStart.Col();
+                        rEntry.eOp = SC_EQUAL;
+                        rEntry.mnZetaMaskRow = rDB.aStart.Row() + 1;
+                        rEntry.mpZetaRowMask = lcl_zetaComputedCriterion(
+                            *const_cast<ScDocument*>(pDoc),
+                            ScAddress(rQ.Col() + nCol, rQ.Row() + nRow, rQ.Tab()),
+                            rDB.aStart.Row() + 1, rDB.aEnd.Row());
+                        nIndex++;
+                        if (nIndex < nNewEntries)
+                            pParam->GetEntry(nIndex).eConnect = SC_AND;
+                    }
+                    else
+                        bValid = false;
+                }
+                else if (!aCellStr.isEmpty())
                 {
                     if (nIndex < nNewEntries)
                     {
