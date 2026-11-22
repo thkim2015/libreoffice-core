@@ -956,11 +956,14 @@ basegfx::B2DHomMatrix zetaLineEffectTransform(const basegfx::B2DRange& rLocalBox
     aInvB.invert();
     basegfx::B2DHomMatrix aMat(aInvB);
     aMat *= basegfx::utils::createTranslateB2DHomMatrix(-fAx, -fAy);
-    aMat.scale(fSx, fSy);
+    // Excel 2021 (CopyPicture, perspective preset 'upper right' sy 30% kx -30deg): the skew is
+    // taken on the unscaled glyphs, then the scale (the top of a glyph moves tan(kx) x its full
+    // height above the anchor, not x the squashed height)
     if (nKx != 0)
         aMat.shearX(std::tan(basegfx::deg2rad(nKx / 60000.0)));
     if (nKy != 0)
         aMat.shearY(std::tan(basegfx::deg2rad(nKy / 60000.0)));
+    aMat.scale(fSx, fSy);
     aMat.translate(fAx + (bLocalMove ? fDx : 0.0), fAy + (bLocalMove ? fDy : 0.0));
     aMat *= rB;
     if (!bLocalMove)
