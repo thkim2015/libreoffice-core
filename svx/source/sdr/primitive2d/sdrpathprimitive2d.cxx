@@ -96,6 +96,16 @@ namespace drawinglayer::primitive2d
                 aRetval.append(aTemp);
             }
 
+            // weboffice: soft edge and glow like rectangles and custom shapes (Excel chart
+            // bars and areas are path objects)
+            if (!aRetval.empty() && getSdrLFSTAttribute().getSoftEdgeRadius())
+            {
+                aRetval = createEmbeddedSoftEdgePrimitive(std::move(aRetval),
+                    getSdrLFSTAttribute().getSoftEdgeRadius());
+            }
+            if (!aRetval.empty() && !getSdrLFSTAttribute().getGlow().isDefault())
+                aRetval = createEmbeddedGlowPrimitive(std::move(aRetval), getSdrLFSTAttribute().getGlow());
+
             // add text
             if(!getSdrLFSTAttribute().getText().isDefault())
             {
