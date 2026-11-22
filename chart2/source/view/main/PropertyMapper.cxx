@@ -361,6 +361,17 @@ const tPropertyNameMap& PropertyMapper::getPropertyNameMapForFillProperties()
 {
     //shape property -- chart model object property
     static tPropertyNameMap s_aShapePropertyMapForFillProperties{
+        // weboffice: Excel chart element effects
+        {"Shadow",                       "Shadow"},
+        {"ShadowColor",                  "ShadowColor"},
+        {"ShadowTransparence",           "ShadowTransparence"},
+        {"ShadowXDistance",              "ShadowXDistance"},
+        {"ShadowYDistance",              "ShadowYDistance"},
+        {"ShadowBlur",                   "ShadowBlur"},
+        {"GlowEffectRadius",             "GlowEffectRadius"},
+        {"GlowEffectColor",              "GlowEffectColor"},
+        {"GlowEffectTransparency",       "GlowEffectTransparency"},
+        {"SoftEdgeRadius",               "SoftEdgeRadius"},
         {"FillBackground",               "FillBackground"},
         {"FillBitmapName",               "FillBitmapName"},
         {"FillColor",                    "FillColor"},
@@ -478,6 +489,17 @@ const tPropertyNameMap& PropertyMapper::getPropertyNameMapForFilledSeriesPropert
 {
     //shape property -- chart model object property
     static tPropertyNameMap s_aShapePropertyMapForFilledSeriesProperties{
+        // weboffice: Excel chart element effects
+        {"Shadow",                       "Shadow"},
+        {"ShadowColor",                  "ShadowColor"},
+        {"ShadowTransparence",           "ShadowTransparence"},
+        {"ShadowXDistance",              "ShadowXDistance"},
+        {"ShadowYDistance",              "ShadowYDistance"},
+        {"ShadowBlur",                   "ShadowBlur"},
+        {"GlowEffectRadius",             "GlowEffectRadius"},
+        {"GlowEffectColor",              "GlowEffectColor"},
+        {"GlowEffectTransparency",       "GlowEffectTransparency"},
+        {"SoftEdgeRadius",               "SoftEdgeRadius"},
         {"FillBackground",               "FillBackground"},
         {"FillBitmapName",               "FillBitmapName"},
         {"FillColor",                    "Color"},

@@ -251,6 +251,9 @@ void DataPointProperties::AddPropertiesToVector(
                   beans::PropertyAttribute::BOUND
                   | beans::PropertyAttribute::MAYBEDEFAULT );
 
+    // weboffice: Excel chart element effects (shadow, glow, soft edge)
+    FillProperties::AddZetaEffectPropertiesToVector( rOutProperties );
+
     // FillProperties
     // bitmap properties
     rOutProperties.emplace_back( "FillBitmapOffsetX",
@@ -502,6 +505,7 @@ void DataPointProperties::AddDefaultsToMap(
     ::chart::tPropertyValueMap & rOutMap )
 {
     PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_COLOR, Color(0x99, 0xcc, 0xff) ); // blue 8
+    FillProperties::AddZetaEffectDefaultsToMap( rOutMap );
     PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_TRANSPARENCY, sal_Int16(0) );
 
     //fill

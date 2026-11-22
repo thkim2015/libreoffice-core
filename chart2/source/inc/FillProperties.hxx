@@ -61,12 +61,29 @@ namespace FillProperties
         , PROP_FILL_BITMAP_MODE
         // bitmap properties end
         , PROP_FILL_BACKGROUND
+        // weboffice: Excel chart element effects (c:spPr a:effectLst outerShdw, glow,
+        // softEdge) passed to the drawn shapes
+        , PROP_FILL_ZETA_SHADOW
+        , PROP_FILL_ZETA_SHADOW_COLOR
+        , PROP_FILL_ZETA_SHADOW_TRANSPARENCE
+        , PROP_FILL_ZETA_SHADOW_XDISTANCE
+        , PROP_FILL_ZETA_SHADOW_YDISTANCE
+        , PROP_FILL_ZETA_SHADOW_BLUR
+        , PROP_FILL_ZETA_GLOW_RADIUS
+        , PROP_FILL_ZETA_GLOW_COLOR
+        , PROP_FILL_ZETA_GLOW_TRANSPARENCY
+        , PROP_FILL_ZETA_SOFTEDGE_RADIUS
     };
 
     void AddPropertiesToVector(
         std::vector< css::beans::Property > & rOutProperties );
 
     void AddDefaultsToMap( ::chart::tPropertyValueMap & rOutMap );
+
+    /// weboffice: shadow, glow and soft edge properties (also on data points)
+    void AddZetaEffectPropertiesToVector(
+        std::vector< css::beans::Property > & rOutProperties );
+    void AddZetaEffectDefaultsToMap( ::chart::tPropertyValueMap & rOutMap );
 }
 
 } //  namespace chart

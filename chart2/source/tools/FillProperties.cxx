@@ -185,12 +185,46 @@ void lcl_AddDefaultsToMap_only_BitmapProperties(
 
 }//end anonymous namespace
 
+void FillProperties::AddZetaEffectPropertiesToVector(std::vector<beans::Property>& rOutProperties)
+{
+    const auto add = [&](const char* pName, sal_Int32 nId, const uno::Type& rType) {
+        rOutProperties.emplace_back(OUString::createFromAscii(pName), nId, rType,
+                                    beans::PropertyAttribute::BOUND
+                                        | beans::PropertyAttribute::MAYBEDEFAULT);
+    };
+    add("Shadow", PROP_FILL_ZETA_SHADOW, cppu::UnoType<bool>::get());
+    add("ShadowColor", PROP_FILL_ZETA_SHADOW_COLOR, cppu::UnoType<sal_Int32>::get());
+    add("ShadowTransparence", PROP_FILL_ZETA_SHADOW_TRANSPARENCE, cppu::UnoType<sal_Int16>::get());
+    add("ShadowXDistance", PROP_FILL_ZETA_SHADOW_XDISTANCE, cppu::UnoType<sal_Int32>::get());
+    add("ShadowYDistance", PROP_FILL_ZETA_SHADOW_YDISTANCE, cppu::UnoType<sal_Int32>::get());
+    add("ShadowBlur", PROP_FILL_ZETA_SHADOW_BLUR, cppu::UnoType<sal_Int32>::get());
+    add("GlowEffectRadius", PROP_FILL_ZETA_GLOW_RADIUS, cppu::UnoType<sal_Int32>::get());
+    add("GlowEffectColor", PROP_FILL_ZETA_GLOW_COLOR, cppu::UnoType<sal_Int32>::get());
+    add("GlowEffectTransparency", PROP_FILL_ZETA_GLOW_TRANSPARENCY, cppu::UnoType<sal_Int16>::get());
+    add("SoftEdgeRadius", PROP_FILL_ZETA_SOFTEDGE_RADIUS, cppu::UnoType<sal_Int32>::get());
+}
+
+void FillProperties::AddZetaEffectDefaultsToMap(::chart::tPropertyValueMap& rOutMap)
+{
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW, false);
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_COLOR, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_TRANSPARENCE, sal_Int16(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_XDISTANCE, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_YDISTANCE, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_BLUR, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_GLOW_RADIUS, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_GLOW_COLOR, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_GLOW_TRANSPARENCY, sal_Int16(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SOFTEDGE_RADIUS, sal_Int32(0));
+}
+
 void FillProperties::AddPropertiesToVector(
     std::vector<beans::Property> & rOutProperties )
 {
     // Fill Properties see service drawing::FillProperties
     lcl_AddPropertiesToVector_without_BitmapProperties( rOutProperties );
     lcl_AddPropertiesToVector_only_BitmapProperties( rOutProperties );
+    AddZetaEffectPropertiesToVector( rOutProperties );
 }
 
 void FillProperties::AddDefaultsToMap(
@@ -198,6 +232,7 @@ void FillProperties::AddDefaultsToMap(
 {
     lcl_AddDefaultsToMap_without_BitmapProperties( rOutMap );
     lcl_AddDefaultsToMap_only_BitmapProperties( rOutMap );
+    AddZetaEffectDefaultsToMap( rOutMap );
 }
 
 } //  namespace chart
