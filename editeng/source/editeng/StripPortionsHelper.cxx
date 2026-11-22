@@ -19,7 +19,6 @@
 
 #include <editeng/StripPortionsHelper.hxx>
 #include <optional>
-#include <cstdio>
 #include <functional>
 #include <drawinglayer/primitive2d/PolygonStrokePrimitive2D.hxx>
 #include <basegfx/polygon/b2dlinegeometry.hxx>
@@ -746,15 +745,25 @@ basegfx::B2DRange zetaPortionAscentRange(const DrawPortionInfo& rInfo,
 namespace
 {
 // weboffice: collect the text portion primitives (also inside groups such as fields)
-// weboffice: the glyphs of text primitives as filled outlines (decorations kept as their strokes).
-// A text primitive under a non-uniform scale (a perspective shadow squashed by sy) did not paint in
-// the shape picture; outlines paint under any transform.
-void zetaTextToGeometry(const drawinglayer::primitive2d::Primitive2DReference& xPrim,
-                        drawinglayer::primitive2d::Primitive2DContainer& rOut, int nDepth)
+// weboffice: the glyphs (and decoration strokes) of text primitives as filled outlines with rMat
+// baked into the coordinates. A perspective text shadow under a TransformPrimitive2D with an
+// absolute matrix drew in the right place on screen but not in the shape picture export
+// (GraphicExportFilter: the content moved to the picture origin while the matrix kept page
+// coordinates, so a sy 30% shadow landed 0.7 x the shape position lower); baked geometry moves
+// with the content.
+void zetaBakeTextGeometry(const drawinglayer::primitive2d::Primitive2DReference& xPrim,
+                          const basegfx::B2DHomMatrix& rMat,
+                          drawinglayer::primitive2d::Primitive2DContainer& rOut, int nDepth)
 {
     const drawinglayer::primitive2d::BasePrimitive2D* pPrim = xPrim.get();
     if (!pPrim)
         return;
+    const auto push = [&](basegfx::B2DPolyPolygon aPoly, const basegfx::BColor& rColor) {
+        if (!aPoly.count())
+            return;
+        aPoly.transform(rMat);
+        rOut.push_back(new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(std::move(aPoly), rColor));
+    };
     if (nDepth < 6)
     {
         if (auto pDeco = dynamic_cast<const drawinglayer::primitive2d::TextDecoratedPortionPrimitive2D*>(pPrim))
@@ -762,7 +771,7 @@ void zetaTextToGeometry(const drawinglayer::primitive2d::Primitive2DReference& x
             drawinglayer::primitive2d::Primitive2DContainer aSub;
             pDeco->get2DDecomposition(aSub, drawinglayer::geometry::ViewInformation2D());
             for (const auto& rChild : aSub)
-                zetaTextToGeometry(rChild, rOut, nDepth + 1);
+                zetaBakeTextGeometry(rChild, rMat, rOut, nDepth + 1);
             return;
         }
         if (auto pText = dynamic_cast<const drawinglayer::primitive2d::TextSimplePortionPrimitive2D*>(pPrim))
@@ -772,16 +781,37 @@ void zetaTextToGeometry(const drawinglayer::primitive2d::Primitive2DReference& x
             pText->getTextOutlinesAndTransformation(aOutlines, aTransform);
             for (auto& rPoly : aOutlines)
             {
-                if (!rPoly.count())
-                    continue;
                 rPoly.transform(aTransform);
-                rOut.push_back(new drawinglayer::primitive2d::PolyPolygonColorPrimitive2D(
-                    std::move(rPoly), pText->getFontColor()));
+                push(std::move(rPoly), pText->getFontColor());
             }
             return;
         }
+        if (auto pStroke = dynamic_cast<const drawinglayer::primitive2d::PolygonStrokePrimitive2D*>(pPrim))
+        {
+            const double fHalf = pStroke->getLineAttribute().getWidth() / 2.0;
+            if (fHalf > 0.0 && pStroke->getB2DPolygon().count() > 1)
+                push(basegfx::utils::createAreaGeometry(pStroke->getB2DPolygon(), fHalf,
+                                                        basegfx::B2DLineJoin::Miter,
+                                                        css::drawing::LineCap_BUTT),
+                     pStroke->getLineAttribute().getColor());
+            return;
+        }
+        if (auto pFill = dynamic_cast<const drawinglayer::primitive2d::PolyPolygonColorPrimitive2D*>(pPrim))
+        {
+            push(pFill->getB2DPolyPolygon(), pFill->getBColor());
+            return;
+        }
+        if (auto pGroup = dynamic_cast<const drawinglayer::primitive2d::GroupPrimitive2D*>(pPrim);
+            pGroup && pPrim->getPrimitive2DID() == PRIMITIVE2D_ID_GROUPPRIMITIVE2D)
+        {
+            for (const auto& rChild : pGroup->getChildren())
+                zetaBakeTextGeometry(rChild, rMat, rOut, nDepth + 1);
+            return;
+        }
     }
-    rOut.push_back(xPrim);
+    // anything else (outline stroke with transparency and so on): under the matrix as it is
+    rOut.push_back(new drawinglayer::primitive2d::TransformPrimitive2D(
+        rMat, drawinglayer::primitive2d::Primitive2DContainer{ xPrim }));
 }
 
 void zetaCollectText(const drawinglayer::primitive2d::BasePrimitive2D* pPrim,
@@ -1154,22 +1184,20 @@ void zetaAddTextShadow(drawinglayer::primitive2d::Primitive2DContainer& rPortion
         if (!aBox.isEmpty())
             aShadowMat = zetaLineEffectTransform(aBox, rB, fSx, fSy, nKx, nKy, aAlgn, fOuterDx,
                                                  fOuterDy, false);
-        fprintf(stderr, "ZETADBG shadow %s box %g %g %g %g algn %s mat %g %g %g %g %g %g\n",
-                rSpec.toUtf8().getStr(), aBox.getMinX(), aBox.getMinY(), aBox.getMaxX(), aBox.getMaxY(),
-                OUString(aAlgn).toUtf8().getStr(), aShadowMat.get(0, 0), aShadowMat.get(0, 1),
-                aShadowMat.get(0, 2), aShadowMat.get(1, 0), aShadowMat.get(1, 1), aShadowMat.get(1, 2));
     }
-    const bool bPerspective = !aShadowMat.isIdentity()
-                              && !(aShadowMat.get(0, 0) == 1.0 && aShadowMat.get(1, 1) == 1.0
-                                   && aShadowMat.get(0, 1) == 0.0 && aShadowMat.get(1, 0) == 0.0);
+    // a pure offset stays the shadow transform; a perspective matrix is baked into the geometry
+    const bool bPerspective = !(aShadowMat.get(0, 0) == 1.0 && aShadowMat.get(1, 1) == 1.0
+                                && aShadowMat.get(0, 1) == 0.0 && aShadowMat.get(1, 0) == 0.0);
     drawinglayer::primitive2d::Primitive2DContainer aCopy;
     for (size_t i = nBefore; i < rPortions.size(); ++i)
     {
         if (bPerspective)
-            zetaTextToGeometry(rPortions[i], aCopy, 0);
+            zetaBakeTextGeometry(rPortions[i], aShadowMat, aCopy, 0);
         else
             aCopy.push_back(rPortions[i]);
     }
+    if (bPerspective)
+        aShadowMat.identity();
     drawinglayer::primitive2d::Primitive2DReference xShadow(
         new drawinglayer::primitive2d::ShadowPrimitive2D(
             aShadowMat, aColor.getBColor(), fOuterBlur, std::move(aCopy)));
