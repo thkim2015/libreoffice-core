@@ -228,7 +228,14 @@ bool lcl_createExcelQuery(
             {
                 aCellStr = pQueryRef->getString(nCol, nRow);
                 aCellStr = ScGlobal::getCharClass().uppercase( aCellStr );
-                if (!aCellStr.isEmpty() && aFields[nCol] < 0)
+                // weboffice: a computed criterion counts when the cell has anything (an error
+                // formula has an empty input string and matches no record)
+                const bool bComputed = aFields[nCol] < 0
+                    && pDoc->GetCellType(ScAddress(pQueryInt->getRange().aStart.Col() + nCol,
+                                                   pQueryInt->getRange().aStart.Row() + nRow,
+                                                   pQueryInt->getRange().aStart.Tab()))
+                           != CELLTYPE_NONE;
+                if (bComputed)
                 {
                     if (nIndex < nNewEntries)
                     {
@@ -250,7 +257,7 @@ bool lcl_createExcelQuery(
                     else
                         bValid = false;
                 }
-                else if (!aCellStr.isEmpty())
+                else if (!aCellStr.isEmpty() && aFields[nCol] >= 0)
                 {
                     if (nIndex < nNewEntries)
                     {

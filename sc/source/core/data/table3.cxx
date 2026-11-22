@@ -2906,7 +2906,7 @@ bool ScTable::CreateExcelQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow
             while (nCol <= nCol2)
             {
                 aCellStr = GetInputString( nCol, nRow );
-                if (!aCellStr.isEmpty() && pFields[nCol - nCol1] < 0)
+                if (pFields[nCol - nCol1] < 0 && GetCellType(nCol, nRow) != CELLTYPE_NONE)
                 {
                     // weboffice: Excel computed criterion — the cell (a formula written for the
                     // first record, its relative references moved down per record, or a
@@ -2928,7 +2928,7 @@ bool ScTable::CreateExcelQuery(SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow
                     else
                         bValid = false;
                 }
-                else if (!aCellStr.isEmpty())
+                else if (!aCellStr.isEmpty() && pFields[nCol - nCol1] >= 0)
                 {
                     if (nIndex < nNewEntries)
                     {
