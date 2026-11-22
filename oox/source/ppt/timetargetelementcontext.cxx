@@ -32,6 +32,15 @@
 #include <com/sun/star/io/XInputStream.hpp>
 #include <avmedia/mediaitem.hxx>
 #include <sax/fastattribs.hxx>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/document/XStorageBasedDocument.hpp>
+#include <com/sun/star/embed/ElementModes.hpp>
+#include <com/sun/star/embed/XStorage.hpp>
+#include <com/sun/star/embed/XTransactedObject.hpp>
+#include <com/sun/star/frame/XModel.hpp>
+#include <com/sun/star/io/XStream.hpp>
+#include <comphelper/diagnose_ex.hxx>
+#include <comphelper/storagehelper.hxx>
 #include <utility>
 
 using namespace ::com::sun::star::uno;
@@ -40,6 +49,60 @@ using namespace ::oox::core;
 namespace oox::ppt {
 
     namespace {
+
+#if !HAVE_FEATURE_AVMEDIA
+    // weboffice: a build without avmedia (WASM) dropped the sound of an animation
+    // effect (p:audio/p:sndTgt in the effect's p:subTnLst): the sound target got an
+    // empty URL. Copy the WAV into the document package the way
+    // avmedia::EmbedMedia does, so the effect keeps its sound and the pptx export
+    // (embedEffectAudio reads vnd.sun.star.Package: URLs) writes it again.
+    bool embedSoundInPackage( const css::uno::Reference< css::frame::XModel >& xModel,
+                              std::u16string_view rSourceURL, OUString& o_rURL,
+                              const css::uno::Reference< css::io::XInputStream >& xInput )
+    {
+        using namespace css;
+        try
+        {
+            uno::Reference< document::XStorageBasedDocument > xSBD( xModel, uno::UNO_QUERY_THROW );
+            uno::Reference< embed::XStorage > xStorage( xSBD->getDocumentStorage(), uno::UNO_SET_THROW );
+            uno::Reference< embed::XStorage > xMedia(
+                xStorage->openStorageElement( u"Media"_ustr, embed::ElementModes::WRITE ), uno::UNO_SET_THROW );
+            size_t nSlash = rSourceURL.rfind( '/' );
+            OUString aName( nSlash == std::u16string_view::npos ? rSourceURL : rSourceURL.substr( nSlash + 1 ) );
+            if( aName.isEmpty() || !comphelper::OStorageHelper::IsValidZipEntryFileName( aName, false ) )
+                aName = u"sound.wav"_ustr;
+            OUString aUnique( aName );
+            const sal_Int32 nDot = aName.lastIndexOf( '.' );
+            const OUString aBase( nDot > 0 ? aName.copy( 0, nDot ) : aName );
+            const OUString aExt( nDot > 0 ? aName.copy( nDot ) : OUString() );
+            for( sal_Int32 n = 1; xMedia->hasByName( aUnique ); ++n )
+                aUnique = aBase + OUString::number( n ) + aExt;
+            uno::Reference< io::XStream > xStream(
+                xMedia->openStreamElement( aUnique, embed::ElementModes::WRITE | embed::ElementModes::TRUNCATE ),
+                uno::UNO_SET_THROW );
+            uno::Reference< beans::XPropertySet > xProps( xStream, uno::UNO_QUERY );
+            if( xProps.is() )
+            {
+                xProps->setPropertyValue( u"MediaType"_ustr, uno::Any( u"audio/x-wav"_ustr ) );
+                xProps->setPropertyValue( u"Compressed"_ustr, uno::Any( false ) );
+            }
+            comphelper::OStorageHelper::CopyInputToOutput( xInput, xStream->getOutputStream() );
+            uno::Reference< embed::XTransactedObject > xMediaTrans( xMedia, uno::UNO_QUERY );
+            if( xMediaTrans.is() )
+                xMediaTrans->commit();
+            uno::Reference< embed::XTransactedObject > xTrans( xStorage, uno::UNO_QUERY );
+            if( xTrans.is() )
+                xTrans->commit();
+            o_rURL = "vnd.sun.star.Package:Media/" + aUnique;
+            return true;
+        }
+        catch( const uno::Exception& )
+        {
+            TOOLS_WARN_EXCEPTION( "oox.ppt", "embedSoundInPackage" );
+        }
+        return false;
+    }
+#endif
 
     // CT_TLShapeTargetElement
     class ShapeTargetElementContext
@@ -143,17 +206,19 @@ namespace oox::ppt {
                 break;
             }
 
-#if HAVE_FEATURE_AVMEDIA
             OUString srcFile = drawingml::getEmbeddedWAVAudioFile(getRelations(), rAttribs);
             Reference<css::io::XInputStream>
                 xInputStream = getFilter().openInputStream(srcFile);
 
             if (xInputStream.is())
             {
+#if HAVE_FEATURE_AVMEDIA
                 ::avmedia::EmbedMedia(getFilter().getModel(), srcFile, mpTarget->msValue, xInputStream);
+#else
+                embedSoundInPackage(getFilter().getModel(), srcFile, mpTarget->msValue, xInputStream);
+#endif
                 xInputStream->closeInput();
             }
-#endif
             break;
         }
         case PPT_TOKEN( spTgt ):
