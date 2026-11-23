@@ -352,6 +352,10 @@ void ScDrawView::MarkListHasChanged()
     const SdrMarkList& rMarkList = GetMarkedObjectList();
     ScModule* pScMod = ScModule::get();
 
+    // weboffice: the cell cursor hides while drawing objects are selected (gridwin.cxx)
+    if (pViewSh && !bInConstruct && !comphelper::LibreOfficeKit::isActive())
+        pViewSh->UpdateAllOverlays();
+
     // #i110829# remove the cell selection only if drawing objects are selected
     if ( !bInConstruct && rMarkList.GetMarkCount() )
     {

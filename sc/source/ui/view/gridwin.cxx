@@ -6758,7 +6758,14 @@ void ScGridWindow::UpdateCursorOverlay()
         bVis = ( nEndX>=mrViewData.GetPosX(eHWhich) && nEndY>=mrViewData.GetPosY(eVWhich) );
     }
 
-    if ( bVis && !bOverlapped && !mrViewData.HasEditView(eWhich) && mrViewData.IsActive() )
+    // weboffice: like Excel, no cell cursor while drawing objects (a chart, a shape) are
+    // selected - a chart sheet otherwise showed the cursor at A1 around its chart
+    bool bZetaObjectsMarked = false;
+    if (!comphelper::LibreOfficeKit::isActive())
+        if (ScDrawView* pZetaDrawView = mrViewData.GetScDrawView())
+            bZetaObjectsMarked = pZetaDrawView->GetMarkedObjectList().GetMarkCount() != 0;
+
+    if ( bVis && !bOverlapped && !bZetaObjectsMarked && !mrViewData.HasEditView(eWhich) && mrViewData.IsActive() )
     {
         Point aScrPos = mrViewData.GetScrPos( nX, nY, eWhich, true );
         bool bLayoutRTL = rDoc.IsLayoutRTL( nTab );
