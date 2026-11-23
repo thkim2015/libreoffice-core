@@ -23,6 +23,8 @@
 #include <com/sun/star/util/XUpdatable2.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
+#include <svx/unopage.hxx>
+#include <svx/svdpage.hxx>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <com/sun/star/chart2/XChartDocument.hpp>
@@ -106,11 +108,16 @@ drawinglayer::primitive2d::Primitive2DContainer ChartHelper::tryToGetChartConten
         try
         {
             const uno::Reference< drawing::XDrawPageSupplier > xDrawPageSupplier(rXModel, uno::UNO_QUERY_THROW);
-            const uno::Reference< beans::XPropertySet > xPageProps(xDrawPageSupplier->getDrawPage(), uno::UNO_QUERY_THROW);
+            const uno::Reference< drawing::XDrawPage > xDrawPage(xDrawPageSupplier->getDrawPage());
             sal_Int32 nWidth(0);
             sal_Int32 nHeight(0);
-            xPageProps->getPropertyValue(u"Width"_ustr) >>= nWidth;
-            xPageProps->getPropertyValue(u"Height"_ustr) >>= nHeight;
+            // the chart draw page is a plain SvxDrawPage (no Width/Height properties)
+            if (SvxDrawPage* pSvxPage = dynamic_cast<SvxDrawPage*>(xDrawPage.get()))
+                if (SdrPage* pSdrPage = pSvxPage->GetSdrPage())
+                {
+                    nWidth = pSdrPage->GetWidth();
+                    nHeight = pSdrPage->GetHeight();
+                }
             if (nWidth > 0 && nHeight > 0
                 && rRange.getMinX() <= 1.0 && rRange.getMinY() <= 1.0
                 && rRange.getMaxX() >= nWidth - 1.0 && rRange.getMaxY() >= nHeight - 1.0)
