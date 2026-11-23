@@ -1889,6 +1889,10 @@ rtl::Reference<SvxShapePolyPolygon>
             if(pLineProperties->LineCap.hasValue())
                 xShape->SvxShape::setPropertyValue( UNO_NAME_LINECAP
                     , pLineProperties->LineCap );
+
+            // weboffice: Excel axis/gridline effects
+            for (const auto& [rName, rValue] : pLineProperties->ZetaEffects)
+                xShape->SvxShape::setPropertyValue(rName, rValue);
         }
     }
     catch( const uno::Exception& )
@@ -1954,6 +1958,10 @@ rtl::Reference<SvxShapePolyPolygon>
             if(pLineProperties->LineCap.hasValue())
                 xShape->SvxShape::setPropertyValue( UNO_NAME_LINECAP
                     , pLineProperties->LineCap );
+
+            // weboffice: Excel axis/gridline effects
+            for (const auto& [rName, rValue] : pLineProperties->ZetaEffects)
+                xShape->SvxShape::setPropertyValue(rName, rValue);
         }
     }
     catch( const uno::Exception& )

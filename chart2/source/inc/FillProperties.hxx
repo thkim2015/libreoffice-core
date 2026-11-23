@@ -73,6 +73,12 @@ namespace FillProperties
         , PROP_FILL_ZETA_GLOW_COLOR
         , PROP_FILL_ZETA_GLOW_TRANSPARENCY
         , PROP_FILL_ZETA_SOFTEDGE_RADIUS
+        // weboffice: Office perspective (sx, sy, algn, kx) and inner/box shadow kind
+        , PROP_FILL_ZETA_SHADOW_SIZEX
+        , PROP_FILL_ZETA_SHADOW_SIZEY
+        , PROP_FILL_ZETA_SHADOW_ALIGNMENT
+        , PROP_FILL_ZETA_SHADOW_KIND
+        , PROP_FILL_ZETA_SHADOW_SKEWX
     };
 
     void AddPropertiesToVector(

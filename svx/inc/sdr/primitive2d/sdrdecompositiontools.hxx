@@ -72,7 +72,9 @@ namespace drawinglayer::primitive2d
             Primitive2DContainer&& rContent,
             const attribute::SdrShadowAttribute& rShadow,
             const basegfx::B2DHomMatrix& rObjectMatrix = basegfx::B2DHomMatrix(),
-            const Primitive2DContainer* pContentForShadow = nullptr);
+            const Primitive2DContainer* pContentForShadow = nullptr,
+            // weboffice: object outline (world coordinates) for the inner and box shadow kinds
+            const basegfx::B2DPolyPolygon* pZetaOutline = nullptr);
 
         Primitive2DContainer SVXCORE_DLLPUBLIC createEmbeddedGlowPrimitive(
             Primitive2DContainer&& rContent,

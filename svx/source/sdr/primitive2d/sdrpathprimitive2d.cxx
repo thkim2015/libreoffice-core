@@ -122,9 +122,15 @@ namespace drawinglayer::primitive2d
             // add shadow
             if(!getSdrLFSTAttribute().getShadow().isDefault())
             {
+                // weboffice: inner/box shadow kinds and perspective need the object outline
+                // (closed paths only - chart bars and areas)
+                basegfx::B2DPolyPolygon aZetaOutline(getUnitPolyPolygon());
+                aZetaOutline.transform(getTransform());
+                const bool bClosed(aZetaOutline.count() && aZetaOutline.isClosed());
                 aRetval = createEmbeddedShadowPrimitive(
                     std::move(aRetval),
-                    getSdrLFSTAttribute().getShadow());
+                    getSdrLFSTAttribute().getShadow(),
+                    basegfx::B2DHomMatrix(), nullptr, bClosed ? &aZetaOutline : nullptr);
             }
 
             return new GroupPrimitive2D(std::move(aRetval));

@@ -45,6 +45,9 @@
 #include <drawinglayer/primitive2d/animatedprimitive2d.hxx>
 #include <drawinglayer/animation/animationtiming.hxx>
 #include <drawinglayer/primitive2d/maskprimitive2d.hxx>
+#include <basegfx/matrix/b2dhommatrixtools.hxx>
+#include <algorithm>
+#include <cmath>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <drawinglayer/primitive2d/texthierarchyprimitive2d.hxx>
 #include <drawinglayer/attribute/sdrfillattribute.hxx>
@@ -861,12 +864,102 @@ sal_uInt32 SlideBackgroundFillPrimitive2D::getPrimitive2DID() const
             Primitive2DContainer&& rContent,
             const attribute::SdrShadowAttribute& rShadow,
             const basegfx::B2DHomMatrix& rObjectMatrix,
-            const Primitive2DContainer* pContentForShadow)
+            const Primitive2DContainer* pContentForShadow,
+            const basegfx::B2DPolyPolygon* pZetaOutline)
         {
             if(rContent.empty())
                 return std::move(rContent);
 
+            // weboffice: Office inner shadow (a:innerShdw) - the area outside the object, moved
+            // against the shadow direction, blurred and clipped to the object, drawn above it
+            if (rShadow.getZetaKind() == 1 && pZetaOutline && pZetaOutline->count())
+            {
+                const basegfx::B2DRange aRange(pZetaOutline->getB2DRange());
+                const double fGrow(std::hypot(rShadow.getOffset().getX(), rShadow.getOffset().getY())
+                                   + 4.0 * rShadow.getBlur() + 100.0);
+                basegfx::B2DRange aFrame(aRange);
+                aFrame.grow(fGrow);
+                basegfx::B2DPolygon aFramePoly(basegfx::utils::createPolygonFromRect(aFrame));
+                basegfx::B2DPolyPolygon aHole(*pZetaOutline);
+                aHole.setClosed(true);
+                if (basegfx::utils::getOrientation(aFramePoly) == basegfx::B2VectorOrientation::Positive)
+                    aFramePoly.flip();
+                for (sal_uInt32 a = 0; a < aHole.count(); ++a)
+                {
+                    basegfx::B2DPolygon aPoly(aHole.getB2DPolygon(a));
+                    if (basegfx::utils::getOrientation(aPoly) != basegfx::B2VectorOrientation::Positive)
+                    {
+                        aPoly.flip();
+                        aHole.setB2DPolygon(a, aPoly);
+                    }
+                }
+                basegfx::B2DPolyPolygon aOutside(aFramePoly);
+                aOutside.append(aHole);
+                Primitive2DContainer aOutsideFill{ new PolyPolygonColorPrimitive2D(
+                    std::move(aOutside), rShadow.getColor()) };
+                const basegfx::B2DHomMatrix aMove(basegfx::utils::createTranslateB2DHomMatrix(
+                    -rShadow.getOffset().getX(), -rShadow.getOffset().getY()));
+                Primitive2DReference xInner(new ShadowPrimitive2D(aMove, rShadow.getColor(),
+                    rShadow.getBlur(), std::move(aOutsideFill)));
+                if (0.0 != rShadow.getTransparence())
+                    xInner = new UnifiedTransparencePrimitive2D(Primitive2DContainer{ xInner },
+                        rShadow.getTransparence());
+                Primitive2DContainer aRetval;
+                aRetval.push_back(new GroupPrimitive2D(std::move(rContent)));
+                aRetval.push_back(new MaskPrimitive2D(basegfx::B2DPolyPolygon(*pZetaOutline),
+                    Primitive2DContainer{ xInner }));
+                return aRetval;
+            }
+            if (rShadow.getZetaKind() == 1)
+                return std::move(rContent); // no outline: an inner shadow never spills outside
+
+            // weboffice: box shadow (Excel chart title/legend without fill) - the shadow of the
+            // filled object box, kept outside the box
+            Primitive2DContainer aZetaBox;
+            const bool bZetaBox(rShadow.getZetaKind() == 2 && pZetaOutline && pZetaOutline->count());
+            if (bZetaBox)
+                aZetaBox.push_back(new PolyPolygonColorPrimitive2D(basegfx::B2DPolyPolygon(*pZetaOutline),
+                                                                   basegfx::BColor(0, 0, 0)));
+
             basegfx::B2DHomMatrix aShadowOffset;
+
+            // weboffice: Office perspective shadow - skew (kx) before the scale (sx, sy) around the
+            // alignment point of the object box
+            if (rShadow.getZetaSkewX() != 0.0
+                || (rShadow.getSize().getX() != 100000 && rObjectMatrix.isIdentity())
+                || (rShadow.getSize().getY() != 100000 && rObjectMatrix.isIdentity()))
+            {
+                basegfx::B2DRange aBox(pZetaOutline && pZetaOutline->count()
+                    ? pZetaOutline->getB2DRange()
+                    : rContent.getB2DRange(geometry::ViewInformation2D()));
+                if (!aBox.isEmpty())
+                {
+                    basegfx::B2DPoint aAnchor(aBox.getCenter());
+                    switch (rShadow.getAlignment())
+                    {
+                        case model::RectangleAlignment::TopLeft: aAnchor = aBox.getMinimum(); break;
+                        case model::RectangleAlignment::Top: aAnchor = basegfx::B2DPoint(aBox.getCenterX(), aBox.getMinY()); break;
+                        case model::RectangleAlignment::TopRight: aAnchor = basegfx::B2DPoint(aBox.getMaxX(), aBox.getMinY()); break;
+                        case model::RectangleAlignment::Left: aAnchor = basegfx::B2DPoint(aBox.getMinX(), aBox.getCenterY()); break;
+                        case model::RectangleAlignment::Right: aAnchor = basegfx::B2DPoint(aBox.getMaxX(), aBox.getCenterY()); break;
+                        case model::RectangleAlignment::BottomLeft: aAnchor = basegfx::B2DPoint(aBox.getMinX(), aBox.getMaxY()); break;
+                        case model::RectangleAlignment::Bottom: aAnchor = basegfx::B2DPoint(aBox.getCenterX(), aBox.getMaxY()); break;
+                        case model::RectangleAlignment::BottomRight: aAnchor = aBox.getMaximum(); break;
+                        default: break;
+                    }
+                    aShadowOffset.translate(-aAnchor.getX(), -aAnchor.getY());
+                    if (rShadow.getZetaSkewX() != 0.0)
+                    {
+                        // Office kx: x' = x + tan(kx) * y with y downwards
+                        basegfx::B2DHomMatrix aShear;
+                        aShear.set(0, 1, std::tan(rShadow.getZetaSkewX()));
+                        aShadowOffset = aShear * aShadowOffset;
+                    }
+                    aShadowOffset.scale(rShadow.getSize().getX() * 0.00001, rShadow.getSize().getY() * 0.00001);
+                    aShadowOffset.translate(aAnchor.getX(), aAnchor.getY());
+                }
+            }
+            else
 
             if(rShadow.getSize().getX() != 100000)
             {
@@ -883,6 +976,36 @@ sal_uInt32 SlideBackgroundFillPrimitive2D::getPrimitive2DID() const
             }
 
             aShadowOffset.translate(rShadow.getOffset().getX(), rShadow.getOffset().getY());
+
+            if (bZetaBox)
+            {
+                Primitive2DReference xBox(new ShadowPrimitive2D(aShadowOffset, rShadow.getColor(),
+                    rShadow.getBlur(), std::move(aZetaBox)));
+                if (0.0 != rShadow.getTransparence())
+                    xBox = new UnifiedTransparencePrimitive2D(Primitive2DContainer{ xBox },
+                        rShadow.getTransparence());
+                // keep the shadow outside the box (the box itself shows what is under it)
+                basegfx::B2DRange aFrame(pZetaOutline->getB2DRange());
+                aFrame.grow(std::hypot(rShadow.getOffset().getX(), rShadow.getOffset().getY())
+                            + 4.0 * rShadow.getBlur() + 100.0
+                            + std::max(aFrame.getWidth(), aFrame.getHeight()));
+                basegfx::B2DPolygon aFramePoly(basegfx::utils::createPolygonFromRect(aFrame));
+                if (basegfx::utils::getOrientation(aFramePoly) == basegfx::B2VectorOrientation::Positive)
+                    aFramePoly.flip();
+                basegfx::B2DPolyPolygon aMask(aFramePoly);
+                for (sal_uInt32 a = 0; a < pZetaOutline->count(); ++a)
+                {
+                    basegfx::B2DPolygon aPoly(pZetaOutline->getB2DPolygon(a));
+                    aPoly.setClosed(true);
+                    if (basegfx::utils::getOrientation(aPoly) != basegfx::B2VectorOrientation::Positive)
+                        aPoly.flip();
+                    aMask.append(aPoly);
+                }
+                Primitive2DContainer aRetval;
+                aRetval.push_back(new MaskPrimitive2D(std::move(aMask), Primitive2DContainer{ xBox }));
+                aRetval.push_back(new GroupPrimitive2D(std::move(rContent)));
+                return aRetval;
+            }
 
             // create shadow primitive and add content
             const Primitive2DContainer& rContentForShadow

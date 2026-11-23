@@ -241,7 +241,9 @@
     { UNO_NAME_SHADOWSIZEX,       SDRATTR_SHADOWSIZEX,        ::cppu::UnoType<sal_Int32>::get(),    0,      0}, \
     { UNO_NAME_SHADOWSIZEY,       SDRATTR_SHADOWSIZEY,        ::cppu::UnoType<sal_Int32>::get(),    0,      0}, \
     { UNO_NAME_SHADOWBLUR,        SDRATTR_SHADOWBLUR,         ::cppu::UnoType<sal_Int32>::get(),    0,      0, PropertyMoreFlags::METRIC_ITEM}, \
-    { UNO_NAME_SHADOWALIGNMENT,   SDRATTR_SHADOWALIGNMENT,    /*ENUM*/::cppu::UnoType<sal_Int32>::get(), 0, 0},
+    { UNO_NAME_SHADOWALIGNMENT,   SDRATTR_SHADOWALIGNMENT,    /*ENUM*/::cppu::UnoType<sal_Int32>::get(), 0, 0}, \
+    { u"ZetaShadowKind"_ustr,     SDRATTR_SHADOW3D,           ::cppu::UnoType<sal_Int32>::get(),    0,      0}, \
+    { u"ZetaShadowSkewX"_ustr,    SDRATTR_SHADOWPERSP,        ::cppu::UnoType<sal_Int32>::get(),    0,      0},
 
 
 #define LINE_PROPERTIES_DEFAULTS\

@@ -19,6 +19,7 @@
 
 #include <GridProperties.hxx>
 #include <LinePropertiesHelper.hxx>
+#include <FillProperties.hxx>
 #include <UserDefinedProperties.hxx>
 #include <PropertyHelper.hxx>
 #include <ModifyListenerHelper.hxx>
@@ -69,6 +70,8 @@ const ::chart::tPropertyValueMap & StaticGridDefaults()
         {
             ::chart::tPropertyValueMap aTmp;
             ::chart::LinePropertiesHelper::AddDefaultsToMap( aTmp );
+            // weboffice: Excel gridline effects (shadow, glow)
+            ::chart::FillProperties::AddZetaEffectDefaultsToMap( aTmp );
 
             ::chart::PropertyHelper::setPropertyValueDefault( aTmp, PROP_GRID_SHOW, false );
 
@@ -87,6 +90,7 @@ const ::chart::tPropertyValueMap & StaticGridDefaults()
             std::vector< Property > aProperties;
             lcl_AddPropertiesToVector( aProperties );
             ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
+            ::chart::FillProperties::AddZetaEffectPropertiesToVector( aProperties );
             ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
 
             std::sort( aProperties.begin(), aProperties.end(),

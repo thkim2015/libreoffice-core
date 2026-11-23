@@ -78,6 +78,12 @@ namespace drawinglayer::attribute
             sal_Int32 getBlur() const;
             model::RectangleAlignment getAlignment() const;
             const basegfx::BColor& getColor() const;
+
+            // weboffice: Office shadow kind (0 outer, 1 inner, 2 box shadow of an unfilled
+            // chart title/legend) and horizontal perspective skew in radians (a:outerShdw kx)
+            sal_uInt16 getZetaKind() const;
+            double getZetaSkewX() const;
+            void setZeta(sal_uInt16 nKind, double fSkewX);
         };
 
 } // end of namespace drawinglayer::attribute
