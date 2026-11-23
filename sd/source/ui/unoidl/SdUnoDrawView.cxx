@@ -446,6 +446,12 @@ Any SAL_CALL SdUnoDrawView::getFastPropertyValue (
             aValue = lcl_getTableCellSelection(mrView);
             break;
 
+        case DrawController::PROPERTY_TEXTEDITSHAPE:
+            if (mrView.IsTextEdit())
+                if (SdrObject* pObj = mrView.GetTextEditObject())
+                    aValue <<= Reference<drawing::XShape>(pObj->getUnoShape(), UNO_QUERY);
+            break;
+
         default:
             throw beans::UnknownPropertyException( OUString::number(nHandle), static_cast<cppu::OWeakObject*>(this));
     }

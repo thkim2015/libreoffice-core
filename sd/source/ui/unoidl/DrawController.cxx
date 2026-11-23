@@ -39,6 +39,7 @@
 #include <com/sun/star/beans/PropertyAttribute.hpp>
 #include <com/sun/star/drawing/XDrawSubController.hpp>
 #include <com/sun/star/drawing/XLayer.hpp>
+#include <com/sun/star/drawing/XShape.hpp>
 
 #include <slideshow.hxx>
 
@@ -671,6 +672,12 @@ void DrawController::FillPropertyTable (
     rProperties.emplace_back( "TableCellSelection",
             PROPERTY_TABLECELLSELECTION,
             cppu::UnoType<css::uno::Sequence<sal_Int32>>::get(),
+            beans::PropertyAttribute::READONLY | beans::PropertyAttribute::MAYBEVOID );
+    // Shape whose text is being edited (the selection may be empty or another object while the
+    // caret is in a text frame). Void outside text edit.
+    rProperties.emplace_back( "TextEditShape",
+            PROPERTY_TEXTEDITSHAPE,
+            cppu::UnoType<css::drawing::XShape>::get(),
             beans::PropertyAttribute::READONLY | beans::PropertyAttribute::MAYBEVOID );
 }
 
