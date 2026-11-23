@@ -2376,8 +2376,11 @@ void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTa
         }
         // weboffice: Excel shows a TRUE/FALSE result as TRUE/FALSE whatever the cell, so a
         // cell imported from xls (no format change allowed) also takes and drops the logical format
-        const bool bLogicalResult = pInterpreter->GetRetFormatType() == SvNumFormatType::LOGICAL
-            || nFormatType == SvNumFormatType::LOGICAL;
+        // A free flying cell (conditional format / validity condition) only borrows the
+        // position of its anchor cell - never give that real cell the logical format.
+        const bool bLogicalResult = !mbFreeFlying
+            && (pInterpreter->GetRetFormatType() == SvNumFormatType::LOGICAL
+                || nFormatType == SvNumFormatType::LOGICAL);
         bool bForceNumberFormat = ((mbAllowNumberFormatChange || bMatrixLogical || bLogicalResult) && !mbNeedsNumberFormat &&
                 !SvNumberFormatter::IsCompatible( nFormatType, pInterpreter->GetRetFormatType()));
 
@@ -2492,7 +2495,8 @@ void ScFormulaCell::InterpretTail( ScInterpreterContext& rContext, ScInterpretTa
             // XXX if mbNeedsNumberFormat was set even if the current format
             // was not General then we'd have to obtain the current format here
             // and check at least the types.
-            const bool bSetNumberFormat = bSetFormat && (bForceNumberFormat || ((nFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) != 0));
+            // weboffice: a free flying cell does not own aPos - do not set a hard format on the real cell there
+            const bool bSetNumberFormat = bSetFormat && !mbFreeFlying && (bForceNumberFormat || ((nFormatIndex % SV_COUNTRY_LANGUAGE_OFFSET) != 0));
             if (bSetNumberFormat && !rDocument.IsInLayoutStrings())
             {
                 // set number format explicitly
