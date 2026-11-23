@@ -915,8 +915,19 @@ sal_uInt32 SlideBackgroundFillPrimitive2D::getPrimitive2DID() const
 
             // weboffice: box shadow (Excel chart title/legend without fill) - the shadow of the
             // filled object box, kept outside the box
+            // kind 3: Excel data label - the label box has text insets around the text frame
+            // (Excel 2021 Chart.Export: about 0.1 cm left/right, 0.09 cm top/bottom)
+            basegfx::B2DPolyPolygon aZetaPadded;
+            if (rShadow.getZetaKind() == 3 && pZetaOutline && pZetaOutline->count())
+            {
+                const basegfx::B2DRange aText(pZetaOutline->getB2DRange());
+                aZetaPadded = basegfx::B2DPolyPolygon(basegfx::utils::createPolygonFromRect(
+                    basegfx::B2DRange(aText.getMinX() - 100.0, aText.getMinY() - 90.0,
+                                      aText.getMaxX() + 100.0, aText.getMaxY() + 90.0)));
+                pZetaOutline = &aZetaPadded;
+            }
             Primitive2DContainer aZetaBox;
-            const bool bZetaBox(rShadow.getZetaKind() == 2 && pZetaOutline && pZetaOutline->count());
+            const bool bZetaBox(rShadow.getZetaKind() >= 2 && pZetaOutline && pZetaOutline->count());
             if (bZetaBox)
                 aZetaBox.push_back(new PolyPolygonColorPrimitive2D(basegfx::B2DPolyPolygon(*pZetaOutline),
                                                                    basegfx::BColor(0, 0, 0)));

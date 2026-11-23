@@ -944,7 +944,7 @@ namespace drawinglayer::primitive2d
             // weboffice: an unfilled, borderless chart legend/title box still casts its box
             // shadow (Office box shadow kind)
             const bool bZetaBoxShadow(!bSuppressShadow && rSet.Get(SDRATTR_SHADOW).GetValue()
-                                      && rSet.Get(SDRATTR_SHADOW3D).GetValue() == 2);
+                                      && rSet.Get(SDRATTR_SHADOW3D).GetValue() >= 2);
             if(bHasContent || bZetaBoxShadow || !aLine.isDefault() || !aFill.isDefault() || !aText.isDefault())
             {
                 // try shadow
