@@ -94,7 +94,10 @@ namespace DataPointProperties
         PROP_DATAPOINT_CUSTOM_LABEL_FIELDS,
         PROP_DATAPOINT_LABEL_CUSTOM_POS,
         PROP_DATAPOINT_LABEL_CUSTOM_SIZE,
-        PROP_DATAPOINT_LABEL_CALLOUT_SHAPE
+        PROP_DATAPOINT_LABEL_CALLOUT_SHAPE,
+        // weboffice: Excel data label effects (c:dLbls c:spPr a:effectLst) - ZetaLabel*
+        PROP_DATAPOINT_ZETA_LABEL_FIRST,
+        PROP_DATAPOINT_ZETA_LABEL_LAST = PROP_DATAPOINT_ZETA_LABEL_FIRST + 14
 
         // additionally some properties from ::chart::LineProperties
     };
