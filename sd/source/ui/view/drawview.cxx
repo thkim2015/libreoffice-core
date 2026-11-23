@@ -310,6 +310,9 @@ void lcl_RemoveHardCharAttribs(SdrObject* pObject, const SfxItemSet& rSet, ::sd:
     if (pDocSh && pDocSh->GetUndoManager())
         pDocSh->GetUndoManager()->AddUndoAction(std::make_unique<SdrUndoAttrObj>(*pObject, false, true));
     pTextObj->RemoveOutlinerCharacterAttribs(aCharWhichIds);
+    // object-level character items (the .pptx import puts them there too) override the style as well
+    for (sal_uInt16 nWhich : aCharWhichIds)
+        pObject->ClearMergedItem(nWhich);
 }
 }
 
