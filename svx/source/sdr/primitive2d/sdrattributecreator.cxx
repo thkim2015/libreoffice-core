@@ -941,7 +941,11 @@ namespace drawinglayer::primitive2d
             // depends on line, fill or text to be set, but for these objects it is possible
             // to have none of these, but still content which needs to have a shadow (if set),
             // so shadow needs to be tried
-            if(bHasContent || !aLine.isDefault() || !aFill.isDefault() || !aText.isDefault())
+            // weboffice: an unfilled, borderless chart legend/title box still casts its box
+            // shadow (Office box shadow kind)
+            const bool bZetaBoxShadow(!bSuppressShadow && rSet.Get(SDRATTR_SHADOW).GetValue()
+                                      && rSet.Get(SDRATTR_SHADOW3D).GetValue() == 2);
+            if(bHasContent || bZetaBoxShadow || !aLine.isDefault() || !aFill.isDefault() || !aText.isDefault())
             {
                 // try shadow
                 const attribute::SdrShadowAttribute aShadow = !bSuppressShadow ?
