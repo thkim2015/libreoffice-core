@@ -441,7 +441,7 @@ namespace drawinglayer::primitive2d
                     const sal_Int32 nZetaKind(rSet.Get(SDRATTR_SHADOW3D).GetValue());
                     const sal_Int32 nZetaSkew(rSet.Get(SDRATTR_SHADOWPERSP).GetValue());
                     if (nZetaKind || nZetaSkew)
-                        aShadow.setZeta(static_cast<sal_uInt16>(std::clamp<sal_Int32>(nZetaKind, 0, 2)),
+                        aShadow.setZeta(static_cast<sal_uInt16>(std::clamp<sal_Int32>(nZetaKind, 0, 3)),
                                         basegfx::deg2rad(std::clamp<sal_Int32>(nZetaSkew, -8900, 8900) / 100.0));
                     return aShadow;
                 }
