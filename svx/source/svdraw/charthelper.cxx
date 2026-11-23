@@ -23,8 +23,8 @@
 #include <com/sun/star/util/XUpdatable2.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
 #include <com/sun/star/beans/XPropertySet.hpp>
-#include <svx/unopage.hxx>
-#include <svx/svdpage.hxx>
+#include <com/sun/star/embed/XVisualObject.hpp>
+#include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <com/sun/star/chart2/XChartDocument.hpp>
@@ -107,21 +107,11 @@ drawinglayer::primitive2d::Primitive2DContainer ChartHelper::tryToGetChartConten
         // must not shrink and move the chart; they spill over the object like in Excel
         try
         {
-            const uno::Reference< drawing::XDrawPageSupplier > xDrawPageSupplier(rXModel, uno::UNO_QUERY_THROW);
-            const uno::Reference< drawing::XDrawPage > xDrawPage(xDrawPageSupplier->getDrawPage());
-            sal_Int32 nWidth(0);
-            sal_Int32 nHeight(0);
-            // the chart draw page is a plain SvxDrawPage (no Width/Height properties)
-            if (SvxDrawPage* pSvxPage = dynamic_cast<SvxDrawPage*>(xDrawPage.get()))
-                if (SdrPage* pSdrPage = pSvxPage->GetSdrPage())
-                {
-                    nWidth = pSdrPage->GetWidth();
-                    nHeight = pSdrPage->GetHeight();
-                }
-            if (nWidth > 0 && nHeight > 0
-                && rRange.getMinX() <= 1.0 && rRange.getMinY() <= 1.0
-                && rRange.getMaxX() >= nWidth - 1.0 && rRange.getMaxY() >= nHeight - 1.0)
-                rRange = basegfx::B2DRange(0.0, 0.0, nWidth, nHeight);
+            // the chart view sets its page to the visual area size (ChartView::createShapes)
+            const uno::Reference< embed::XVisualObject > xVisual(rXModel, uno::UNO_QUERY_THROW);
+            const awt::Size aPage(xVisual->getVisualAreaSize(embed::Aspects::MSOLE_CONTENT));
+            if (aPage.Width > 0 && aPage.Height > 0)
+                rRange = basegfx::B2DRange(0.0, 0.0, aPage.Width, aPage.Height);
         }
         catch(uno::Exception&)
         {
