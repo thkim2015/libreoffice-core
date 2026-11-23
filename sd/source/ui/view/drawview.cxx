@@ -285,6 +285,34 @@ bool DrawView::SetAttributes(const SfxItemSet& rSet,
     return bOk;
 }
 
+namespace
+{
+// weboffice: a master placeholder whose text carries hard character attributes (e.g. imported from
+// a .pptx master, where every run gets the resolved lstStyle values) hides the style change made by
+// SetMasterAttributes - bold on the selected master title changed the Title style but the text stayed
+// normal (PowerPoint bolds the master title and every layout title inheriting it).
+// Remove the changed character attributes from the text so the style shows through.
+void lcl_RemoveHardCharAttribs(SdrObject* pObject, const SfxItemSet& rSet, ::sd::DrawDocShell* pDocSh)
+{
+    SdrTextObj* pTextObj = DynCastSdrTextObj(pObject);
+    if (!pTextObj || !pTextObj->GetOutlinerParaObject())
+        return;
+    std::vector<sal_uInt16> aCharWhichIds;
+    SfxWhichIter aIter(rSet);
+    for (sal_uInt16 nWhich = aIter.FirstWhich(); nWhich; nWhich = aIter.NextWhich())
+    {
+        if (nWhich >= EE_CHAR_START && nWhich <= EE_CHAR_END
+            && SfxItemState::SET == aIter.GetItemState())
+            aCharWhichIds.push_back(nWhich);
+    }
+    if (aCharWhichIds.empty())
+        return;
+    if (pDocSh && pDocSh->GetUndoManager())
+        pDocSh->GetUndoManager()->AddUndoAction(std::make_unique<SdrUndoAttrObj>(*pObject, false, true));
+    pTextObj->RemoveOutlinerCharacterAttribs(aCharWhichIds);
+}
+}
+
 void DrawView::SetMasterAttributes( SdrObject* pObject, const SdPage& rPage, const SfxItemSet& rSet, SfxStyleSheetBasePool* pStShPool, bool& bOk, bool bMaster, bool bSlide )
 {
     SdrInventor nInv    = pObject->GetObjInventor();
@@ -331,6 +359,7 @@ void DrawView::SetMasterAttributes( SdrObject* pObject, const SdPage& rPage, con
 
         pSheet->GetItemSet().Put(aTempSet,false);
         pSheet->Broadcast(SfxHint(SfxHintId::DataChanged));
+        lcl_RemoveHardCharAttribs(pObject, rSet, mpDocSh);
         bOk = true;
     }
     else if (eObjKind == SdrObjKind::OutlineText)
@@ -380,6 +409,7 @@ void DrawView::SetMasterAttributes( SdrObject* pObject, const SdPage& rPage, con
             }
 
             // remove all hard set items from shape that are now set in style
+            lcl_RemoveHardCharAttribs(pObject, rSet, mpDocSh);
             SfxWhichIter aWhichIter(rSet);
             sal_uInt16 nWhich(aWhichIter.FirstWhich());
             while( nWhich )
