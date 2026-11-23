@@ -2643,6 +2643,10 @@ bool SvxShape::getPropertyValueImpl( const OUString&, const SfxItemPropertyMapEn
 
     case OWN_ATTR_BOUNDRECT:
     {
+        // weboffice: a chart's effects (chart area shadow, glow) spill over the object and
+        // change with the chart content, which does not dirty the cached bound rect
+        if (auto pOle = dynamic_cast<SdrOle2Obj*>(GetSdrObject()); pOle && pOle->IsChart())
+            pOle->SetBoundRectDirty();
         tools::Rectangle aRect( GetSdrObject()->GetCurrentBoundRect() );
         Point aTopLeft( aRect.TopLeft() );
         Size aObjSize( aRect.GetWidth(), aRect.GetHeight() );
