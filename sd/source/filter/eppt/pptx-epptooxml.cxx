@@ -2464,7 +2464,28 @@ void PowerPointExport::ImplWriteSlideMaster(sal_uInt32 nPageNum, Reference< XPro
     // placeholder to set that state on.
     if (aXBackgroundPropSet)
         ImplWriteBackground(pFS, aXBackgroundPropSet);
+    // weboffice: a group's master part used to take its placeholders from the group's first page,
+    // which is the Title Slide layout of a PowerPoint file (centred 60pt title, subtitle in place of
+    // the body), and an edit of that one layout then showed up on the master. PowerPoint's master
+    // matches its Title and Content layout, so write the placeholders from that page when the group
+    // has one. The leading shapes the group shares are the same on every page of it.
+    const Reference<XShapes> xLeaderShapes = mXShapes;
+    if (GetEquivalentMasterPage(nPageNum) == nPageNum)
+    {
+        for (sal_uInt32 j = 0; j < mnMasterPages; ++j)
+        {
+            if (j != nPageNum && maEquivalentMasters[j] == nPageNum && maMastersLayouts[j].first
+                && maMastersLayouts[j].second == AUTOLAYOUT_TITLE_CONTENT)
+            {
+                Reference<XShapes> xShapes(maMastersLayouts[j].first->getUnoPage(), UNO_QUERY);
+                if (xShapes.is())
+                    mXShapes = xShapes;
+                break;
+            }
+        }
+    }
     WriteShapeTree(pFS, MASTER, true, /*bSlideMasterPart=*/true, nPageNum);
+    mXShapes = xLeaderShapes;
 
     pFS->endElementNS(XML_p, XML_cSld);
 
