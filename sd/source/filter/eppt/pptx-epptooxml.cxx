@@ -2472,16 +2472,20 @@ void PowerPointExport::ImplWriteSlideMaster(sal_uInt32 nPageNum, Reference< XPro
     const Reference<XShapes> xLeaderShapes = mXShapes;
     if (GetEquivalentMasterPage(nPageNum) == nPageNum)
     {
-        for (sal_uInt32 j = 0; j < mnMasterPages; ++j)
+        // oox imports a PowerPoint obj layout (Title and Content) as AUTOLAYOUT_OBJ
+        for (const sal_Int32 nLayout : { sal_Int32(AUTOLAYOUT_TITLE_CONTENT), sal_Int32(AUTOLAYOUT_OBJ) })
         {
-            if (j != nPageNum && maEquivalentMasters[j] == nPageNum && maMastersLayouts[j].first
-                && maMastersLayouts[j].second == AUTOLAYOUT_TITLE_CONTENT)
-            {
-                Reference<XShapes> xShapes(maMastersLayouts[j].first->getUnoPage(), UNO_QUERY);
-                if (xShapes.is())
-                    mXShapes = xShapes;
-                break;
-            }
+            sal_uInt32 j = 0;
+            while (j < mnMasterPages
+                   && (j == nPageNum || maEquivalentMasters[j] != nPageNum
+                       || !maMastersLayouts[j].first || maMastersLayouts[j].second != nLayout))
+                ++j;
+            if (j == mnMasterPages)
+                continue;
+            Reference<XShapes> xShapes(maMastersLayouts[j].first->getUnoPage(), UNO_QUERY);
+            if (xShapes.is())
+                mXShapes = xShapes;
+            break;
         }
     }
     WriteShapeTree(pFS, MASTER, true, /*bSlideMasterPart=*/true, nPageNum);
