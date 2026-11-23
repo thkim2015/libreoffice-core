@@ -21,6 +21,7 @@
 #include <GridProperties.hxx>
 #include <CharacterProperties.hxx>
 #include <LinePropertiesHelper.hxx>
+#include <FillProperties.hxx>
 #include <UserDefinedProperties.hxx>
 #include <PropertyHelper.hxx>
 #include <AxisHelper.hxx>
@@ -284,6 +285,8 @@ const ::chart::tPropertyValueMap &  StaticAxisDefaults()
             ::chart::tPropertyValueMap aMap;
             ::chart::CharacterProperties::AddDefaultsToMap( aMap );
             ::chart::LinePropertiesHelper::AddDefaultsToMap( aMap );
+            // weboffice: Excel axis line effects (shadow, glow)
+            ::chart::FillProperties::AddZetaEffectDefaultsToMap( aMap );
 
             ::chart::PropertyHelper::setPropertyValueDefault( aMap, PROP_AXIS_SHOW, true );
             ::chart::PropertyHelper::setPropertyValueDefault( aMap, PROP_AXIS_CROSSOVER_POSITION, css::chart::ChartAxisPosition_ZERO );
@@ -322,6 +325,7 @@ namespace
             lcl_AddPropertiesToVector( aProperties );
             ::chart::CharacterProperties::AddPropertiesToVector( aProperties );
             ::chart::LinePropertiesHelper::AddPropertiesToVector( aProperties );
+            ::chart::FillProperties::AddZetaEffectPropertiesToVector( aProperties );
             ::chart::UserDefinedProperties::AddPropertiesToVector( aProperties );
 
             std::sort( aProperties.begin(), aProperties.end(),

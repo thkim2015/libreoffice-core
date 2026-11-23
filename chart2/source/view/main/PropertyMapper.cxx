@@ -372,6 +372,11 @@ const tPropertyNameMap& PropertyMapper::getPropertyNameMapForFillProperties()
         {"GlowEffectColor",              "GlowEffectColor"},
         {"GlowEffectTransparency",       "GlowEffectTransparency"},
         {"SoftEdgeRadius",               "SoftEdgeRadius"},
+        {"ShadowSizeX",                  "ShadowSizeX"},
+        {"ShadowSizeY",                  "ShadowSizeY"},
+        {"ShadowAlignment",              "ShadowAlignment"},
+        {"ZetaShadowKind",               "ZetaShadowKind"},
+        {"ZetaShadowSkewX",              "ZetaShadowSkewX"},
         {"FillBackground",               "FillBackground"},
         {"FillBitmapName",               "FillBitmapName"},
         {"FillColor",                    "FillColor"},
@@ -472,7 +477,23 @@ namespace {
             {"FillColor", CHART_UNONAME_LABEL_FILL_COLOR},
             {"FillComplexColor", CHART_UNONAME_LABEL_FILL_COMPLEX_COLOR},
             {"FillBackground", CHART_UNONAME_LABEL_FILL_BACKGROUND},
-            {"FillHatchName", CHART_UNONAME_LABEL_FILL_HATCH_NAME}
+            {"FillHatchName", CHART_UNONAME_LABEL_FILL_HATCH_NAME},
+            // weboffice: Excel data label effects
+            {"Shadow", "ZetaLabelShadow"},
+            {"ShadowColor", "ZetaLabelShadowColor"},
+            {"ShadowTransparence", "ZetaLabelShadowTransparence"},
+            {"ShadowXDistance", "ZetaLabelShadowXDistance"},
+            {"ShadowYDistance", "ZetaLabelShadowYDistance"},
+            {"ShadowBlur", "ZetaLabelShadowBlur"},
+            {"ShadowSizeX", "ZetaLabelShadowSizeX"},
+            {"ShadowSizeY", "ZetaLabelShadowSizeY"},
+            {"ShadowAlignment", "ZetaLabelShadowAlignment"},
+            {"ZetaShadowKind", "ZetaLabelShadowKind"},
+            {"ZetaShadowSkewX", "ZetaLabelShadowSkewX"},
+            {"GlowEffectRadius", "ZetaLabelGlowEffectRadius"},
+            {"GlowEffectColor", "ZetaLabelGlowEffectColor"},
+            {"GlowEffectTransparency", "ZetaLabelGlowEffectTransparency"},
+            {"SoftEdgeRadius", "ZetaLabelSoftEdgeRadius"}
             });
                 // fix the spelling!
         return map;
@@ -500,6 +521,11 @@ const tPropertyNameMap& PropertyMapper::getPropertyNameMapForFilledSeriesPropert
         {"GlowEffectColor",              "GlowEffectColor"},
         {"GlowEffectTransparency",       "GlowEffectTransparency"},
         {"SoftEdgeRadius",               "SoftEdgeRadius"},
+        {"ShadowSizeX",                  "ShadowSizeX"},
+        {"ShadowSizeY",                  "ShadowSizeY"},
+        {"ShadowAlignment",              "ShadowAlignment"},
+        {"ZetaShadowKind",               "ZetaShadowKind"},
+        {"ZetaShadowSkewX",              "ZetaShadowSkewX"},
         {"FillBackground",               "FillBackground"},
         {"FillBitmapName",               "FillBitmapName"},
         {"FillColor",                    "Color"},

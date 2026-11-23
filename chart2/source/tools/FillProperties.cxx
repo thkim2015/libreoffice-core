@@ -202,6 +202,11 @@ void FillProperties::AddZetaEffectPropertiesToVector(std::vector<beans::Property
     add("GlowEffectColor", PROP_FILL_ZETA_GLOW_COLOR, cppu::UnoType<sal_Int32>::get());
     add("GlowEffectTransparency", PROP_FILL_ZETA_GLOW_TRANSPARENCY, cppu::UnoType<sal_Int16>::get());
     add("SoftEdgeRadius", PROP_FILL_ZETA_SOFTEDGE_RADIUS, cppu::UnoType<sal_Int32>::get());
+    add("ShadowSizeX", PROP_FILL_ZETA_SHADOW_SIZEX, cppu::UnoType<sal_Int32>::get());
+    add("ShadowSizeY", PROP_FILL_ZETA_SHADOW_SIZEY, cppu::UnoType<sal_Int32>::get());
+    add("ShadowAlignment", PROP_FILL_ZETA_SHADOW_ALIGNMENT, cppu::UnoType<sal_Int32>::get());
+    add("ZetaShadowKind", PROP_FILL_ZETA_SHADOW_KIND, cppu::UnoType<sal_Int32>::get());
+    add("ZetaShadowSkewX", PROP_FILL_ZETA_SHADOW_SKEWX, cppu::UnoType<sal_Int32>::get());
 }
 
 void FillProperties::AddZetaEffectDefaultsToMap(::chart::tPropertyValueMap& rOutMap)
@@ -216,6 +221,11 @@ void FillProperties::AddZetaEffectDefaultsToMap(::chart::tPropertyValueMap& rOut
     ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_GLOW_COLOR, sal_Int32(0));
     ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_GLOW_TRANSPARENCY, sal_Int16(0));
     ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SOFTEDGE_RADIUS, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_SIZEX, sal_Int32(100000));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_SIZEY, sal_Int32(100000));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_ALIGNMENT, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_KIND, sal_Int32(0));
+    ::chart::PropertyHelper::setPropertyValueDefault(rOutMap, PROP_FILL_ZETA_SHADOW_SKEWX, sal_Int32(0));
 }
 
 void FillProperties::AddPropertiesToVector(

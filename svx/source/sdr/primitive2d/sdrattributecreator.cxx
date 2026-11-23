@@ -93,6 +93,8 @@
 #include <com/sun/star/drawing/LineCap.hpp>
 
 #include <math.h>
+#include <basegfx/numeric/ftools.hxx>
+#include <algorithm>
 
 using namespace com::sun::star;
 
@@ -434,7 +436,14 @@ namespace drawinglayer::primitive2d
 
                     model::RectangleAlignment eAlignment{rSet.Get(SDRATTR_SHADOWALIGNMENT).GetValue()};
 
-                    return attribute::SdrShadowAttribute(aOffset, aSize, static_cast<double>(nTransparence) * 0.01, nBlur, eAlignment, aColor.getBColor());
+                    attribute::SdrShadowAttribute aShadow(aOffset, aSize, static_cast<double>(nTransparence) * 0.01, nBlur, eAlignment, aColor.getBColor());
+                    // weboffice: Office inner/box shadow and perspective skew
+                    const sal_Int32 nZetaKind(rSet.Get(SDRATTR_SHADOW3D).GetValue());
+                    const sal_Int32 nZetaSkew(rSet.Get(SDRATTR_SHADOWPERSP).GetValue());
+                    if (nZetaKind || nZetaSkew)
+                        aShadow.setZeta(static_cast<sal_uInt16>(std::clamp<sal_Int32>(nZetaKind, 0, 3)),
+                                        basegfx::deg2rad(std::clamp<sal_Int32>(nZetaSkew, -8900, 8900) / 100.0));
+                    return aShadow;
                 }
             }
 
@@ -932,7 +941,11 @@ namespace drawinglayer::primitive2d
             // depends on line, fill or text to be set, but for these objects it is possible
             // to have none of these, but still content which needs to have a shadow (if set),
             // so shadow needs to be tried
-            if(bHasContent || !aLine.isDefault() || !aFill.isDefault() || !aText.isDefault())
+            // weboffice: an unfilled, borderless chart legend/title box still casts its box
+            // shadow (Office box shadow kind)
+            const bool bZetaBoxShadow(!bSuppressShadow && rSet.Get(SDRATTR_SHADOW).GetValue()
+                                      && rSet.Get(SDRATTR_SHADOW3D).GetValue() >= 2);
+            if(bHasContent || bZetaBoxShadow || !aLine.isDefault() || !aFill.isDefault() || !aText.isDefault())
             {
                 // try shadow
                 const attribute::SdrShadowAttribute aShadow = !bSuppressShadow ?

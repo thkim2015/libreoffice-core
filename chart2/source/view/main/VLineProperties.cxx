@@ -56,6 +56,33 @@ void VLineProperties::initFromPropertySet(const uno::Reference<beans::XPropertyS
         {
             TOOLS_WARN_EXCEPTION("chart2", "");
         }
+        // weboffice: effects only when the model has them switched on
+        ZetaEffects.clear();
+        try
+        {
+            bool bShadow = false;
+            sal_Int32 nGlow = 0;
+            xProp->getPropertyValue(u"Shadow"_ustr) >>= bShadow;
+            xProp->getPropertyValue(u"GlowEffectRadius"_ustr) >>= nGlow;
+            static constexpr OUString aShadowNames[]
+                = { u"Shadow"_ustr, u"ShadowColor"_ustr, u"ShadowTransparence"_ustr,
+                    u"ShadowXDistance"_ustr, u"ShadowYDistance"_ustr, u"ShadowBlur"_ustr,
+                    u"ShadowSizeX"_ustr, u"ShadowSizeY"_ustr, u"ShadowAlignment"_ustr,
+                    u"ZetaShadowSkewX"_ustr };
+            static constexpr OUString aGlowNames[]
+                = { u"GlowEffectRadius"_ustr, u"GlowEffectColor"_ustr,
+                    u"GlowEffectTransparency"_ustr };
+            if (bShadow)
+                for (const OUString& rName : aShadowNames)
+                    ZetaEffects.emplace_back(rName, xProp->getPropertyValue(rName));
+            if (nGlow > 0)
+                for (const OUString& rName : aGlowNames)
+                    ZetaEffects.emplace_back(rName, xProp->getPropertyValue(rName));
+        }
+        catch (const uno::Exception&)
+        {
+            // models without the effect properties
+        }
     }
     else
         LineStyle <<= drawing::LineStyle_NONE;

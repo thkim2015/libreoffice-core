@@ -187,8 +187,11 @@ inline constexpr TypedWhichId<XColorItem>     SDRATTR_SHADOWCOLOR        (SDRATT
 inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOWXDIST        (SDRATTR_SHADOW_FIRST+ 2);                 // 1050
 inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOWYDIST        (SDRATTR_SHADOW_FIRST+ 3);                 // 1051
 inline constexpr TypedWhichId<SdrPercentItem> SDRATTR_SHADOWTRANSPARENCE (SDRATTR_SHADOW_FIRST+ 4);                 // 1052
-inline constexpr TypedWhichId<SfxVoidItem>    SDRATTR_SHADOW3D           (SDRATTR_SHADOW_FIRST+ 5);                 // 1053
-inline constexpr TypedWhichId<SfxVoidItem>    SDRATTR_SHADOWPERSP        (SDRATTR_SHADOW_FIRST+ 6);                 // 1054
+// weboffice: the unused 3D/perspective slots carry the Office shadow kind (0 outer, 1 inner,
+// 2 box: an unfilled chart title/legend casts the shadow of its box) and the horizontal
+// perspective skew (a:outerShdw kx, 1/100 degree)
+inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOW3D           (SDRATTR_SHADOW_FIRST+ 5);                 // 1053
+inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOWPERSP        (SDRATTR_SHADOW_FIRST+ 6);                 // 1054
 inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOWSIZEX        (SDRATTR_SHADOW_FIRST+ 7);                 // 1055
 inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOWSIZEY        (SDRATTR_SHADOW_FIRST+ 8);                 // 1056
 inline constexpr TypedWhichId<SdrMetricItem>  SDRATTR_SHADOWBLUR         (SDRATTR_SHADOW_FIRST+ 9);                 // 1057

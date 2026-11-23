@@ -22,6 +22,9 @@
 #include <com/sun/star/embed/XEmbeddedObject.hpp>
 #include <com/sun/star/util/XUpdatable2.hpp>
 #include <com/sun/star/drawing/XDrawPageSupplier.hpp>
+#include <com/sun/star/beans/XPropertySet.hpp>
+#include <com/sun/star/embed/XVisualObject.hpp>
+#include <com/sun/star/embed/Aspects.hpp>
 #include <com/sun/star/lang/XMultiServiceFactory.hpp>
 #include <drawinglayer/geometry/viewinformation2d.hxx>
 #include <com/sun/star/chart2/XChartDocument.hpp>
@@ -98,6 +101,21 @@ drawinglayer::primitive2d::Primitive2DContainer ChartHelper::tryToGetChartConten
         const drawinglayer::geometry::ViewInformation2D aViewInformation2D;
 
         rRange = aRetval.getB2DRange(aViewInformation2D);
+
+        // weboffice: map the chart page, not the content bounds, to the object - effects
+        // drawn outside the chart area (Excel chart area shadow, perspective shadow, glow)
+        // must not shrink and move the chart; they spill over the object like in Excel
+        try
+        {
+            // the chart view sets its page to the visual area size (ChartView::createShapes)
+            const uno::Reference< embed::XVisualObject > xVisual(rXModel, uno::UNO_QUERY_THROW);
+            const awt::Size aPage(xVisual->getVisualAreaSize(embed::Aspects::MSOLE_CONTENT));
+            if (aPage.Width > 0 && aPage.Height > 0)
+                rRange = basegfx::B2DRange(0.0, 0.0, aPage.Width, aPage.Height);
+        }
+        catch(uno::Exception&)
+        {
+        }
     }
 
     return aRetval;

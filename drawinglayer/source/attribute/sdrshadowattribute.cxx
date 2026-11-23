@@ -35,6 +35,8 @@ namespace drawinglayer::attribute
             sal_Int32                           mnBlur;                     // [0   .. 180], radius of the blur
             model::RectangleAlignment           meAlignment{model::RectangleAlignment::Unset}; // alignment of the shadow
             basegfx::BColor                     maColor;                    // color of shadow
+            sal_uInt16                          mnZetaKind = 0;             // weboffice: 0 outer, 1 inner, 2 box
+            double                              mfZetaSkewX = 0.0;          // weboffice: perspective skew (radians)
 
             ImpSdrShadowAttribute(
                 const basegfx::B2DVector& rOffset,
@@ -72,6 +74,8 @@ namespace drawinglayer::attribute
                     && getTransparence() == rCandidate.getTransparence()
                         && getBlur() == rCandidate.getBlur()
                     && meAlignment == rCandidate.meAlignment
+                    && mnZetaKind == rCandidate.mnZetaKind
+                    && mfZetaSkewX == rCandidate.mfZetaSkewX
                     && getColor() == rCandidate.getColor());
             }
         };
@@ -155,6 +159,24 @@ namespace drawinglayer::attribute
         const basegfx::BColor& SdrShadowAttribute::getColor() const
         {
             return mpSdrShadowAttribute->getColor();
+        }
+
+        sal_uInt16 SdrShadowAttribute::getZetaKind() const
+        {
+            return mpSdrShadowAttribute->mnZetaKind;
+        }
+
+        double SdrShadowAttribute::getZetaSkewX() const
+        {
+            return mpSdrShadowAttribute->mfZetaSkewX;
+        }
+
+        void SdrShadowAttribute::setZeta(sal_uInt16 nKind, double fSkewX)
+        {
+            if (isDefault())
+                return;
+            mpSdrShadowAttribute->mnZetaKind = nKind;
+            mpSdrShadowAttribute->mfZetaSkewX = fSkewX;
         }
 
 } // end of namespace

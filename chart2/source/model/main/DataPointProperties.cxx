@@ -253,6 +253,37 @@ void DataPointProperties::AddPropertiesToVector(
 
     // weboffice: Excel chart element effects (shadow, glow, soft edge)
     FillProperties::AddZetaEffectPropertiesToVector( rOutProperties );
+    // weboffice: Excel data label effects, drawn on the label shapes
+    rOutProperties.emplace_back( u"ZetaLabelShadow"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 0, cppu::UnoType<bool>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowColor"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 1, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowTransparence"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 2, cppu::UnoType<sal_Int16>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowXDistance"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 3, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowYDistance"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 4, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowBlur"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 5, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowSizeX"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 6, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowSizeY"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 7, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowAlignment"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 8, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowKind"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 9, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelShadowSkewX"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 10, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelGlowEffectRadius"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 11, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelGlowEffectColor"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 12, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelGlowEffectTransparency"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 13, cppu::UnoType<sal_Int16>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
+    rOutProperties.emplace_back( u"ZetaLabelSoftEdgeRadius"_ustr, PROP_DATAPOINT_ZETA_LABEL_FIRST + 14, cppu::UnoType<sal_Int32>::get(),
+                  beans::PropertyAttribute::BOUND | beans::PropertyAttribute::MAYBEDEFAULT );
 
     // FillProperties
     // bitmap properties
@@ -592,6 +623,22 @@ void DataPointProperties::AddDefaultsToMap(
 
     uno::Sequence<uno::Reference<chart2::XDataPointCustomLabelField>> aFields(0);
     PropertyHelper::setPropertyValueDefault(rOutMap, PROP_DATAPOINT_CUSTOM_LABEL_FIELDS, aFields);
+    // weboffice: Excel data label effects
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 0, false );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 1, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 2, sal_Int16(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 3, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 4, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 5, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 6, sal_Int32(100000) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 7, sal_Int32(100000) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 8, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 9, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 10, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 11, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 12, sal_Int32(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 13, sal_Int16(0) );
+    PropertyHelper::setPropertyValueDefault( rOutMap, PROP_DATAPOINT_ZETA_LABEL_FIRST + 14, sal_Int32(0) );
 }
 
 } //  namespace chart
