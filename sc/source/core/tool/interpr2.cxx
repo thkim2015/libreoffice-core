@@ -2529,8 +2529,8 @@ void ScInterpreter::ScIpmt()
     double fNper = GetDouble();
     double fPer  = GetDouble();
     double fRate = GetDouble();
-    // weboffice: like Excel, the last period may be the partial one (IPMT(0.1;3;2.5;1000) is a value)
-    if (fPer < 1.0 || fPer > ::rtl::math::approxCeil(fNper))
+    // weboffice: like Excel, the last period may be the partial one (per < nper + 1: IPMT(0.1;3.1;2.2;1000) is a value, IPMT(0.1;3;2;1000) #NUM!)
+    if (fPer < 1.0 || fPer >= fNper + 1.0)
         PushIllegalArgument();
     else
     {
@@ -2551,8 +2551,8 @@ void ScInterpreter::ScPpmt()
     double fNper = GetDouble();
     double fPer  = GetDouble();
     double fRate = GetDouble();
-    // weboffice: like Excel, the last period may be the partial one (IPMT(0.1;3;2.5;1000) is a value)
-    if (fPer < 1.0 || fPer > ::rtl::math::approxCeil(fNper))
+    // weboffice: like Excel, the last period may be the partial one (per < nper + 1: IPMT(0.1;3.1;2.2;1000) is a value, IPMT(0.1;3;2;1000) #NUM!)
+    if (fPer < 1.0 || fPer >= fNper + 1.0)
         PushIllegalArgument();
     else
     {
