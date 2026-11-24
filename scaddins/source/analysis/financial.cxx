@@ -410,10 +410,12 @@ double SAL_CALL AnalysisAddIn::getTbillprice( const css::uno::Reference< css::be
 
 double SAL_CALL AnalysisAddIn::getTbillyield( const css::uno::Reference< css::beans::XPropertySet >& xOpt, sal_Int32 nSettle, sal_Int32 nMat, double fPrice )
 {
-    sal_Int32   nDiff = GetDiffDate360( xOpt, nSettle, nMat, true );
-    nDiff++;
+    // weboffice: like Excel, (100 - pr) / pr * 360 / DSM with the actual days DSM, at most a year
+    // (TBILLYIELD(2024-01-15;2024-06-01;98.45) is 0.0410714 in Excel 2021, measured; Calc used 30/360 + 1)
+    (void) xOpt;
+    const sal_Int32 nDiff = nMat - nSettle;
 
-    if( fPrice <= 0.0 || nSettle >= nMat || nDiff > 360 )
+    if( fPrice <= 0.0 || nSettle >= nMat || nDiff > 365 )
         throw css::lang::IllegalArgumentException();
 
     double      fRet = 100.0;

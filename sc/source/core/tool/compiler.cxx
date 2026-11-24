@@ -3238,6 +3238,11 @@ bool ScCompiler::ParseOpCode( const OUString& rName, bool bInArray )
         {
             // If symbols are set by filters get mapping to exact name.
             ExternalHashMap::const_iterator iExt(mxSymbols->getExternalHashMap().find(aFuncName));
+            // weboffice: Excel writes the Analysis functions new in 2013 with the prefix
+            // (_xlfn.IMCOSH, _xlfn.IMTAN, ...) but the map has the plain Excel names, so they were #NAME?
+            if (iExt == mxSymbols->getExternalHashMap().end() && mxSymbols->isOOXML()
+                && aFuncName.startsWithIgnoreAsciiCase(u"_xlfn."))
+                iExt = mxSymbols->getExternalHashMap().find(aFuncName.copy(6).toAsciiUpperCase());
             if (iExt != mxSymbols->getExternalHashMap().end())
             {
                 if (ScGlobal::GetAddInCollection()->GetFuncData( (*iExt).second))
@@ -3254,8 +3259,12 @@ bool ScCompiler::ParseOpCode( const OUString& rName, bool bInArray )
             else
                 // bLocalFirst=false for (English) upper full original name
                 // (service.function)
+            {
                 aIntName = ScGlobal::GetAddInCollection()->FindFunction(aFuncName,
                                                                         !mxSymbols->isEnglish());
+                if (aIntName.isEmpty() && mxSymbols->isOOXML() && aFuncName.startsWithIgnoreAsciiCase(u"_xlfn."))
+                    aIntName = ScGlobal::GetAddInCollection()->FindFunction(aFuncName.copy(6), false);
+            }
         }
         if (!aIntName.isEmpty())
         {

@@ -19,6 +19,7 @@
 #pragma once
 
 
+#include <com/sun/star/lang/IllegalArgumentException.hpp>
 #include <com/sun/star/uno/Reference.hxx>
 #include <unotools/resmgr.hxx>
 
@@ -402,6 +403,7 @@ public:
 
     inline double           Real() const;
     inline double           Imag() const;
+    sal_Unicode             Suffix() const { return c; } // weboffice: i, j or none
 
     /// @throws css::uno::RuntimeException
     /// @throws css::lang::IllegalArgumentException
@@ -698,6 +700,11 @@ inline const Complex& ComplexList::Get( sal_uInt32 n ) const
 
 inline void ComplexList::Append( Complex&& p )
 {
+    // weboffice: like Excel, numbers with different imaginary units (3+4i and 1j) are #VALUE!
+    if (p.Suffix())
+        for (const Complex& r : maVector)
+            if (r.Suffix() && r.Suffix() != p.Suffix())
+                throw css::lang::IllegalArgumentException();
     maVector.emplace_back(p);
 }
 
