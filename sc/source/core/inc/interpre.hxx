@@ -314,6 +314,9 @@ private:
     // weboffice: Excel's approximate/binary search of a one row or column cell range
     sal_Int32 ExcelRangeLookup( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, SCTAB nTab,
                                 const ScQueryEntry::Item& rItem, bool bDescending, int nMode );
+    // weboffice: the same search over the elements of an array (nFixed: the row or column searched)
+    sal_Int32 ExcelMatrixLookup( const ScMatrix& rMat, bool bVertical, SCSIZE nFixed,
+                                 const ScQueryEntry::Item& rItem, bool bDescending, int nMode );
 
 public:
     static double ScGetGCD(double fx, double fy);

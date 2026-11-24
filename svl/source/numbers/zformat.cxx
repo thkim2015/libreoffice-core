@@ -28,6 +28,7 @@
 #include <tools/debug.hxx>
 #include <tools/long.hxx>
 #include <i18nlangtag/mslangid.hxx>
+#include <i18nlangtag/languagetag.hxx>
 #include <rtl/ustring.hxx>
 #include <string_view>
 
@@ -1629,7 +1630,28 @@ SvNumberformat::LocaleType SvNumberformat::ImpGetLocaleType(std::u16string_view 
         int nValue = o3tl::convertToHex<int>(cToken);
 
         if (nValue == -1)
-            return LocaleType(); // LANGUAGE_DONTKNOW;
+        {
+            // weboffice: Excel also takes a BCP 47 tag in [$-ko-KR] and the
+            // system date/time pseudo tags [$-x-sysdate] / [$-x-systime]
+            // (Excel writes those into .xlsx number formats).
+            size_t nEnd = rString.find(']', nStart);
+            std::u16string_view aTag = rString.substr(nStart, (nEnd == std::u16string_view::npos ? nLen : nEnd) - nStart);
+            LanguageType eLang = LANGUAGE_DONTKNOW;
+            if (o3tl::equalsIgnoreAsciiCase(aTag, u"x-sysdate"))
+                eLang = LANGUAGE_NF_SYSTEM_DATE;
+            else if (o3tl::equalsIgnoreAsciiCase(aTag, u"x-systime"))
+                eLang = LANGUAGE_NF_SYSTEM_TIME;
+            else if (aTag.size() >= 2 && aTag.size() <= 20 && aTag.find('-') != std::u16string_view::npos)
+            {
+                LanguageTag aLanguageTag{OUString(aTag), true};
+                if (aLanguageTag.isValidBcp47())
+                    eLang = aLanguageTag.getLanguageType(false);
+            }
+            if (eLang == LANGUAGE_DONTKNOW || eLang == LANGUAGE_SYSTEM)
+                return LocaleType(); // LANGUAGE_DONTKNOW;
+            nPos = nStart + aTag.size();
+            return LocaleType(static_cast<sal_uInt32>(static_cast<sal_uInt16>(eLang)));
+        }
 
         nNum *= 16;
         nNum += nValue;
@@ -3624,6 +3646,9 @@ namespace {
 
 // weboffice: bKorean - like Excel (ko-KR), AAA/AAAA (day names) and E (year) stay in the Gregorian
 // calendar; Calc switched to the Korean hanja calendar (day names 日月火水木金土, 2-digit year).
+// The callers pass true for every language but Japanese (lcl_ExcelGregorianEra): Excel only switches
+// to an era calendar for Japanese (Gengou) without an explicit calendar code — G/GG/GGG/R/RR stay
+// Gregorian too (en-US/zh-CN/zh-TW/ko-KR "g" is empty and "e" the 4-digit year, Excel 2021).
 bool ImpIsOtherCalendar( const ImpSvNumFor& rNumFor, const CalendarWrapper& rCal, bool bKorean = false )
 {
     if ( rCal.getUniqueID() != GREGORIAN )
@@ -3651,10 +3676,18 @@ bool ImpIsOtherCalendar( const ImpSvNumFor& rNumFor, const CalendarWrapper& rCal
         case NF_KEY_G :
         case NF_KEY_GG :
         case NF_KEY_GGG :
+            if (bKorean)
+                break;
             return true;
         }
     }
     return false;
+}
+
+// weboffice: Excel shows eras only for Japanese (see ImpIsOtherCalendar)
+bool lcl_ExcelGregorianEra( LanguageType eLang )
+{
+    return primary( MsLangId::getRealLanguage( eLang ) ) != primary( LANGUAGE_JAPANESE );
 }
 
 }
@@ -3987,7 +4020,7 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
     OUString aOrgCalendar; // empty => not changed yet
 
     double fOrgDateTime(0.0);
-    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) ) );
+    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), lcl_ExcelGregorianEra( GetLanguage() ) );
     if ( bOtherCalendar )
     {
         SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -4193,8 +4226,8 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
             }
             break;
         case NF_KEY_EC:                 // E
-            // weboffice: Excel ko-KR "e" is the 4-digit year (Gregorian)
-            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) )
+            // weboffice: Excel "e" outside Japanese is the 4-digit year (Gregorian)
+            sBuff.append(rCal.getDisplayString( rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() )
                     ? CalendarDisplayCode::LONG_YEAR : CalendarDisplayCode::SHORT_YEAR, nNatNum ));
             break;
         case NF_KEY_EEC:                // EE
@@ -4230,13 +4263,16 @@ bool SvNumberformat::ImpGetDateOutput(double fNumber,
                                          rCal.getValue( CalendarFieldIndex::WEEK_OF_YEAR )));
             break;
         case NF_KEY_G:                  // G
-            ImpAppendEraG(sBuff, rCal, nNatNum );
+            if (!(rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() ))) // weboffice: Excel has no Gregorian era name
+                ImpAppendEraG(sBuff, rCal, nNatNum );
             break;
         case NF_KEY_GG:                 // GG
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_ERA, nNatNum ));
+            if (!(rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() )))
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_ERA, nNatNum ));
             break;
         case NF_KEY_GGG:                // GGG
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_ERA, nNatNum ));
+            if (!(rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() )))
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_ERA, nNatNum ));
             break;
         case NF_KEY_RR:                 // RR => GGGEE
             sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_YEAR_AND_ERA, nNatNum ));
@@ -4340,7 +4376,7 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
     int nUseMonthCase = 0; // Not decided yet
     OUString aOrgCalendar; // empty => not changed yet
     double fOrgDateTime(0.0);
-    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) ) );
+    bool bOtherCalendar = ImpIsOtherCalendar( NumFor[nIx], *rCurrentLang.GetCalendar(), lcl_ExcelGregorianEra( GetLanguage() ) );
     if ( bOtherCalendar )
     {
         SwitchToOtherCalendar( rCurrentLang, aOrgCalendar, fOrgDateTime, *rCurrentLang.GetCalendar() );
@@ -4615,8 +4651,8 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             }
             break;
         case NF_KEY_EC:                 // E
-            // weboffice: Excel ko-KR "e" is the 4-digit year (Gregorian)
-            sBuff.append(rCal.getDisplayString( MsLangId::isKorean( MsLangId::getRealLanguage( GetLanguage() ) )
+            // weboffice: Excel "e" outside Japanese is the 4-digit year (Gregorian)
+            sBuff.append(rCal.getDisplayString( rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() )
                     ? CalendarDisplayCode::LONG_YEAR : CalendarDisplayCode::SHORT_YEAR, nNatNum ));
             break;
         case NF_KEY_EEC:                // EE
@@ -4639,13 +4675,16 @@ bool SvNumberformat::ImpGetDateTimeOutput(double fNumber,
             sBuff.append(ImpIntToString(rNatNum, nIx, rCal.getValue( CalendarFieldIndex::WEEK_OF_YEAR )));
             break;
         case NF_KEY_G:                  // G
-            ImpAppendEraG( sBuff, rCal, nNatNum );
+            if (!(rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() ))) // weboffice: Excel has no Gregorian era name
+                ImpAppendEraG( sBuff, rCal, nNatNum );
             break;
         case NF_KEY_GG:                 // GG
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_ERA, nNatNum ));
+            if (!(rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() )))
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::SHORT_ERA, nNatNum ));
             break;
         case NF_KEY_GGG:                // GGG
-            sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_ERA, nNatNum ));
+            if (!(rCal.getUniqueID() == GREGORIAN && lcl_ExcelGregorianEra( GetLanguage() )))
+                sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_ERA, nNatNum ));
             break;
         case NF_KEY_RR:                 // RR => GGGEE
             sBuff.append(rCal.getDisplayString( CalendarDisplayCode::LONG_YEAR_AND_ERA, nNatNum ));
