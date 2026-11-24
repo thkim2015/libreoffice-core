@@ -1007,7 +1007,28 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
                 auto& rUnoTheme = dynamic_cast<UnoTheme&>(*xTheme);
                 auto pTheme = rUnoTheme.getTheme();
                 auto* pPage = GetPage();
+                // weboffice: a new master page without a theme that joins the theme another master
+                // page already uses (a layout inserted next to a sibling, so the PPTX export writes it
+                // under the same slide master) changes no colours: every object and style was
+                // already resolved against that colour set. ThemeColorChanger walks all styles and
+                // all objects of the document anyway, which took 0.8 s per inserted layout.
+                bool bJoinShared = false;
+                if (pTheme && pPage->IsMasterPage() && !pPage->getSdrPageProperties().getTheme())
+                {
+                    SdrModel& rModel = pPage->getSdrModelFromSdrPage();
+                    for (sal_uInt16 nPage = 0; nPage < rModel.GetMasterPageCount(); ++nPage)
+                    {
+                        SdrPage* pOther = rModel.GetMasterPage(nPage);
+                        if (pOther != pPage && pOther->getSdrPageProperties().getTheme() == pTheme)
+                        {
+                            bJoinShared = true;
+                            break;
+                        }
+                    }
+                }
                 pPage->getSdrPageProperties().setTheme(pTheme);
+                if (bJoinShared)
+                    break;
                 SdrPage* pMasterPage = nullptr;
                 if (pPage->IsMasterPage())
                     pMasterPage = pPage;
