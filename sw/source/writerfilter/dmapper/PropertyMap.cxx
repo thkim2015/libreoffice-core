@@ -1798,17 +1798,13 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_nextPage;
     else if (m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_nextColumn && pPrevSection
              && !rDM_Impl.IsInComments() && m_nColumnCount > 1
-             && m_nColumnCount == pPrevSection->ColumnCount())
+             && m_nColumnCount == pPrevSection->ColumnCount()
+             && pPrevSection->m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_continuous)
     {
         // weboffice: Word 2021 starts a new-column section with the same number of columns in
-        // the next column of the same page, also in Word 2013+ compatibility mode. Open it as a
-        // continuous section whose first paragraph has a column break, like a column break typed
-        // at the section start. When the previous section's columns are page columns (a page
-        // break section, or such a section continued here), the new section gets no columns of
-        // its own and keeps flowing in the page columns.
-        m_bPageColumnsOnly
-            = pPrevSection->m_nBreakType != NS_ooxml::LN_Value_ST_SectionMark_continuous
-              || pPrevSection->m_bPageColumnsOnly;
+        // the next column of the same page, also in Word 2013+ compatibility mode. When the
+        // previous section is a Writer section (continuous), open it as a continuous section
+        // whose first paragraph has a column break, like a column break typed at the section start.
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_continuous;
         bColumnBreakAtStart = true;
     }
@@ -1904,7 +1900,7 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
             rDM_Impl.appendTextSectionAfter( m_xStartingRange );
         if ( xSection.is() )
         {
-            if ( m_nColumnCount > 1 && !m_bPageColumnsOnly )
+            if ( m_nColumnCount > 1 )
                 ApplyColumnProperties( xSection, rDM_Impl );
 
             ApplyProtectionProperties( xSection, rDM_Impl );

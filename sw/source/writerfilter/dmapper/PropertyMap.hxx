@@ -290,9 +290,6 @@ private:
     OUString                                        m_sPageNumberChapStyle;
     OUString                                        m_sPageNumberChapSep;
     sal_Int32                                       m_nBreakType;
-    // weboffice: a nextColumn section opened as a continuous section that keeps flowing in the
-    // columns of the page style (the previous section's columns are page columns)
-    bool                                            m_bPageColumnsOnly = false;
 
     sal_Int32                                       m_nLeftMargin;
     sal_Int32                                       m_nRightMargin;
