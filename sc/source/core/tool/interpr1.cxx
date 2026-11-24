@@ -7089,7 +7089,9 @@ void ScInterpreter::ScCountIf()
                         sal_uInt32 nFormat = 0;
                         double fText = 0.0;
                         const OUString aTrim = aText.trim();
+                        // weboffice: a "TRUE"/"FALSE" text cell is not the number 1/0 (COUNTIF(A1;1))
                         bEq = !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, fText)
+                              && mrContext.NFGetType(nFormat) != SvNumFormatType::LOGICAL
                               && rtl::math::approxEqual(fText, fCrit);
                     }
                 }
@@ -8307,6 +8309,7 @@ bool ScInterpreter::ExcelCriteriaMask( sal_uInt8 nCritParams, std::vector<char>&
                 double fText = 0.0;
                 const OUString aTrim = aText.trim();
                 return !aTrim.isEmpty() && mrContext.NFIsNumberFormat(aTrim, nFormat, fText)
+                       && mrContext.NFGetType(nFormat) != SvNumFormatType::LOGICAL
                        && rtl::math::approxEqual(fText, rCrit.fNumber);
             }
             return rCrit.nOp == 1;
