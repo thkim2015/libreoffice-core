@@ -557,7 +557,7 @@ private:
     sal_Int16 GetInt16WithDefault(sal_Int16 nDefault);
     /** if GetDouble() not within uint32 limits sets nGlobalError and returns SAL_MAX_UINT32 */
     sal_uInt32 GetUInt32();
-    bool GetBool() { return GetDouble() != 0.0; }
+    bool GetBool();
     bool GetBoolWithDefault(bool bDefault);
     /// returns TRUE if double (or error, check nGlobalError), else FALSE
     bool GetDoubleOrString( double& rValue, svl::SharedString& rString );

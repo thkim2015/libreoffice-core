@@ -2753,9 +2753,53 @@ double ScInterpreter::GetDoubleWithDefault(double nDefault)
     return nDefault;
 }
 
+// weboffice: like Excel, a TRUE/FALSE parameter takes the text "TRUE" or "FALSE" (any case) and
+// rejects other text, even "1" (NORM.DIST(1;0;1;"TRUE") is 0.84, NORM.DIST(1;0;1;"1") #VALUE!)
+bool ScInterpreter::GetBool()
+{
+    auto lcl_TextBool = [this](const OUString& rStr)
+    {
+        if (rStr.equalsIgnoreAsciiCase("TRUE"))
+            return true;
+        if (!rStr.equalsIgnoreAsciiCase("FALSE"))
+            SetError(FormulaError::NoValue);
+        return false;
+    };
+    switch (nGlobalError == FormulaError::NONE ? GetStackType() : svUnknown)
+    {
+        case svString:
+            return lcl_TextBool(GetString().getString());
+        case svSingleRef:
+        {
+            FormulaConstTokenRef xTok( pStack[sp - 1]);
+            ScAddress aAdr;
+            PopSingleRef( aAdr);
+            if (nGlobalError == FormulaError::NONE)
+            {
+                ScRefCellValue aCell( mrDoc, aAdr);
+                if (aCell.hasString())
+                {
+                    svl::SharedString aStr;
+                    GetCellString( aStr, aCell);
+                    return lcl_TextBool(aStr.getString());
+                }
+            }
+            nGlobalError = FormulaError::NONE;
+            PushTokenRef( xTok);
+            break;
+        }
+        default:
+            break;
+    }
+    return GetDouble() != 0.0;
+}
+
 bool ScInterpreter::GetBoolWithDefault(bool bDefault)
 {
-    return GetDoubleWithDefault(bDefault ? 1.0 : 0.0) != 0.0;
+    if (!IsMissing())
+        return GetBool();
+    Pop();
+    return bDefault;
 }
 
 template <typename Int>
