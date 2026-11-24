@@ -27,8 +27,16 @@ class SAL_DLLPUBLIC_RTTI SwBodyFrame final : public SwLayoutFrame
 {
     virtual void Format( vcl::RenderContext* pRenderContext, const SwBorderAttrs *pAttrs = nullptr ) override;
 
+    // weboffice: vertical alignment of the page (page style TextVerticalAdjust, docx w:vAlign):
+    // the print area starts this far below the body top (content keeps the same bottom limit)
+    SwTwips m_nVertAdjustOffset = 0;
+
 public:
     SwBodyFrame( SwFrameFormat*, SwFrame* );
+
+    // weboffice: recompute the vertical alignment offset after the page content was formatted.
+    // Returns true when the offset changed (the body print area and the content were invalidated).
+    bool CheckVertAdjust();
 
     virtual void PaintSubsidiaryLines( const SwPageFrame*, const SwRect& ) const override;
 
