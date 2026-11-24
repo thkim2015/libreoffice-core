@@ -499,10 +499,12 @@ static OUString lcl_ExcelLiteralRAndLocaleMonths(const OUString& rCode)
             const sal_Int32 nDash = rCode.indexOf('-', i);
             if (bMonthNames && nEnd > 0 && i + 2 < nLen && rCode[i + 1] == '$' && nDash > i + 2 && nDash < nEnd)
             {
+                // the locale bracket first: after a text Calc reads [$-412] as a currency again
+                aBuf.append("[$");
+                aBuf.append(rCode.subView(nDash, nEnd - nDash + 1));
                 aBuf.append('"');
                 aBuf.append(rCode.subView(i + 2, nDash - i - 2));
-                aBuf.append("\"[$");
-                aBuf.append(rCode.subView(nDash, nEnd - nDash + 1));
+                aBuf.append('"');
             }
             else
                 aBuf.append(rCode.subView(i, nTo - i + 1));
