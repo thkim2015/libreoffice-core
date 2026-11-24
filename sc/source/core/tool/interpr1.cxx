@@ -13752,7 +13752,25 @@ void ScInterpreter::ScAggregate()
     PushWithoutError( *p2 );
     sal_Int32 nOption = GetInt32();
 
-    if ( nGlobalError != FormulaError::NONE || nFunc < 1 || nFunc > 19 )
+    // weboffice: like Excel, the reference form (functions 1 to 13) takes only references,
+    // an array argument is #VALUE! (AGGREGATE(5;6;B1:B7*2) in Excel 2021, measured)
+    bool bArrayArg = false;
+    if (nGlobalError == FormulaError::NONE && nFunc >= 1 && nFunc <= 13)
+        for (sal_uInt8 i = 2; i < nParamCount; ++i)
+        {
+            const StackVar eT = pStack[sp - nParamCount + i]->GetType();
+            if (eT == svMatrix || eT == svDouble || eT == svString)
+                bArrayArg = true;
+        }
+    if (bArrayArg)
+    {
+        nGlobalError = nErr;
+        sal_uInt8 n = nParamCount;
+        while (n-- > 0)
+            Pop();
+        PushNoValue();
+    }
+    else if ( nGlobalError != FormulaError::NONE || nFunc < 1 || nFunc > 19 )
     {
         nGlobalError = nErr;
         PushIllegalArgument();
