@@ -843,7 +843,10 @@ OUString SAL_CALL AnalysisAddIn::getImpower( const OUString& aNum, double f )
 
 double SAL_CALL AnalysisAddIn::getImargument( const OUString& aNum )
 {
-    double fRet = Complex( aNum ).Arg();
+    Complex aZ( aNum );
+    if( aZ.Real() == 0.0 && aZ.Imag() == 0.0 )
+        throw lang::IllegalArgumentException(u"#DIV/0!"_ustr, {}, 0); // weboffice: IMARGUMENT(0) like Excel
+    double fRet = aZ.Arg();
     return finiteOrThrow( fRet );
 }
 

@@ -954,7 +954,8 @@ OUString GetString( double f, bool bLeadingSign, sal_uInt16 nMaxDig )
 
     OUString          aRet( aBuff, nLen, RTL_TEXTENCODING_MS_1252 );
 
-    return aRet;
+    // weboffice: Excel writes the exponent with a capital E (IMSQRT("-4") is "1.2...E-16+2i")
+    return aRet.replace(e, E);
 }
 
 
