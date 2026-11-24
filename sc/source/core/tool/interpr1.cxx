@@ -16273,7 +16273,7 @@ void ScInterpreter::ScMid()
 // weboffice: whether the section of a number format code used for a negative number (the
 // second if there are two or more, else the first) shows a date or a time
 // (y m d h s outside quotes, escapes and [colour]/[condition] brackets; [h] [m] [s] count)
-static bool lcl_ExcelNegativeDateTimeCode( const OUString& rCode )
+static bool lcl_ExcelNegativeDateTimeCode( const OUString& rCode, bool bFirstSection = false )
 {
     bool bDateTime = false;
     sal_Int32 nSection = 0;
@@ -16302,7 +16302,7 @@ static bool lcl_ExcelNegativeDateTimeCode( const OUString& rCode )
         }
         else if (c == ';')
         {
-            if (++nSection == 2)
+            if (bFirstSection || ++nSection == 2)
                 break;
             bDateTime = false;
         }
@@ -16426,7 +16426,9 @@ void ScInterpreter::ScText()
         else
             eCellLang = ScGlobal::eLnge;
         // weboffice: like Excel, a negative number shown with a date or time section is #VALUE!
-        const bool bNegativeDate = !bString && fVal < 0.0 && lcl_ExcelNegativeDateTimeCode( sFormatString );
+        const bool bNegativeDate = !bString && ((fVal < 0.0 && lcl_ExcelNegativeDateTimeCode( sFormatString ))
+            // and a number after 9999-12-31 shown as a date or time (TEXT(1E+15;"yyyy-mm-dd"))
+            || (fVal >= 2958466.0 && lcl_ExcelNegativeDateTimeCode( sFormatString, true )));
         // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
         bool bInvalidCode = false;
         // weboffice: like Excel, [$-x-sysdate] / [$-F800] is the system long date whatever follows
