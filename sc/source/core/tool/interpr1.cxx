@@ -1927,6 +1927,18 @@ void ScInterpreter::ScNot()
             }
         }
         break;
+        case svString:
+        {
+            // weboffice: like Excel, NOT of text is #VALUE! unless it is "TRUE"/"FALSE"
+            OUString aStr = GetString().getString();
+            if (aStr.equalsIgnoreAsciiCase("TRUE"))
+                PushInt(0);
+            else if (aStr.equalsIgnoreAsciiCase("FALSE"))
+                PushInt(1);
+            else
+                PushNoValue();
+        }
+        break;
         default:
             PushInt( int(GetDouble() == 0.0) );
     }
@@ -3644,6 +3656,11 @@ bool ScInterpreter::IsEven()
             FormulaError nErr = GetCellErrCode(aCell);
             if (nErr != FormulaError::NONE)
                 SetError(nErr);
+            // weboffice: like Excel, a TRUE/FALSE cell is #VALUE! and an empty cell is 0 (even)
+            else if (IsLogicalCell(aAdr, aCell))
+                SetError(FormulaError::NoValue);
+            else if (aCell.isEmpty())
+                bRes = true;
             else
             {
                 switch (aCell.getType())
@@ -3668,8 +3685,23 @@ bool ScInterpreter::IsEven()
         case svDouble:
         {
             fVal = PopDouble();
-            bRes = true;
+            // weboffice: like Excel, TRUE/FALSE is #VALUE!
+            if (nCurFmtType == SvNumFormatType::LOGICAL)
+                SetError(FormulaError::NoValue);
+            else
+                bRes = true;
         }
+        break;
+        case svString:
+        {
+            // weboffice: like Excel, a number in text counts ("7" is odd), other text is #VALUE!
+            fVal = GetDouble();
+            if (nGlobalError == FormulaError::NONE)
+                bRes = true;
+        }
+        break;
+        case svError:
+            PopError();
         break;
         case svExternalSingleRef:
         {
@@ -3714,7 +3746,10 @@ bool ScInterpreter::IsEven()
             ; // nothing
     }
     if ( !bRes )
-        SetError( FormulaError::IllegalParameter);
+    {
+        if (nGlobalError == FormulaError::NONE)
+            SetError( FormulaError::IllegalParameter);
+    }
     else
         bRes = ( fmod( ::rtl::math::approxFloor( fabs( fVal ) ), 2.0 ) < 0.5 );
     return bRes;
