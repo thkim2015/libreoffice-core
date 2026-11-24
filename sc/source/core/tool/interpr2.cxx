@@ -865,8 +865,9 @@ void ScInterpreter::ScGetDiffDate()
 {
     if ( MustHaveParamCount( GetByte(), 2 ) )
     {
-        double fDate2 = GetDouble();
-        double fDate1 = GetDouble();
+        // weboffice: like Excel, DAYS drops the time of day (DAYS(45000.999;45000)=0)
+        double fDate2 = ::rtl::math::approxFloor(GetDouble());
+        double fDate1 = ::rtl::math::approxFloor(GetDouble());
         PushDouble(fDate1 - fDate2);
     }
 }
