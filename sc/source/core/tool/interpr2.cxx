@@ -405,6 +405,14 @@ void ScInterpreter::ScGetWeekOfYear()
     sal_Int16 nFlag = 1;
     if (nParamCount == 2)
     {
+        // and a TRUE/FALSE return type is #VALUE! (WEEKNUM(45000;A1) with TRUE in A1)
+        if (IsStackTopLogical())
+        {
+            Pop();
+            Pop();
+            PushNoValue();
+            return;
+        }
         const double fFlag = ::rtl::math::approxFloor(GetDoubleWithDefault(1.0));
         nFlag = (fFlag >= 1.0 && fFlag <= 150.0) ? static_cast<sal_Int16>(fFlag) : 0;
     }
