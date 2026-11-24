@@ -7037,7 +7037,8 @@ bool ScCompiler::HandleIIOpCodeInternal(FormulaToken* token, FormulaToken*** ppp
         if (nNumParams != 1)
             return false;
         // weboffice: like Excel, T(range) is T of the range's first cell (ScInterpreter::ScT)
-        if (nOpCode == ocT)
+        // and N(range) likewise its first cell (ScInterpreter::ScN)
+        if (nOpCode == ocT || nOpCode == ocN)
             return false;
 
         if( !ParameterMayBeImplicitIntersection( token, 0 ))

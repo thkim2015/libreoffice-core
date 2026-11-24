@@ -1242,7 +1242,9 @@ void ScInterpreter::ScMatTrans()
     // weboffice: a loaded legacy (non-array) TRANSPOSE of a range is the implicit intersection of the
     // range, like Excel (TRANSPOSE(A1:A10) in row 4 is A4, in row 14 #VALUE! in Excel 2021, measured;
     // Calc gave the top-left 1). UI-typed formulas are dynamic-array masters and stay arrays.
-    if (GetStackType() == svDoubleRef && !IsInArrayContext() && !pJumpMatrix)
+    // TRANSPOSE forces its own parameter to an array, so test for the outermost call of a
+    // non-matrix formula instead of IsInArrayContext().
+    if (GetStackType() == svDoubleRef && !bMatrixFormula && !pJumpMatrix && !aCode.PeekNextOperator())
     {
         ScRange aRange;
         PopDoubleRef(aRange);

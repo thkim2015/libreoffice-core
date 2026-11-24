@@ -704,7 +704,7 @@ inline void ComplexList::Append( Complex&& p )
     if (p.Suffix())
         for (const Complex& r : maVector)
             if (r.Suffix() && r.Suffix() != p.Suffix())
-                throw css::lang::IllegalArgumentException();
+                throw css::lang::IllegalArgumentException(u"#VALUE!"_ustr, {}, 0);
     maVector.emplace_back(p);
 }
 
