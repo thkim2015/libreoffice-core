@@ -794,6 +794,33 @@ std::pair<bool, bool> ScQueryEvaluator::processEntry(SCROW nRow, SCCOL nCol,
             }
         }
     }
+    // weboffice: an Excel lookup function matches only the same type: text never matches a number,
+    // a TRUE/FALSE search value only TRUE/FALSE cells, a number no TRUE/FALSE cell
+    // (MATCH("1";{1;3};0), MATCH(TRUE;{1;3};0) are #N/A in Excel 2021, measured)
+    if (mrParam.mbExcelLookup && rItems.size() == 1 && !aCell.isEmpty()
+        && (rItems.front().meType == ScQueryEntry::ByString || rItems.front().meType == ScQueryEntry::ByValue))
+    {
+        const bool bCellError = aCell.getType() == CELLTYPE_FORMULA
+                                && aCell.getFormula()->GetErrCode() != FormulaError::NONE;
+        const bool bCellNum = !bCellError && aCell.hasNumeric();
+        bool bCellLogical = false;
+        if (bCellNum)
+        {
+            if (aCell.getType() == CELLTYPE_FORMULA)
+                bCellLogical = aCell.getFormula()->GetFormatType() == SvNumFormatType::LOGICAL;
+            else
+            {
+                const sal_uInt32 nFmt = mpContext
+                    ? mrTab.GetNumberFormat(*mpContext, ScAddress(nCol, nRow, mrTab.GetTab()))
+                    : mrTab.GetNumberFormat(nCol, nRow);
+                bCellLogical = (mpContext ? mpContext->NFGetType(nFmt)
+                                          : mrDoc.GetFormatTable()->GetType(nFmt)) == SvNumFormatType::LOGICAL;
+            }
+        }
+        if (rItems.front().meType == ScQueryEntry::ByString ? bCellNum
+            : (!bCellNum || bCellLogical != mrParam.mbLookupLogical))
+            return aRes;
+    }
     // Generic handling.
     for (const auto& rItem : rItems)
     {

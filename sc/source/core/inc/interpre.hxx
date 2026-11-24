@@ -91,6 +91,7 @@ struct VectorSearchArguments
     SCTAB nTab2 = 0;
     ScMatrixRef pMatSrc;
     bool isStringSearch = true;
+    bool isLogicalSearch = false; // weboffice: TRUE/FALSE search value, matches only TRUE/FALSE cells
     bool isEmptySearch = false;
     double fSearchVal;
     svl::SharedString sSearchStr;
@@ -299,6 +300,7 @@ private:
     void PushIllegalArgument();
     /// weboffice: a TRUE/FALSE cell (BOOLEAN number format, or a formula with a logical result)
     bool IsLogicalCell( const ScAddress& rPos, const ScRefCellValue& rCell );
+    bool IsStackTopLogical(); // weboffice: the next value on the stack is TRUE/FALSE
     void PushNoValue();
     void PushNA();
 

@@ -323,6 +323,32 @@ bool ScInterpreter::IsLogicalCell( const ScAddress& rPos, const ScRefCellValue& 
     }
 }
 
+bool ScInterpreter::IsStackTopLogical()
+{
+    if (!sp)
+        return false;
+    const FormulaToken* p = pStack[sp - 1];
+    switch (p->GetType())
+    {
+        case svDouble:
+            return static_cast<SvNumFormatType>(static_cast<const FormulaDoubleToken*>(p)->GetDoubleType())
+                == SvNumFormatType::LOGICAL;
+        case svSingleRef:
+        {
+            const ScAddress aAdr = p->GetSingleRef()->toAbs(mrDoc, aPos);
+            ScRefCellValue aCell(mrDoc, aAdr);
+            return IsLogicalCell(aAdr, aCell);
+        }
+        case svMatrix:
+        {
+            const ScMatrix* pMat = p->GetMatrix();
+            return pMat && pMat->IsBoolean(0, 0);
+        }
+        default:
+            return false;
+    }
+}
+
 // weboffice: TRUE/FALSE cell as text, like Excel ("TRUE", not "1")
 static svl::SharedString lcl_LogicalString( ScInterpreterContext& rContext, svl::SharedStringPool& rPool, double fVal )
 {

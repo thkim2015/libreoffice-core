@@ -5830,6 +5830,7 @@ void ScInterpreter::ScMatch()
     }
 
     // get search value
+    vsa.isLogicalSearch = IsStackTopLogical(); // weboffice
     if (nGlobalError == FormulaError::NONE)
     {
         switch ( GetStackType() )
@@ -6006,6 +6007,7 @@ void ScInterpreter::ScXMatch()
     }
 
     // get search value
+    vsa.isLogicalSearch = IsStackTopLogical(); // weboffice
     if (nGlobalError == FormulaError::NONE)
     {
         switch (GetRawStackType())
@@ -8584,6 +8586,8 @@ void ScInterpreter::ScLookup()
 
     ScQueryParam aParam;
     ScQueryEntry& rEntry = aParam.GetEntry(0);
+    aParam.mbExcelLookup = true; // weboffice: typed matching like Excel
+    aParam.mbLookupLogical = IsStackTopLogical();
     if ( !FillEntry(rEntry) )
         return;
 
@@ -9499,6 +9503,8 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
         const ScAddress aLookupAdr = static_cast<const ScSingleRefToken*>(pStack[sp - 1])->GetSingleRef().toAbs(mrDoc, aPos);
         bBlankLookup = ScRefCellValue(mrDoc, aLookupAdr).isEmpty();
     }
+    aParam.mbExcelLookup = true; // weboffice: typed matching like Excel
+    aParam.mbLookupLogical = IsStackTopLogical();
     if ( !FillEntry(rEntry) )
         return;
 
@@ -9970,6 +9976,7 @@ void ScInterpreter::ScXLookup()
     }
 
     // 1st argument is search value
+    vsa.isLogicalSearch = IsStackTopLogical(); // weboffice
     if (nGlobalError == FormulaError::NONE)
     {
         switch ( GetRawStackType() )
@@ -17001,6 +17008,8 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
 {
     // preparations
     ScQueryParam rParam;
+    rParam.mbExcelLookup = true; // weboffice: typed matching like Excel
+    rParam.mbLookupLogical = vsa.isLogicalSearch;
     rParam.nCol1 = vsa.nCol1;
     rParam.nRow1 = vsa.nRow1;
     rParam.nCol2 = vsa.nCol2;
@@ -17299,7 +17308,8 @@ bool ScInterpreter::LookupQueryWithCache( ScAddress & o_rResultPos,
      * generating and not reference generating functions to have to force less
      * direct lookups here. We could even further attribute volatility per
      * parameter so it would affect only the lookup range parameter. */
-    if (!bColumnsMatch || GetVolatileType() != NOT_VOLATILE)
+    // weboffice: the cache keys a TRUE/FALSE search value like the number 1/0, look it up directly
+    if (!bColumnsMatch || GetVolatileType() != NOT_VOLATILE || rParam.mbLookupLogical)
         bFound = lcl_LookupQuery( o_rResultPos, mrDoc, mrContext, rParam, rEntry, pMyFormulaCell,
             refData, nSearchMode, nOpCode );
     else

@@ -48,6 +48,10 @@ struct SAL_DLLPUBLIC_RTTI ScQueryParamBase
     bool            bCaseSens;
     bool            bDuplicate;
     bool            mbRangeLookup;      ///< for spreadsheet functions like MATCH, LOOKUP, HLOOKUP, VLOOKUP
+    // weboffice: Excel lookup (MATCH, LOOKUP, VLOOKUP, HLOOKUP, XLOOKUP, XMATCH) on cells - text never
+    // matches a number, a TRUE/FALSE search value only TRUE/FALSE cells and a number no TRUE/FALSE cell
+    bool            mbExcelLookup = false;
+    bool            mbLookupLogical = false;
 
     virtual ~ScQueryParamBase();
 

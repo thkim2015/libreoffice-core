@@ -81,7 +81,7 @@ ScQueryParamBase::ScQueryParamBase() :
 ScQueryParamBase::ScQueryParamBase(const ScQueryParamBase& r) :
     eSearchType(r.eSearchType), bHasHeader(r.bHasHeader), bHasTotals(r.bHasTotals), bByRow(r.bByRow),
     bInplace(r.bInplace), bCaseSens(r.bCaseSens), bDuplicate(r.bDuplicate),
-    mbRangeLookup(r.mbRangeLookup), m_Entries(r.m_Entries)
+    mbRangeLookup(r.mbRangeLookup), mbExcelLookup(r.mbExcelLookup), mbLookupLogical(r.mbLookupLogical), m_Entries(r.m_Entries)
 {
 }
 
@@ -97,6 +97,8 @@ ScQueryParamBase& ScQueryParamBase::operator=(const ScQueryParamBase& r)
         bCaseSens = r.bCaseSens;
         bDuplicate = r.bDuplicate;
         mbRangeLookup = r.mbRangeLookup;
+        mbExcelLookup = r.mbExcelLookup;
+        mbLookupLogical = r.mbLookupLogical;
         m_Entries = r.m_Entries;
     }
     return *this;
