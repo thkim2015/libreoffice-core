@@ -188,10 +188,12 @@ void SwBodyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorder
 bool SwBodyFrame::CheckVertAdjust()
 {
     SwTwips nNew = 0;
+    SwTwips nNewGap = 0;
     SwPageFrame* pPage = GetUpper() && GetUpper()->IsPageFrame() ? static_cast<SwPageFrame*>(GetUpper()) : nullptr;
     const drawing::TextVerticalAdjust eAdjust = pPage && pPage->GetPageDesc()
         ? pPage->GetPageDesc()->GetVerticalAdjustment() : drawing::TextVerticalAdjust_TOP;
-    if (pPage && (eAdjust == drawing::TextVerticalAdjust_CENTER || eAdjust == drawing::TextVerticalAdjust_BOTTOM)
+    if (pPage && (eAdjust == drawing::TextVerticalAdjust_CENTER || eAdjust == drawing::TextVerticalAdjust_BOTTOM
+                  || eAdjust == drawing::TextVerticalAdjust_BLOCK)
         && !IsVertical() && !pPage->HasGrid() && Lower() && !Lower()->IsColumnFrame())
     {
         // Content continuing on the next page (split paragraph/table or plain overflow) fills this page: no offset.
@@ -215,18 +217,32 @@ bool SwBodyFrame::CheckVertAdjust()
         if (!bContinues)
         {
             SwTwips nContent = 0;
+            int nLowers = 0;
             for (const SwFrame* pLow = Lower(); pLow; pLow = pLow->GetNext())
                 if (!pLow->IsHiddenNow())
+                {
                     nContent += pLow->getFrameArea().Height();
+                    ++nLowers;
+                }
             const SwTwips nFree = getFrameArea().Height() - nContent;
             if (nContent > 0 && nFree > 0)
-                nNew = eAdjust == drawing::TextVerticalAdjust_CENTER ? nFree / 2 : nFree;
+            {
+                if (eAdjust == drawing::TextVerticalAdjust_BLOCK)
+                {
+                    // Word: a single paragraph stays at the top
+                    if (nLowers > 1)
+                        nNewGap = nFree / (nLowers - 1);
+                }
+                else
+                    nNew = eAdjust == drawing::TextVerticalAdjust_CENTER ? nFree / 2 : nFree;
+            }
         }
     }
     // small differences (rounding) do not move the content again
-    if (std::abs(nNew - m_nVertAdjustOffset) <= 2)
+    if (std::abs(nNew - m_nVertAdjustOffset) <= 2 && std::abs(nNewGap - m_nVertJustifyGap) <= 2)
         return false;
     m_nVertAdjustOffset = nNew;
+    m_nVertJustifyGap = nNewGap;
     InvalidatePrt_();
     if (pPage)
         pPage->InvalidateLayout();

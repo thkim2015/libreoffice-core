@@ -20,6 +20,7 @@
 #include <memory>
 #include <rootfrm.hxx>
 #include <pagefrm.hxx>
+#include <bodyfrm.hxx>
 #include <viewopt.hxx>
 #include <frmatr.hxx>
 #include <frmtool.hxx>
@@ -620,6 +621,9 @@ void SwFrame::MakePos()
         else
         {
             aFrm.SetPosY(aFrm.Pos().getY() + pPrv->getFrameArea().Height());
+            // weboffice: page vertical justification (SwBodyFrame::CheckVertAdjust)
+            if (GetUpper() && GetUpper()->IsBodyFrame())
+                aFrm.SetPosY(aFrm.Pos().getY() + static_cast<const SwBodyFrame*>(GetUpper())->GetVertJustifyGap());
         }
     }
     else if ( GetUpper() )
@@ -674,6 +678,9 @@ void SwFrame::MakePos()
             else
             {
                 aFrm.SetPosY(aFrm.Pos().getY() + pPrv->getFrameArea().Height());
+                // weboffice: page vertical justification (SwBodyFrame::CheckVertAdjust)
+                if (GetUpper()->IsBodyFrame())
+                    aFrm.SetPosY(aFrm.Pos().getY() + static_cast<const SwBodyFrame*>(GetUpper())->GetVertJustifyGap());
             }
         }
         else

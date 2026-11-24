@@ -30,6 +30,9 @@ class SAL_DLLPUBLIC_RTTI SwBodyFrame final : public SwLayoutFrame
     // weboffice: vertical alignment of the page (page style TextVerticalAdjust, docx w:vAlign):
     // the print area starts this far below the body top (content keeps the same bottom limit)
     SwTwips m_nVertAdjustOffset = 0;
+    // weboffice: vertical justification (TextVerticalAdjust BLOCK, docx w:vAlign both): extra space
+    // between two lowers of the body
+    SwTwips m_nVertJustifyGap = 0;
 
 public:
     SwBodyFrame( SwFrameFormat*, SwFrame* );
@@ -37,6 +40,7 @@ public:
     // weboffice: recompute the vertical alignment offset after the page content was formatted.
     // Returns true when the offset changed (the body print area and the content were invalidated).
     bool CheckVertAdjust();
+    SwTwips GetVertJustifyGap() const { return m_nVertJustifyGap; }
 
     virtual void PaintSubsidiaryLines( const SwPageFrame*, const SwRect& ) const override;
 
