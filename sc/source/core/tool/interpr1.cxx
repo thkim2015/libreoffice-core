@@ -1955,7 +1955,7 @@ void ScInterpreter::ScBitAnd()
     double num1 = ::rtl::math::approxFloor( fRaw1);
     double num2 = ::rtl::math::approxFloor( fRaw2);
     // weboffice: like Excel, a number that is not an integer is #NUM! (BITOR(1.5;2))
-    if (    num1 != fRaw1 || num2 != fRaw2 ||
+    if (    !rtl::math::approxEqual(num1, fRaw1) || !rtl::math::approxEqual(num2, fRaw2) ||
             (num1 >= n2power48) || (num1 < 0) ||
             (num2 >= n2power48) || (num2 < 0))
         PushIllegalArgument();
@@ -1974,7 +1974,7 @@ void ScInterpreter::ScBitOr()
     double num1 = ::rtl::math::approxFloor( fRaw1);
     double num2 = ::rtl::math::approxFloor( fRaw2);
     // weboffice: like Excel, a number that is not an integer is #NUM! (BITOR(1.5;2))
-    if (    num1 != fRaw1 || num2 != fRaw2 ||
+    if (    !rtl::math::approxEqual(num1, fRaw1) || !rtl::math::approxEqual(num2, fRaw2) ||
             (num1 >= n2power48) || (num1 < 0) ||
             (num2 >= n2power48) || (num2 < 0))
         PushIllegalArgument();
@@ -1993,7 +1993,7 @@ void ScInterpreter::ScBitXor()
     double num1 = ::rtl::math::approxFloor( fRaw1);
     double num2 = ::rtl::math::approxFloor( fRaw2);
     // weboffice: like Excel, a number that is not an integer is #NUM! (BITOR(1.5;2))
-    if (    num1 != fRaw1 || num2 != fRaw2 ||
+    if (    !rtl::math::approxEqual(num1, fRaw1) || !rtl::math::approxEqual(num2, fRaw2) ||
             (num1 >= n2power48) || (num1 < 0) ||
             (num2 >= n2power48) || (num2 < 0))
         PushIllegalArgument();
@@ -2011,7 +2011,7 @@ void ScInterpreter::ScBitLshift()
     const double fRaw = GetDouble();
     double num = ::rtl::math::approxFloor( fRaw);
     // weboffice: like Excel, a number that is not an integer or a shift beyond 53 is #NUM!
-    if (num != fRaw || std::abs(fShift) > 53.0 || (num >= n2power48) || (num < 0))
+    if (!rtl::math::approxEqual(num, fRaw) || std::abs(fShift) > 53.0 || (num >= n2power48) || (num < 0))
         PushIllegalArgument();
     else
     {
@@ -2039,7 +2039,7 @@ void ScInterpreter::ScBitRshift()
     const double fRaw = GetDouble();
     double num = ::rtl::math::approxFloor( fRaw);
     // weboffice: like Excel, a number that is not an integer or a shift beyond 53 is #NUM!
-    if (num != fRaw || std::abs(fShift) > 53.0 || (num >= n2power48) || (num < 0))
+    if (!rtl::math::approxEqual(num, fRaw) || std::abs(fShift) > 53.0 || (num >= n2power48) || (num < 0))
         PushIllegalArgument();
     else
     {
