@@ -873,7 +873,7 @@ double ScInterpreter::GetBetaDistPDF(double fX, double fA, double fB)
             return -2.0*fX + 2.0;
         if (fX == 1.0 && fB < 1.0)
         {
-            SetError(FormulaError::IllegalArgument);
+            SetError(FormulaError::IllegalFPOperation); // weboffice: infinite density, #NUM! like Excel
             return HUGE_VAL;
         }
         if (fX <= 0.01)
@@ -887,7 +887,7 @@ double ScInterpreter::GetBetaDistPDF(double fX, double fA, double fB)
             return fA * fX;
         if (fX == 0.0 && fA < 1.0)
         {
-            SetError(FormulaError::IllegalArgument);
+            SetError(FormulaError::IllegalFPOperation); // weboffice: infinite density, #NUM! like Excel
             return HUGE_VAL;
         }
         return fA * pow(fX,fA-1);
@@ -1536,7 +1536,7 @@ void ScInterpreter::ScNegBinomDist_MS()
     double p = GetDouble();                            // probability
     double s = ::rtl::math::approxFloor(GetDouble());  // No of successes
     double f = ::rtl::math::approxFloor(GetDouble());  // No of failures
-    if ( s < 1.0 || f < 0.0 || p < 0.0 || p > 1.0 )
+    if ( s < 1.0 || f < 0.0 || p < 0.0 || p >= 1.0 ) // weboffice: p = 1 is #NUM! in Excel
         PushIllegalArgument();
     else
     {
@@ -2362,7 +2362,13 @@ void ScInterpreter::ScFInv_LT()
     double fF2 = ::rtl::math::approxFloor(GetDouble());
     double fF1 = ::rtl::math::approxFloor(GetDouble());
     double fP  = GetDouble();
-    if (fP <= 0.0 || fF1 < 1.0 || fF2 < 1.0 || fF1 >= 1.0E10 || fF2 >= 1.0E10 || fP > 1.0)
+    // weboffice: like Excel, F.INV(0;..)=0 and F.INV(1;..) is #NUM!
+    if (fP == 0.0 && fF1 >= 1.0 && fF2 >= 1.0 && fF1 < 1.0E10 && fF2 < 1.0E10)
+    {
+        PushDouble(0.0);
+        return;
+    }
+    if (fP < 0.0 || fF1 < 1.0 || fF2 < 1.0 || fF1 >= 1.0E10 || fF2 >= 1.0E10 || fP >= 1.0)
     {
         PushIllegalArgument();
         return;
