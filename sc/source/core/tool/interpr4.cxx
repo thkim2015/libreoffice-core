@@ -3446,7 +3446,8 @@ void ScInterpreter::ScExternal()
             ScAddInArgumentType eType = aCall.GetArgType( nPar );
             // weboffice: like Excel, the Analysis ToolPak functions reject TRUE/FALSE arguments and
             // TRUE/FALSE cells in ranges (#VALUE!, XNPV #NUM!): SQRTPI(TRUE), MULTINOMIAL(A1:A3)
-            if (eType != SC_ADDINARG_STRING && eType != SC_ADDINARG_STRING_ARRAY && eType != SC_ADDINARG_CELLRANGE
+            // (BIN2DEC(TRUE) too)
+            if (eType != SC_ADDINARG_STRING_ARRAY && eType != SC_ADDINARG_CELLRANGE
                 && aUnoName.indexOf(".Analysis.") >= 0)
             {
                 bool bLogical = false;
