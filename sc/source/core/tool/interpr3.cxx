@@ -2838,7 +2838,11 @@ void ScInterpreter::ScChiTest()
             if (!(pMat1->IsEmpty(i,j) || pMat2->IsEmpty(i,j)))
             {
                 bEmpty = false;
-                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+                // weboffice: like Excel, a pair with text or TRUE/FALSE is skipped (the degrees of
+                // freedom still come from the size)
+                if (pMat1->IsStringOrEmpty(i,j) || pMat2->IsStringOrEmpty(i,j)
+                    || pMat1->IsBoolean(i,j) || pMat2->IsBoolean(i,j))
+                    continue;
                 {
                     double fValX = pMat1->GetDouble(i,j);
                     double fValE = pMat2->GetDouble(i,j);
@@ -2860,11 +2864,6 @@ void ScInterpreter::ScChiTest()
                         return;
                     }
                     fChi += sc::divide( fTemp2, fValE);
-                }
-                else
-                {
-                    PushIllegalArgument();
-                    return;
                 }
             }
         }
