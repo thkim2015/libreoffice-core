@@ -415,6 +415,112 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
 
 static OUString lcl_ExcelDefaultNamesFormatCodeCJK(const OUString& rCode, LanguageType eLang);
 
+// weboffice: the language of an explicit locale bracket ([$-412], [$-0411], [$₩-412], [$-ko-KR]);
+// LANGUAGE_DONTKNOW when there is none
+static LanguageType lcl_ExcelCodeLocale(const OUString& rCode)
+{
+    const sal_Int32 nLen = rCode.getLength();
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            const sal_Int32 nEnd = rCode.indexOf('"', i + 1);
+            if (nEnd < 0)
+                break;
+            i = nEnd;
+        }
+        else if (c == '\\')
+            ++i;
+        else if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            if (nEnd < 0)
+                break;
+            const sal_Int32 nDash = rCode.indexOf('-', i);
+            if (i + 1 < nLen && rCode[i + 1] == '$' && nDash > 0 && nDash < nEnd)
+            {
+                const OUString aTag = rCode.copy(nDash + 1, nEnd - nDash - 1);
+                bool bHex = !aTag.isEmpty();
+                for (sal_Int32 k = 0; k < aTag.getLength() && bHex; ++k)
+                    bHex = rtl::isAsciiHexDigit(aTag[k]);
+                if (bHex)
+                    return LanguageType(static_cast<sal_uInt16>(aTag.toUInt32(16) & 0xFFFF));
+                const OUString aLower = aTag.toAsciiLowerCase();
+                if (aLower.startsWith("ko"))
+                    return LANGUAGE_KOREAN;
+                if (aLower.startsWith("ja"))
+                    return LANGUAGE_JAPANESE;
+                return LANGUAGE_DONTKNOW;
+            }
+            i = nEnd;
+        }
+    }
+    return LANGUAGE_DONTKNOW;
+}
+
+// weboffice: Excel has no r/rr era code (TEXT(A1;"r") is "r" in Excel ko-KR and ja, measured), and under
+// an explicit Korean or Japanese locale the month names are numbers: mmmm "11월"/"11月", mmm "11"
+// (Calc showed the era year and the English "November" / Japanese "十一月").
+static OUString lcl_ExcelLiteralRAndLocaleMonths(const OUString& rCode)
+{
+    const sal_Int32 nLen = rCode.getLength();
+    const LanguageType eTag = lcl_ExcelCodeLocale(rCode);
+    const sal_uInt16 nPrimary = static_cast<sal_uInt16>(eTag) & 0x3FF;
+    const bool bTagKorean = eTag != LANGUAGE_DONTKNOW && nPrimary == 0x12;
+    const bool bTagJapanese = eTag != LANGUAGE_DONTKNOW && nPrimary == 0x11;
+    const bool bHasR = rCode.indexOf('r') >= 0 || rCode.indexOf('R') >= 0;
+    if (!bHasR && !bTagKorean && !bTagJapanese)
+        return rCode;
+    OUStringBuffer aBuf(nLen + 8);
+    for (sal_Int32 i = 0; i < nLen; ++i)
+    {
+        const sal_Unicode c = rCode[i];
+        if (c == '"')
+        {
+            const sal_Int32 nEnd = rCode.indexOf('"', i + 1);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if (c == '\\' && i + 1 < nLen)
+        {
+            aBuf.append(rCode.subView(i, 2));
+            ++i;
+        }
+        else if (c == '[')
+        {
+            const sal_Int32 nEnd = rCode.indexOf(']', i);
+            const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
+            aBuf.append(rCode.subView(i, nTo - i + 1));
+            i = nTo;
+        }
+        else if ((c == 'g' || c == 'G') && rCode.matchIgnoreAsciiCase(u"general", i))
+        {
+            aBuf.append(rCode.subView(i, 7));
+            i += 6;
+        }
+        else if (c == 'r' || c == 'R')
+            aBuf.append(OUStringChar('"') + OUStringChar(c) + OUStringChar('"'));
+        else if ((c == 'm' || c == 'M') && (bTagKorean || bTagJapanese))
+        {
+            sal_Int32 n = 1;
+            while (i + n < nLen && (rCode[i + n] == 'm' || rCode[i + n] == 'M'))
+                ++n;
+            if (n == 3)
+                aBuf.append('M');
+            else if (n == 4)
+                aBuf.append(bTagKorean ? u"M\"월\"" : u"M\"月\"");
+            else
+                aBuf.append(rCode.subView(i, n));
+            i += n - 1;
+        }
+        else
+            aBuf.append(c);
+    }
+    return aBuf.makeStringAndClear();
+}
+
 // weboffice: Excel reads y and yy as the 2-digit year and yyy or more as the 4-digit year;
 // Calc knew only YY and YYYY (and showed a lone y as a letter).
 static OUString lcl_ExcelYearTokens(const OUString& rCode)
@@ -466,8 +572,6 @@ OUString ScGlobal::ExcelTextFunctionFormatCode(const OUString& rCode, LanguageTy
     if (!MsLangId::isKorean(eReal) || rCode.isEmpty())
         return ExcelDefaultNamesFormatCode(rCode, eLang);
     const sal_Int32 nLen = rCode.getLength();
-    // is there a date or time part (then '/' is a literal, not a fraction)?
-    bool bDate = false;
     bool bDigits = false;
     for (sal_Int32 i = 0; i < nLen; ++i)
     {
@@ -484,12 +588,11 @@ OUString ScGlobal::ExcelTextFunctionFormatCode(const OUString& rCode, LanguageTy
             i = nEnd < 0 ? nLen : nEnd;
             continue;
         }
-        const sal_Unicode u = rtl::toAsciiUpperCase(c);
-        if (u == 'Y' || u == 'D' || u == 'H' || u == 'S' || u == 'M')
-            bDate = true;
         if (c == '0' || c == '#' || c == '?')
             bDigits = true;
     }
+    // a date or time code before a '/' makes it a literal; before any, '/' is a fraction or invalid
+    bool bDateSeen = false;
     OUStringBuffer aBuf(nLen + 8);
     for (sal_Int32 i = 0; i < nLen; ++i)
     {
@@ -509,7 +612,51 @@ OUString ScGlobal::ExcelTextFunctionFormatCode(const OUString& rCode, LanguageTy
         {
             const sal_Int32 nEnd = rCode.indexOf(']', i);
             const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
-            aBuf.append(rCode.subView(i, nTo - i + 1));
+            // Korean Excel names the colours in Korean ([빨강], [색10]); the English names are #VALUE!
+            // (measured: [Red]/[RED]/[Black]/[Color10] #VALUE!, [색3] fine, [색0]/[색57]/[빨간색] #VALUE!)
+            const OUString aIn = rCode.copy(i + 1, std::max<sal_Int32>(0, nTo - i - 1));
+            const OUString aLower = aIn.toAsciiLowerCase();
+            static constexpr std::u16string_view aEnglish[] = { u"black", u"blue", u"cyan", u"green",
+                u"magenta", u"red", u"white", u"yellow" };
+            static constexpr std::pair<std::u16string_view, std::u16string_view> aKorean[] = {
+                { u"검정", u"BLACK" }, { u"파랑", u"BLUE" }, { u"녹청", u"CYAN" },
+                { u"녹색", u"GREEN" }, { u"자홍", u"MAGENTA" }, { u"빨강", u"RED" },
+                { u"흰색", u"WHITE" }, { u"노랑", u"YELLOW" } };
+            bool bEnglishColor = aLower.startsWith("color") && aLower.getLength() > 5;
+            for (sal_Int32 k = 5; bEnglishColor && k < aLower.getLength(); ++k)
+                bEnglishColor = rtl::isAsciiDigit(aLower[k]);
+            for (auto aName : aEnglish)
+                bEnglishColor = bEnglishColor || aLower == aName;
+            if (bEnglishColor)
+            {
+                rbInvalid = true;
+                return rCode;
+            }
+            bool bDone = false;
+            for (const auto& [aKo, aEn] : aKorean)
+            {
+                if (aIn == aKo)
+                {
+                    aBuf.append(OUString::Concat("[") + aEn + "]");
+                    bDone = true;
+                }
+            }
+            if (!bDone && aIn.startsWith(u"색"))
+            {
+                const OUString aNum = aIn.copy(1);
+                bool bNum = !aNum.isEmpty() && aNum.getLength() <= 2;
+                for (sal_Int32 k = 0; bNum && k < aNum.getLength(); ++k)
+                    bNum = rtl::isAsciiDigit(aNum[k]);
+                if (!bNum || aNum.toInt32() < 1 || aNum.toInt32() > 56)
+                {
+                    rbInvalid = true;
+                    return rCode;
+                }
+                aBuf.append(OUString::Concat("[COLOR") + aNum + "]");
+                bDone = true;
+            }
+            if (!bDone)
+                aBuf.append(rCode.subView(i, nTo - i + 1));
             i = nTo;
         }
         else if ((c == 'G' || c == 'g') && rCode.matchIgnoreAsciiCase(u"general", i))
@@ -537,10 +684,28 @@ OUString ScGlobal::ExcelTextFunctionFormatCode(const OUString& rCode, LanguageTy
             aBuf.append(rCode.subView(i, 3));
             i += 2;
         }
-        else if (c == '/' && bDate)
+        else if (c == '/' && bDateSeen)
             aBuf.append(u"\"/\"");
-        else
+        else if (c == '/')
+        {
+            // before any date or time code '/' can only be a fraction: Excel ko-KR gives #VALUE! for
+            // "오전/오후 h:mm", "x/mm", "가/나", "0 가/나" but "h:mm 오전/오후" is literal (measured)
+            const bool bNumBefore = i > 0 && (rCode[i - 1] == '0' || rCode[i - 1] == '#' || rCode[i - 1] == '?');
+            const bool bNumAfter = i + 1 < nLen && (rtl::isAsciiDigit(rCode[i + 1]) || rCode[i + 1] == '#' || rCode[i + 1] == '?');
+            if (!bNumBefore || !bNumAfter)
+            {
+                rbInvalid = true;
+                return rCode;
+            }
             aBuf.append(c);
+        }
+        else
+        {
+            const sal_Unicode u = rtl::toAsciiUpperCase(c);
+            if (u == 'Y' || u == 'D' || u == 'H' || u == 'S' || u == 'M')
+                bDateSeen = true;
+            aBuf.append(c);
+        }
     }
     return ExcelDefaultNamesFormatCode(aBuf.makeStringAndClear(), eLang);
 }
@@ -549,7 +714,7 @@ OUString ScGlobal::ExcelDefaultNamesFormatCode(const OUString& rCode, LanguageTy
 {
     if (rCode.isEmpty())
         return rCode;
-    const OUString aCode = lcl_ExcelYearTokens(rCode);
+    const OUString aCode = lcl_ExcelLiteralRAndLocaleMonths(lcl_ExcelYearTokens(rCode));
     if (!MsLangId::isCJK(MsLangId::getRealLanguage(eLang)))
         return aCode;
     return lcl_ExcelDefaultNamesFormatCodeCJK(aCode, eLang);

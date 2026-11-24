@@ -16330,11 +16330,23 @@ void ScInterpreter::ScText()
         // (TEXT(A1;"[$-x-sysdate]dddd") is "2026년 11월 24일 화요일" in Excel ko-KR, measured)
         const OUString aLowerCode = sFormatString.toAsciiLowerCase();
         const bool bSysDate = aLowerCode.indexOf("[$-x-sysdate]") >= 0 || aLowerCode.indexOf("[$-f800]") >= 0;
+        // and [$-x-systime] / [$-F400] the system long time ("오후 3:04:05" in Excel ko-KR, measured)
+        const bool bSysTime = !bSysDate && (aLowerCode.indexOf("[$-x-systime]") >= 0 || aLowerCode.indexOf("[$-f400]") >= 0);
         sFormatString = ScGlobal::ExcelTextFunctionFormatCode( sFormatString, eCellLang, bInvalidCode );
         if (bSysDate && !bInvalidCode)
         {
             if (const SvNumberformat* pLong = mrContext.NFGetFormatEntry(mrContext.NFGetFormatIndex(NF_DATE_SYSTEM_LONG, eCellLang)))
                 sFormatString = pLong->GetFormatstring();
+        }
+        else if (bSysTime && !bInvalidCode)
+        {
+            const LanguageType eReal = MsLangId::getRealLanguage(eCellLang);
+            if (MsLangId::isKorean(eReal))
+                sFormatString = u"AM/PM H:MM:SS"_ustr;
+            else if (MsLangId::getPrimaryLanguage(eReal) == MsLangId::getPrimaryLanguage(LANGUAGE_JAPANESE))
+                sFormatString = u"H:MM:SS"_ustr;
+            else
+                sFormatString = u"H:MM:SS AM/PM"_ustr;
         }
         if (bInvalidCode || bNegativeDate)
             PushNoValue();
