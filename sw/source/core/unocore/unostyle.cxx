@@ -58,6 +58,9 @@
 
 #include <autostyle_helper.hxx>
 #include <pagedesc.hxx>
+#include <rootfrm.hxx>
+#include <pagefrm.hxx>
+#include <IDocumentLayoutAccess.hxx>
 #include <algorithm>
 #include <doc.hxx>
 #include <IDocumentUndoRedo.hxx>
@@ -1865,7 +1868,29 @@ void SwXStyle::SetPropertyValue<sal_uInt16(RES_TEXT_VERT_ADJUST)>(const SfxItemP
         return;
     SwPageDesc* pPageDesc = m_pDoc->FindPageDesc(o_rStyleBase.GetOldPageDesc()->GetName());
     if(pPageDesc)
-        pPageDesc->SetVerticalAdjustment(rValue.get<drawing::TextVerticalAdjust>());
+    {
+        const drawing::TextVerticalAdjust eNew = rValue.get<drawing::TextVerticalAdjust>();
+        const bool bChanged = pPageDesc->GetVerticalAdjustment() != eNew;
+        pPageDesc->SetVerticalAdjustment(eNew);
+        // weboffice: the body layout follows the page vertical alignment (SwBodyFrame::CheckVertAdjust) -
+        // lay out again the pages using this page style
+        if (bChanged)
+        {
+            if (SwRootFrame* pLayout = m_pDoc->getIDocumentLayoutAccess().GetCurrentLayout())
+            {
+                for (SwFrame* pFrame = pLayout->Lower(); pFrame; pFrame = pFrame->GetNext())
+                {
+                    SwPageFrame* pPage = static_cast<SwPageFrame*>(pFrame);
+                    if (pPage->GetPageDesc() != pPageDesc)
+                        continue;
+                    if (SwLayoutFrame* pBody = pPage->FindBodyCont())
+                        pBody->InvalidatePrt();
+                    pPage->InvalidateLayout();
+                    pPage->InvalidateContent();
+                }
+            }
+        }
+    }
 }
 template<>
 void SwXStyle::SetPropertyValue<FN_UNO_IS_AUTO_UPDATE>(const SfxItemPropertyMapEntry&, const SfxItemPropertySet&, const uno::Any& rValue, SwStyleBase_Impl& o_rStyleBase)

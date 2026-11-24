@@ -24,6 +24,7 @@
 #include <rootfrm.hxx>
 #include <rowfrm.hxx>
 #include <pagefrm.hxx>
+#include <bodyfrm.hxx>
 #include <viewimp.hxx>
 #include <crsrsh.hxx>
 #include <dflyobj.hxx>
@@ -646,6 +647,12 @@ void SwLayAction::InternalAction(OutputDevice* pRenderContext)
                             if ( IsBrowseActionStop() )
                                 m_bInterrupt = true;
                         }
+                    }
+                    // weboffice: page vertical alignment needs the formatted content height
+                    if ( !IsNextCycle() && !pPage->IsInvalid() )
+                    {
+                        if ( SwLayoutFrame* pBody = pPage->FindBodyCont() )
+                            static_cast<SwBodyFrame*>(pBody)->CheckVertAdjust();
                     }
                     if( bNoLoop )
                         rLayoutAccess.GetLayouter()->LoopControl( pPage );

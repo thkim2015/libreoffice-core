@@ -69,6 +69,8 @@
 #include <frmatr.hxx>
 #include <swfntcch.hxx>
 #include <vcl/svapp.hxx>
+#include <flowfrm.hxx>
+#include <algorithm>
 
 using namespace ::com::sun::star;
 
@@ -172,13 +174,84 @@ void SwBodyFrame::Format( vcl::RenderContext* /*pRenderContext*/, const SwBorder
     if( bNoGrid )
     {
         SwFrameAreaDefinition::FramePrintAreaWriteAccess aPrt(*this);
-        aPrt.Pos(0, 0);
-        aPrt.Height( getFrameArea().Height() );
+        // weboffice: page vertical alignment (see CheckVertAdjust)
+        const SwTwips nOffset = std::clamp<SwTwips>(m_nVertAdjustOffset, 0, getFrameArea().Height());
+        aPrt.Pos(0, nOffset);
+        aPrt.Height( getFrameArea().Height() - nOffset );
         aPrt.Width( getFrameArea().Width() );
     }
 
     setFrameAreaSizeValid(true);
     setFramePrintAreaValid(true);
+}
+
+bool SwBodyFrame::CheckVertAdjust()
+{
+    SwTwips nNew = 0;
+    SwTwips nNewGap = 0;
+    SwPageFrame* pPage = GetUpper() && GetUpper()->IsPageFrame() ? static_cast<SwPageFrame*>(GetUpper()) : nullptr;
+    const drawing::TextVerticalAdjust eAdjust = pPage && pPage->GetPageDesc()
+        ? pPage->GetPageDesc()->GetVerticalAdjustment() : drawing::TextVerticalAdjust_TOP;
+    if (pPage && (eAdjust == drawing::TextVerticalAdjust_CENTER || eAdjust == drawing::TextVerticalAdjust_BOTTOM
+                  || eAdjust == drawing::TextVerticalAdjust_BLOCK)
+        && !IsVertical() && !pPage->HasGrid() && Lower() && !Lower()->IsColumnFrame())
+    {
+        // Content continuing on the next page (split paragraph/table or plain overflow) fills this page: no offset.
+        bool bContinues = false;
+        if (const SwContentFrame* pLast = pPage->FindLastBodyContent())
+        {
+            const SwFrame* pFlow = pLast->IsInTab() ? static_cast<const SwFrame*>(pLast->FindTabFrame()) : pLast;
+            const SwFlowFrame* pLastFlow = SwFlowFrame::CastFlowFrame(pFlow);
+            if (pLastFlow && pLastFlow->HasFollow())
+                bContinues = true;
+            else if (const SwContentFrame* pNext = pLast->FindNextCnt())
+            {
+                if (pNext->IsInDocBody() && pNext->FindPageFrame() != pPage)
+                {
+                    const SwFrame* pNextFlowFrame = pNext->IsInTab() ? static_cast<const SwFrame*>(pNext->FindTabFrame()) : pNext;
+                    const SwFlowFrame* pNextFlow = SwFlowFrame::CastFlowFrame(pNextFlowFrame);
+                    bContinues = !pNextFlow || !pNextFlow->IsPageBreak(true);
+                }
+            }
+        }
+        if (!bContinues)
+        {
+            SwTwips nContent = 0;
+            int nLowers = 0;
+            for (const SwFrame* pLow = Lower(); pLow; pLow = pLow->GetNext())
+                if (!pLow->IsHiddenNow())
+                {
+                    nContent += pLow->getFrameArea().Height();
+                    ++nLowers;
+                }
+            const SwTwips nFree = getFrameArea().Height() - nContent;
+            if (nContent > 0 && nFree > 0)
+            {
+                if (eAdjust == drawing::TextVerticalAdjust_BLOCK)
+                {
+                    // Word: a single paragraph stays at the top
+                    if (nLowers > 1)
+                        nNewGap = nFree / (nLowers - 1);
+                }
+                else
+                    nNew = eAdjust == drawing::TextVerticalAdjust_CENTER ? nFree / 2 : nFree;
+            }
+        }
+    }
+    // small differences (rounding) do not move the content again
+    if (std::abs(nNew - m_nVertAdjustOffset) <= 2 && std::abs(nNewGap - m_nVertJustifyGap) <= 2)
+        return false;
+    m_nVertAdjustOffset = nNew;
+    m_nVertJustifyGap = nNewGap;
+    InvalidatePrt_();
+    if (pPage)
+        pPage->InvalidateLayout();
+    for (SwFrame* pLow = Lower(); pLow; pLow = pLow->GetNext())
+        pLow->InvalidatePos();
+    if (pPage)
+        pPage->InvalidateContent();
+    SetCompletePaint();
+    return true;
 }
 
 void SwBodyFrame::dumpAsXml(xmlTextWriterPtr writer) const
