@@ -2612,7 +2612,14 @@ void ScInterpreter::ScCumIpmt()
     if ( !MustHaveParamCount( GetByte(), 6 ) )
         return;
 
+    // weboffice: a TRUE/FALSE type is #VALUE! in Excel
+    const bool bLogicalFlag = IsStackTopLogical();
     double fFlag  = GetDoubleWithDefault( -1.0 );
+    if (bLogicalFlag)
+    {
+        PushNoValue();
+        return;
+    }
     double fEnd   = ::rtl::math::approxFloor(GetDouble());
     double fStart = ::rtl::math::approxFloor(GetDouble());
     double fPv    = GetDouble();
@@ -2653,7 +2660,14 @@ void ScInterpreter::ScCumPrinc()
     if ( !MustHaveParamCount( GetByte(), 6 ) )
         return;
 
+    // weboffice: a TRUE/FALSE type is #VALUE! in Excel
+    const bool bLogicalFlag = IsStackTopLogical();
     double fFlag  = GetDoubleWithDefault( -1.0 );
+    if (bLogicalFlag)
+    {
+        PushNoValue();
+        return;
+    }
     double fEnd   = ::rtl::math::approxFloor(GetDouble());
     double fStart = ::rtl::math::approxFloor(GetDouble());
     double fPv    = GetDouble();

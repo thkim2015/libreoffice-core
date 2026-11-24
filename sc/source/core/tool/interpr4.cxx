@@ -2761,9 +2761,10 @@ bool ScInterpreter::GetBool()
     {
         if (rStr.equalsIgnoreAsciiCase("TRUE"))
             return true;
-        if (!rStr.equalsIgnoreAsciiCase("FALSE"))
-            SetError(FormulaError::NoValue);
-        return false;
+        if (rStr.equalsIgnoreAsciiCase("FALSE"))
+            return false;
+        // a number in text still counts as that number, PMT(0.05;10;1000;0;"1")
+        return ConvertStringToValue(rStr) != 0.0;
     };
     switch (nGlobalError == FormulaError::NONE ? GetStackType() : svUnknown)
     {
