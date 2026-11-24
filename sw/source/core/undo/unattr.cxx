@@ -195,6 +195,17 @@ void SwUndoFormatAttr::Init( const SwFormat & rFormat )
             if(pTableBox)
                 m_nNodeIndex = pTableBox->GetSttIdx();
         }
+        else if (dynamic_cast<const SwTableLineFormat*>(&rFormat))
+        {
+            // weboffice: row formats (SwTableLineFormat) had no way back - undo of a row height set through
+            // UNO (SwXTextTableRow Height/SizeType) did nothing. Remember the row by its first box.
+            SwTableLine* pLine = SwIterator<SwTableLine, SwFormat>(rFormat).First();
+            if (pLine && !pLine->GetTabBoxes().empty() && pLine->GetTabBoxes()[0]->GetSttNd())
+            {
+                m_nNodeIndex = pLine->GetTabBoxes()[0]->GetSttIdx();
+                m_bTableLine = true;
+            }
+        }
     }
 }
 
@@ -295,6 +306,8 @@ SwFormat* SwUndoFormatAttr::GetFormat( const SwDoc& rDoc )
                     SwTableBox* pBox = pTableNode->GetTable().GetTableBox(m_nNodeIndex);
                     if (pBox)
                     {
+                        if (m_bTableLine)
+                            return pBox->GetUpper() ? pBox->GetUpper()->GetFrameFormat() : nullptr;
                         return pBox->GetFrameFormat();
                     }
                 }

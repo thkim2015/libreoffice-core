@@ -3993,9 +3993,15 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
 
     bool bIsListStyle = (nElement >= XML_lvl1pPr && nElement <= XML_lvl9pPr);
 
-    if (nParaLeftMargin || bIsListStyle) // For Paragraph or List-Style elements
+    // weboffice: a placeholder paragraph always says its left margin, also 0 - without marL PowerPoint
+    // takes the master body marL (18pt), so every subtitle saved here read LeftIndent 18 there.
+    // A first-line indent with no left margin (and no bullet indents) comes from the paragraph too:
+    // the bullet branch below wrote the bullet indent (0) and lost it.
+    const bool bPlaceholderPara = mbPlaceholder && !bIsListStyle;
+    if (nParaLeftMargin || bIsListStyle
+        || (nParaFirstLineIndent != 0 && nLeftMargin == 0 && nLineIndentation == 0)) // For Paragraph or List-Style elements
         mpFS->startElementNS( XML_a, nElement,
-                           XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaLeftMargin)), nParaLeftMargin > 0),
+                           XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nParaLeftMargin)), nParaLeftMargin > 0 || bPlaceholderPara),
                            XML_lvl, sax_fastparser::UseIf(OString::number(nOutLevel), nOutLevel > 0),
                            XML_indent, sax_fastparser::UseIf(OString::number((bForceZeroIndent && nParaFirstLineIndent == 0) ? 0 : oox::drawingml::convertHmmToEmu(nParaFirstLineIndent)), (bForceZeroIndent || nParaFirstLineIndent != 0)),
                            XML_algn, bDistributed ? "dist" : GetAlignment( nAlignment, bRtl, mbPlaceholder ),
@@ -4003,7 +4009,7 @@ bool DrawingML::WriteParagraphProperties(const Reference<XTextContent>& rParagra
                            XML_rtl, sax_fastparser::UseIf(ToPsz10(bRtl), bRtl));
     else
         mpFS->startElementNS( XML_a, nElement,
-                           XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nLeftMargin)), nLeftMargin > 0),
+                           XML_marL, sax_fastparser::UseIf(OString::number(oox::drawingml::convertHmmToEmu(nLeftMargin)), nLeftMargin > 0 || bPlaceholderPara),
                            XML_lvl, sax_fastparser::UseIf(OString::number(nOutLevel), nOutLevel > 0),
                            XML_indent, sax_fastparser::UseIf(OString::number(!bForceZeroIndent ? oox::drawingml::convertHmmToEmu(nLineIndentation) : 0), (bForceZeroIndent || ( nLineIndentation != 0))),
                            XML_algn, bDistributed ? "dist" : GetAlignment( nAlignment, bRtl, mbPlaceholder ),

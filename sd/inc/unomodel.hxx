@@ -132,6 +132,7 @@ private:
     bool mbPaintTextEdit;
 
     void initializeDocument();
+    void ApplyZetaThemeFonts(const css::uno::Sequence<css::beans::PropertyValue>& rArgs);
 
     SAL_RET_MAYBENULL sd::DrawViewShell* GetViewShell();
 

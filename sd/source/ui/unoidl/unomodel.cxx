@@ -109,6 +109,9 @@
 #include <svx/sdrpagewindow.hxx>
 #include <svx/sdrpaintwindow.hxx>
 #include <editeng/fontitem.hxx>
+#include <svx/svdotext.hxx>
+#include <glob.hxx>
+#include <editeng/colritem.hxx>
 #include <toolkit/awt/vclxdevice.hxx>
 #include <svx/svdpool.hxx>
 #include <svx/svdpagv.hxx>
@@ -1805,6 +1808,7 @@ const sal_uInt16 WID_MODEL_ALLOWLINKUPDATE    = 16;
 const sal_uInt16 WID_MODEL_SLIDESECTIONS      = 17;
 const sal_uInt16 WID_MODEL_ANIMATIONSOUNDLINK = 18;
 const sal_uInt16 WID_MODEL_ZETAFIRSTSLIDENUM  = 19; // zeta: internal, not in the IDL
+const sal_uInt16 WID_MODEL_ZETATHEMEFONTS     = 20; // weboffice: internal, write-only
 
 static const SvxItemPropertySet* ImplGetDrawModelPropertySet()
 {
@@ -1829,6 +1833,7 @@ static const SvxItemPropertySet* ImplGetDrawModelPropertySet()
         { u"SlideSections"_ustr,          WID_MODEL_SLIDESECTIONS,      cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(),       0, 0},
         { u"HasExternalAnimationSoundLink"_ustr, WID_MODEL_ANIMATIONSOUNDLINK, cppu::UnoType<bool>::get(),       0, 0},
         { u"ZetaFirstSlideNum"_ustr,      WID_MODEL_ZETAFIRSTSLIDENUM,  cppu::UnoType<sal_Int32>::get(),       0, 0},
+        { u"ZetaThemeFonts"_ustr,         WID_MODEL_ZETATHEMEFONTS,     cppu::UnoType<uno::Sequence< beans::PropertyValue >>::get(),       0, 0},
         { sUNO_Prop_Theme,                WID_MODEL_THEME,              cppu::UnoType<util::XTheme>::get(),       0, 0},
     };
     static SvxItemPropertySet aDrawModelPropertySet_Impl( aDrawModelPropertyMap_Impl, SdrObject::GetGlobalDrawObjectItemPool() );
@@ -2903,6 +2908,101 @@ uno::Reference< beans::XPropertySetInfo > SAL_CALL SdXImpressDocument::getProper
     return mpPropSet->getPropertySetInfo();
 }
 
+// weboffice: Design > Themes puts the theme fonts (and title/text colors) into every master's
+// title/subtitle/outline/notes styles and into the text of the master placeholders in one call.
+// Doing it through UNO took ~1s for 11 layouts (a few hundred style and cursor property writes).
+void SdXImpressDocument::ApplyZetaThemeFonts(const uno::Sequence<beans::PropertyValue>& rArgs)
+{
+    comphelper::SequenceAsHashMap aMap(rArgs);
+    const OUString aHead = aMap.getUnpackedValueOrDefault(u"Heading"_ustr, OUString());
+    OUString aHeadAsian = aMap.getUnpackedValueOrDefault(u"HeadingAsian"_ustr, OUString());
+    const OUString aBody = aMap.getUnpackedValueOrDefault(u"Body"_ustr, OUString());
+    OUString aBodyAsian = aMap.getUnpackedValueOrDefault(u"BodyAsian"_ustr, OUString());
+    const sal_Int32 nTitleColor = aMap.getUnpackedValueOrDefault(u"TitleColor"_ustr, sal_Int32(-1));
+    const sal_Int32 nTextColor = aMap.getUnpackedValueOrDefault(u"TextColor"_ustr, sal_Int32(-1));
+    if (aHeadAsian.isEmpty())
+        aHeadAsian = aHead;
+    if (aBodyAsian.isEmpty())
+        aBodyAsian = aBody;
+    if (!mpDoc)
+        return;
+    SfxStyleSheetBasePool* pPool = mpDoc->GetStyleSheetPool();
+
+    auto putFonts = [](SfxItemSet& rSet, const OUString& rLatin, const OUString& rAsian)
+    {
+        if (rLatin.isEmpty())
+            return;
+        SvxFontItem aLatin(static_cast<const SvxFontItem&>(rSet.Get(EE_CHAR_FONTINFO)));
+        aLatin.SetFamilyName(rLatin);
+        rSet.Put(aLatin);
+        SvxFontItem aAsian(static_cast<const SvxFontItem&>(rSet.Get(EE_CHAR_FONTINFO_CJK)));
+        aAsian.SetFamilyName(rAsian);
+        rSet.Put(aAsian);
+    };
+
+    const sal_uInt16 nMasters = mpDoc->GetMasterSdPageCount(PageKind::Standard);
+    for (sal_uInt16 i = 0; i < nMasters; ++i)
+    {
+        SdPage* pMaster = mpDoc->GetMasterSdPage(i, PageKind::Standard);
+        if (!pMaster)
+            continue;
+        OUString aPrefix = pMaster->GetLayoutName();
+        const sal_Int32 nSep = aPrefix.indexOf(SD_LT_SEPARATOR);
+        if (nSep >= 0)
+            aPrefix = aPrefix.copy(0, nSep + SD_LT_SEPARATOR.getLength());
+        std::vector<std::pair<OUString, bool>> aStyles{ { STR_LAYOUT_TITLE, true }, { STR_LAYOUT_SUBTITLE, true }, { STR_LAYOUT_NOTES, false } };
+        for (sal_Int32 n = 1; n <= 9; ++n)
+            aStyles.emplace_back(STR_LAYOUT_OUTLINE + " " + OUString::number(n), false);
+        for (const auto& [rName, bHead] : aStyles)
+        {
+            SfxStyleSheetBase* pSheet = pPool ? pPool->Find(aPrefix + rName, SfxStyleFamily::Page) : nullptr;
+            if (!pSheet)
+                continue;
+            SfxItemSet& rSet = pSheet->GetItemSet();
+            putFonts(rSet, bHead ? aHead : aBody, bHead ? aHeadAsian : aBodyAsian);
+            const sal_Int32 nColor = bHead ? nTitleColor : nTextColor;
+            if (nColor >= 0)
+                rSet.Put(SvxColorItem(Color(ColorTransparency, nColor), EE_CHAR_COLOR));
+            if (auto pBroadcaster = dynamic_cast<SfxStyleSheet*>(pSheet))
+                pBroadcaster->Broadcast(SfxHint(SfxHintId::DataChanged));
+        }
+
+        // master placeholder text: the fonts over the whole text (also its portions), colors stay with the styles
+        for (size_t j = 0; j < pMaster->GetObjCount(); ++j)
+        {
+            SdrObject* pObj = pMaster->GetObj(j);
+            const PresObjKind eKind = pMaster->GetPresObjKind(pObj);
+            const bool bTitle = eKind == PresObjKind::Title;
+            if (!bTitle && eKind != PresObjKind::Outline && eKind != PresObjKind::Text && eKind != PresObjKind::DateTime
+                && eKind != PresObjKind::Footer && eKind != PresObjKind::SlideNumber && eKind != PresObjKind::Header)
+                continue;
+            const OUString& rLatin = bTitle ? aHead : aBody;
+            if (rLatin.isEmpty())
+                continue;
+            SdrTextObj* pText = DynCastSdrTextObj(pObj);
+            OutlinerParaObject* pOPO = pText ? pText->GetOutlinerParaObject() : nullptr;
+            if (!pOPO)
+                continue;
+            SdOutliner* pOutl = mpDoc->GetInternalOutliner();
+            if (!pOutl)
+                continue;
+            pOutl->SetText(*pOPO);
+            SfxItemSet aSet(pOutl->GetEmptyItemSet());
+            SvxFontItem aLatin(static_cast<const SvxFontItem&>(pOutl->GetParaAttribs(0).Get(EE_CHAR_FONTINFO)));
+            aLatin.SetFamilyName(rLatin);
+            aSet.Put(aLatin);
+            SvxFontItem aAsian(static_cast<const SvxFontItem&>(pOutl->GetParaAttribs(0).Get(EE_CHAR_FONTINFO_CJK)));
+            aAsian.SetFamilyName(bTitle ? aHeadAsian : aBodyAsian);
+            aSet.Put(aAsian);
+            const sal_Int32 nParas = pOutl->GetParagraphCount();
+            pOutl->QuickSetAttribs(aSet, ESelection(0, 0, nParas - 1, pOutl->GetText(pOutl->GetParagraph(nParas - 1)).getLength()));
+            pText->SetOutlinerParaObject(pOutl->CreateParaObject());
+            pOutl->Clear();
+        }
+    }
+    mpDoc->SetChanged();
+}
+
 void SAL_CALL SdXImpressDocument::setPropertyValue( const OUString& aPropertyName, const uno::Any& aValue )
 {
     ::SolarMutexGuard aGuard;
@@ -2993,6 +3093,14 @@ void SAL_CALL SdXImpressDocument::setPropertyValue( const OUString& aPropertyNam
             else
                 aGrabBag[u"ZetaFirstSlideNum"_ustr] <<= nFirst;
             setGrabBagItem(uno::Any(aGrabBag.getAsConstPropertyValueList()));
+            break;
+        }
+        case WID_MODEL_ZETATHEMEFONTS:
+        {
+            uno::Sequence<beans::PropertyValue> aArgs;
+            if (!(aValue >>= aArgs))
+                throw lang::IllegalArgumentException();
+            ApplyZetaThemeFonts(aArgs);
             break;
         }
         case WID_MODEL_SLIDESECTIONS:
@@ -3137,6 +3245,9 @@ uno::Any SAL_CALL SdXImpressDocument::getPropertyValue( const OUString& Property
             }
         case WID_MODEL_INTEROPGRABBAG:
             getGrabBagItem(aAny);
+            break;
+        case WID_MODEL_ZETATHEMEFONTS:
+            aAny <<= uno::Sequence<beans::PropertyValue>();
             break;
         case WID_MODEL_ZETAFIRSTSLIDENUM:
         {
