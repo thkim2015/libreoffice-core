@@ -16326,7 +16326,16 @@ void ScInterpreter::ScText()
         const bool bNegativeDate = !bString && fVal < 0.0 && lcl_ExcelNegativeDateTimeCode( sFormatString );
         // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
         bool bInvalidCode = false;
+        // weboffice: like Excel, [$-x-sysdate] / [$-F800] is the system long date whatever follows
+        // (TEXT(A1;"[$-x-sysdate]dddd") is "2026년 11월 24일 화요일" in Excel ko-KR, measured)
+        const OUString aLowerCode = sFormatString.toAsciiLowerCase();
+        const bool bSysDate = aLowerCode.indexOf("[$-x-sysdate]") >= 0 || aLowerCode.indexOf("[$-f800]") >= 0;
         sFormatString = ScGlobal::ExcelTextFunctionFormatCode( sFormatString, eCellLang, bInvalidCode );
+        if (bSysDate && !bInvalidCode)
+        {
+            if (const SvNumberformat* pLong = mrContext.NFGetFormatEntry(mrContext.NFGetFormatIndex(NF_DATE_SYSTEM_LONG, eCellLang)))
+                sFormatString = pLong->GetFormatstring();
+        }
         if (bInvalidCode || bNegativeDate)
             PushNoValue();
         else if (bString)
