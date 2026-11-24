@@ -39,6 +39,7 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <com/sun/star/presentation/EffectNodeType.hpp>
+#include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <oox/core/xmlfilterbase.hxx>
@@ -405,6 +406,13 @@ namespace oox::ppt {
                     {
                         maNodeProperties[ NP_SUBITEM ] <<= nSubItem;
                     }
+                    else if ( nSubItem == ShapeAnimationSubType::ONLY_BACKGROUND
+                              && Reference<XAnimate>( xNode, UNO_QUERY ).is() )
+                    {
+                        // weboffice: p:bg (animate attached shape) of p:set / p:animEffect - keep
+                        // the background sub item on the node itself, it is the whole effect
+                        maNodeProperties[ NP_SUBITEM ] <<= nSubItem;
+                    }
                     else
                         lcl_setAncestorSubItem( xParent, nSubItem );
                 }
@@ -492,7 +500,11 @@ namespace oox::ppt {
                         break;
                     case NP_TARGET:
 
-                        if (xParent.is() && xParent->getType() == AnimationNodeType::ITERATE)
+                        // weboffice: the sound of an effect animated by letter or word
+                        // (p:audio in the p:subTnLst of an effect with p:iterate) is a child
+                        // of the iterate container too; its sound URL is the audio source,
+                        // not the iterate target (it replaced the target and lost the sound)
+                        if (!xAudio.is() && xParent.is() && xParent->getType() == AnimationNodeType::ITERATE)
                         {
                             Reference<XIterateContainer> xParentContainer(xParent, UNO_QUERY);
                             if (xParentContainer.is())
