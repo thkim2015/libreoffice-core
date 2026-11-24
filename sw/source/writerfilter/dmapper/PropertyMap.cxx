@@ -1804,8 +1804,8 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
         // the next column of the same page, also in Word 2013+ compatibility mode. Open it as a
         // continuous section whose first paragraph has a column break, like a column break typed
         // at the section start. When the previous section's columns are page columns (a page
-        // break section, or such a section continued here), the new section keeps flowing in the
-        // page columns without a Writer section of its own.
+        // break section, or such a section continued here), the new section gets no columns of
+        // its own and keeps flowing in the page columns.
         m_bPageColumnsOnly
             = pPrevSection->m_nBreakType != NS_ooxml::LN_Value_ST_SectionMark_continuous
               || pPrevSection->m_bPageColumnsOnly;
@@ -1900,12 +1900,8 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
         && !rDM_Impl.IsInComments())
     {
         //todo: insert a section or access the already inserted section
-        // weboffice: a nextColumn section in page columns gets no Writer section: its text keeps
-        // flowing in the page columns, and the column break before its first paragraph moves it
-        // to the next column (a Writer section without columns would start it on the next page)
-        rtl::Reference< SwXTextSection > xSection;
-        if (!m_bPageColumnsOnly)
-            xSection = rDM_Impl.appendTextSectionAfter( m_xStartingRange );
+        rtl::Reference< SwXTextSection > xSection =
+            rDM_Impl.appendTextSectionAfter( m_xStartingRange );
         if ( xSection.is() )
         {
             if ( m_nColumnCount > 1 && !m_bPageColumnsOnly )
