@@ -4122,8 +4122,8 @@ void ScInterpreter::ScInfo()
         // TODO tdf#140286 handle MACOSX version to get result compatible to Excel
         PushString("Windows (32-bit) NT 5.01");
 #else // handle Windows (WNT, WIN_NT, WIN32, _WIN32)
-        // TODO tdf#140286 handle Windows version to get a result compatible to Excel
-        PushString( "Windows (32-bit) NT 5.01" );
+        // weboffice: what Excel 2021 shows on Windows 10/11, measured
+        PushString( u"Windows (64-bit) NT 10.00"_ustr );
 #endif
     else if( aStr == "RELEASE" )
         PushString( ::utl::Bootstrap::getBuildIdData( OUString() ) );
