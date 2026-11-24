@@ -10697,6 +10697,14 @@ void ScInterpreter::ScSortBy()
                             else
                                 pFullMatSortBy->PutString(pMatSortBy->GetString(ci, rj), ci, rj + nSortBy);
                         }
+                        else if (pMatSortBy->IsBoolean(ci, rj))
+                        {
+                            // weboffice: keep TRUE/FALSE keys, which sort after text like Excel
+                            if (aSortData.bByRow)
+                                pFullMatSortBy->PutBoolean(pMatSortBy->GetDouble(ci, rj) != 0.0, ci + nSortBy, rj);
+                            else
+                                pFullMatSortBy->PutBoolean(pMatSortBy->GetDouble(ci, rj) != 0.0, ci, rj + nSortBy);
+                        }
                         else
                         {
                             if (aSortData.bByRow)
