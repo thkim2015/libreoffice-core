@@ -698,7 +698,8 @@ static char GetMaxChar( sal_uInt16 nBase )
 OUString ConvertFromDec( double fNum, double fMin, double fMax, sal_uInt16 nBase,
     sal_Int32 nPlaces, sal_Int32 nMaxPlaces, bool bUsePlaces )
 {
-    fNum = ::rtl::math::approxFloor( fNum );
+    // weboffice: like Excel, toward zero (DEC2HEX(-0.5) is 0, DEC2HEX(-2.5) is FFFFFFFFFE)
+    fNum = fNum < 0 ? ::rtl::math::approxCeil( fNum ) : ::rtl::math::approxFloor( fNum );
     fMin = ::rtl::math::approxFloor( fMin );
     fMax = ::rtl::math::approxFloor( fMax );
 
