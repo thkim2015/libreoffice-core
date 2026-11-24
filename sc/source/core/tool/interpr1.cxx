@@ -5792,9 +5792,10 @@ void ScInterpreter::ScMatch()
     // get match mode
     double fType = ( nParamCount == 3 ? GetDouble() : 1.0 );
     // weboffice: like Excel, a match type above 1 works as 1 and below -1 as -1
-    if (fType > 1.0)
+    // (only the sign counts: MATCH(2;A1:A3;-0.5) searches descending)
+    if (fType > 0.0)
         fType = 1.0;
-    else if (fType < -1.0)
+    else if (fType < 0.0)
         fType = -1.0;
     switch ( static_cast<int>(fType) )
     {
