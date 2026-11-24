@@ -3738,6 +3738,14 @@ void ScInterpreter::ScN()
     // GetCellValue() / GetCellValueOrZero()
     FormulaError nSErr = mnStringNoValueError;
     mnStringNoValueError = FormulaError::CellNoValue;
+    // weboffice: like Excel, N of a range is N of its first cell, not the implicit intersection
+    // (N(A2:A10) is A2 in every row in Excel 2021, measured; Calc intersected or gave #VALUE!)
+    if (GetStackType() == svDoubleRef && !IsInArrayContext() && !pJumpMatrix)
+    {
+        ScRange aRange;
+        PopDoubleRef(aRange);
+        PushSingleRef(aRange.aStart.Col(), aRange.aStart.Row(), aRange.aStart.Tab());
+    }
     double fVal = GetDouble();
     mnStringNoValueError = nSErr;
     if (nErr != FormulaError::NONE)
@@ -6730,7 +6738,33 @@ void ScInterpreter::ScCountIf()
             ScAddress aAdr;
             if ( !PopDoubleRefOrSingleRef( aAdr ) )
             {
-                PushInt(0);
+                // weboffice: like Excel, a criteria range that does not intersect the formula row/column
+                // is the #VALUE! criterion: count the #VALUE! cells (COUNTIF(A1:A10;A1:A10) in row 13
+                // is 0 in Excel 2021, measured; Calc gave #VALUE!)
+                nGlobalError = FormulaError::NONE;
+                double fErrors = 0.0;
+                if (GetStackType() == svDoubleRef || GetStackType() == svSingleRef)
+                {
+                    ScRange aRange;
+                    if (GetStackType() == svSingleRef)
+                    {
+                        ScAddress aOne;
+                        PopSingleRef(aOne);
+                        aRange = ScRange(aOne);
+                    }
+                    else
+                        PopDoubleRef(aRange);
+                    ScCellIterator aIter(mrDoc, aRange);
+                    for (bool bHas = aIter.first(); bHas; bHas = aIter.next())
+                    {
+                        ScRefCellValue aCell(aIter.getRefCellValue());
+                        if (aCell.getType() == CELLTYPE_FORMULA && aCell.getFormula()->GetErrCode() == FormulaError::NoValue)
+                            fErrors += 1.0;
+                    }
+                }
+                else
+                    Pop();
+                PushDouble(fErrors);
                 return ;
             }
             ScRefCellValue aCell(mrDoc, aAdr);
