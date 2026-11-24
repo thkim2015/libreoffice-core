@@ -439,6 +439,15 @@ bool ScDBQueryDataIterator::DataAccessInternal::getCurrent(Value& rValue)
             {
                 case CELLTYPE_VALUE:
                 {
+                    // weboffice: like Excel, DSUM/DCOUNT/DAVERAGE... skip TRUE/FALSE cells
+                    // (DCOUNT of a field with TRUE cells counts only the numbers)
+                    if (mpParam->mbSkipString
+                        && mrContext.NFGetType(mrDoc.GetNumberFormat(mrContext, ScAddress(nCol, nRow, nTab)))
+                               == SvNumFormatType::LOGICAL)
+                    {
+                        incPos();
+                        continue;
+                    }
                     rValue.mfValue = aCell.getDouble();
                     rValue.mbIsNumber = true;
                     if ( bCalcAsShown )
@@ -457,6 +466,13 @@ bool ScDBQueryDataIterator::DataAccessInternal::getCurrent(Value& rValue)
 
                 case CELLTYPE_FORMULA:
                 {
+                    if (mpParam->mbSkipString && aCell.getFormula()->IsValue()
+                        && aCell.getFormula()->GetErrCode() == FormulaError::NONE
+                        && aCell.getFormula()->GetFormatType() == SvNumFormatType::LOGICAL)
+                    {
+                        incPos(); // weboffice: a TRUE/FALSE result is skipped too
+                        continue;
+                    }
                     if (aCell.getFormula()->IsValue())
                     {
                         rValue.mfValue = aCell.getFormula()->GetValue();
