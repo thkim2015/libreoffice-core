@@ -99,6 +99,7 @@
 #include <frmfmt.hxx>
 #include <modcfg.hxx>
 #include <fmtcol.hxx>
+#include <poolfmt.hxx>
 #include <wview.hxx>
 #include <gloslst.hxx>
 #include <inputwin.hxx>
@@ -2753,9 +2754,16 @@ KEYINPUT_CHECKTABLE_INSDEL:
                 break;
 
             case SwKeyState::NumOff:
+            {
                 // shell change - so record in advance
                 rSh.DelNumRules();
+                // weboffice: Word ends a list (Enter in an empty item) with a Normal paragraph - undo the
+                // List Paragraph that AutoFormat As You Type gave the list (autofmt.cxx BuildEnum)
+                SwTextFormatColl* pColl = rSh.GetCurTextFormatColl();
+                if (pColl && pColl->GetName() == UIName(u"List Paragraph"_ustr))
+                    rSh.SetTextFormatColl(rSh.GetTextCollFromPool(SwPoolFormatId::COLL_STANDARD));
                 break;
+            }
             case SwKeyState::OutlineLvOff: // delete autofmt outlinelevel later
                 break;
 
