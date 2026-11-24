@@ -58,6 +58,8 @@
     <DateAcceptancePattern>M월D일</DateAcceptancePattern>
     <DateAcceptancePattern>Y.M.D.</DateAcceptancePattern>
     <DateAcceptancePattern>Y년M월D일</DateAcceptancePattern>
+    <DateAcceptancePattern>Y년 M월 D일</DateAcceptancePattern>
+    <DateAcceptancePattern>M월 D일</DateAcceptancePattern>
     <FormatElement msgid="NumberFormatskey1" default="true" type="medium" usage="FIXED_NUMBER" formatindex="0">
       <FormatCode>General</FormatCode>
     </FormatElement>
