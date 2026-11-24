@@ -492,7 +492,11 @@ namespace oox::ppt {
                         break;
                     case NP_TARGET:
 
-                        if (xParent.is() && xParent->getType() == AnimationNodeType::ITERATE)
+                        // weboffice: the sound of an effect animated by letter or word
+                        // (p:audio in the p:subTnLst of an effect with p:iterate) is a child
+                        // of the iterate container too; its sound URL is the audio source,
+                        // not the iterate target (it replaced the target and lost the sound)
+                        if (!xAudio.is() && xParent.is() && xParent->getType() == AnimationNodeType::ITERATE)
                         {
                             Reference<XIterateContainer> xParentContainer(xParent, UNO_QUERY);
                             if (xParentContainer.is())
