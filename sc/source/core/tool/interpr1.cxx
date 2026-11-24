@@ -4100,10 +4100,7 @@ void ScInterpreter::ScNumberValue()
     }
     if ( aInputString.isEmpty() )
     {
-        if ( maCalcConfig.mbEmptyStringAsZero )
-            PushDouble( 0.0 );
-        else
-            PushNoValue();
+        PushDouble( 0.0 ); // weboffice: NUMBERVALUE("") is 0 in Excel
         return;
     }
 
@@ -4482,6 +4479,8 @@ void ScInterpreter::ScUnichar()
         // weboffice: like Excel, UNICHAR(0) is #VALUE!
         if (nGlobalError != FormulaError::NONE || !rtl::isUnicodeCodePoint(nCodePoint) || nCodePoint == 0)
             PushIllegalArgument();
+        else if (nCodePoint >= 0xD800 && nCodePoint <= 0xDFFF)
+            PushNA(); // weboffice: a surrogate code is #N/A in Excel (UNICHAR(55296))
         else
         {
             OUString aStr( &nCodePoint, 1 );
@@ -16359,6 +16358,13 @@ void ScInterpreter::ScText()
             PopError();
             break;
         case svDouble:
+            if (IsStackTopLogical())
+            {
+                // weboffice: TEXT(TRUE;"0") is "TRUE" in Excel, like a TRUE/FALSE cell
+                aStr = mrStrPool.intern(PopDouble() != 0.0 ? u"TRUE"_ustr : u"FALSE"_ustr);
+                bString = true;
+                break;
+            }
             fVal = PopDouble();
             break;
         default:
