@@ -71,6 +71,7 @@
 #include <editeng/unoprnms.hxx>
 #include "unoobj.hxx"
 #include <theme/ThemeColorChanger.hxx>
+#include <svx/theme/ThemeColorChangerCommon.hxx>
 
 #include <strings.hxx>
 #include <bitmaps.hlst>
@@ -1007,13 +1008,16 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
                 auto& rUnoTheme = dynamic_cast<UnoTheme&>(*xTheme);
                 auto pTheme = rUnoTheme.getTheme();
                 auto* pPage = GetPage();
-                // weboffice: a new master page without a theme that joins the theme another master
-                // page already uses (a layout inserted next to a sibling, so the PPTX export writes it
-                // under the same slide master) changes no colours: every object and style was
-                // already resolved against that colour set. ThemeColorChanger walks all styles and
-                // all objects of the document anyway, which took 0.8 s per inserted layout.
+                // weboffice: a master page that joins the theme another master page already uses
+                // (a layout inserted next to a sibling, or the layouts of an inserted slide master,
+                // so the PPTX export writes them under one slide master) changes no colours of the
+                // rest of the document: its objects were already resolved against that colour set.
+                // ThemeColorChanger walks all styles and all objects of the document, which took
+                // 0.8 s per inserted layout, so only this page's objects are recoloured. Setting the
+                // page's own theme again (old == new, after its colour set changed) still recolours.
+                // getTheme() falls back to the model theme when the page has none of its own.
                 bool bJoinShared = false;
-                if (pTheme && pPage->IsMasterPage() && !pPage->getSdrPageProperties().getTheme())
+                if (pTheme && pPage->IsMasterPage() && pPage->getSdrPageProperties().getTheme() != pTheme)
                 {
                     SdrModel& rModel = pPage->getSdrModelFromSdrPage();
                     for (sal_uInt16 nPage = 0; nPage < rModel.GetMasterPageCount(); ++nPage)
@@ -1028,7 +1032,19 @@ void SAL_CALL SdGenericDrawPage::setPropertyValue( const OUString& aPropertyName
                 }
                 pPage->getSdrPageProperties().setTheme(pTheme);
                 if (bJoinShared)
+                {
+                    sd::DrawDocShell* pDocShell = GetModel()->GetDocShell();
+                    sd::ViewShell* pViewShell = pDocShell ? pDocShell->GetViewShell() : nullptr;
+                    SdrView* pView = pViewShell ? pViewShell->GetView() : nullptr;
+                    if (pView && pTheme->getColorSet())
+                    {
+                        SdrObjListIter aIter(pPage, SdrIterMode::DeepWithGroups);
+                        while (aIter.IsMore())
+                            svx::theme::updateSdrObject(*pTheme->getColorSet(), aIter.Next(), pView,
+                                                        pDocShell->GetUndoManager());
+                    }
                     break;
+                }
                 SdrPage* pMasterPage = nullptr;
                 if (pPage->IsMasterPage())
                     pMasterPage = pPage;
