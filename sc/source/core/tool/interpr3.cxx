@@ -2771,14 +2771,25 @@ void ScInterpreter::ScFTest()
         return;
     }
 
-    auto aVal1 = pMat1->CollectKahan(sc::op::kOpSumAndSumSquare);
-    auto aVal2 = pMat2->CollectKahan(sc::op::kOpSumAndSumSquare);
-    double fCount1  = aVal1.mnCount;
-    double fCount2  = aVal2.mnCount;
-    KahanSum fSum1    = aVal1.maAccumulator[0];
-    KahanSum fSumSqr1 = aVal1.maAccumulator[1];
-    KahanSum fSum2    = aVal2.maAccumulator[0];
-    KahanSum fSumSqr2 = aVal2.maAccumulator[1];
+    // weboffice: like Excel, TRUE/FALSE cells are skipped (F.TEST(A1:A5;B1:B5) with a TRUE cell)
+    auto lcl_Collect = [](const ScMatrix& rMat, double& rCount, KahanSum& rSum, KahanSum& rSumSqr)
+    {
+        SCSIZE nC, nR;
+        rMat.GetDimensions(nC, nR);
+        for (SCSIZE i = 0; i < nC; ++i)
+            for (SCSIZE j = 0; j < nR; ++j)
+                if (!rMat.IsStringOrEmpty(i, j) && !rMat.IsBoolean(i, j))
+                {
+                    const double fVal = rMat.GetDouble(i, j);
+                    rSum += fVal;
+                    rSumSqr += fVal * fVal;
+                    ++rCount;
+                }
+    };
+    double fCount1 = 0.0, fCount2 = 0.0;
+    KahanSum fSum1, fSumSqr1, fSum2, fSumSqr2;
+    lcl_Collect(*pMat1, fCount1, fSum1, fSumSqr1);
+    lcl_Collect(*pMat2, fCount2, fSum2, fSumSqr2);
 
     if (fCount1 < 2.0 || fCount2 < 2.0)
     {
