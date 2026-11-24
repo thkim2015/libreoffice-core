@@ -93,6 +93,8 @@ class SwUndoFormatAttr final : public SwUndo
     SwNodeOffset m_nNodeIndex;
     const sal_uInt16 m_nFormatWhich;
     const bool m_bSaveDrawPt;
+    // weboffice: m_nNodeIndex is the first box of a table row whose line format changed (row height via UNO)
+    bool m_bTableLine = false;
 
     void SaveFlyAnchor( const SwFormat * pFormat, bool bSaveDrawPt = false );
     // #i35443# - Add return value, type <bool>.
