@@ -1907,6 +1907,9 @@ void ScInterpreter::ScSwitch_MS()
     bool isValue = false;
     double fRefVal = 0;
     svl::SharedString aRefStr;
+    // weboffice: like Excel, a value matches only the same type (a TRUE cell is not 1, the number
+    // 1 is not "1": SWITCH(A1;1;"one";TRUE;"t") with TRUE in A1 is "t" in Excel 2021)
+    const bool bRefLogical = IsStackTopLogical();
     switch ( GetStackType() )
     {
         case svDouble:
@@ -1947,14 +1950,44 @@ void ScInterpreter::ScSwitch_MS()
     {
         double fVal = 0;
         svl::SharedString aStr;
+        const bool bCandLogical = IsStackTopLogical();
+        bool bCandString = false, bCandNumber = false;
+        switch (GetStackType())
+        {
+            case svString:
+                bCandString = true;
+                break;
+            case svDouble:
+                bCandNumber = true;
+                break;
+            case svSingleRef:
+            {
+                ScAddress aCandAdr;
+                FormulaConstTokenRef xCand( PopToken());
+                PushTokenRef( xCand);
+                PopSingleRef( aCandAdr);
+                if (nGlobalError == FormulaError::NONE)
+                {
+                    ScRefCellValue aCandCell( mrDoc, aCandAdr);
+                    bCandString = aCandCell.hasString();
+                    bCandNumber = aCandCell.hasNumeric();
+                }
+                PushTokenRef( xCand);
+                break;
+            }
+            default:
+                break;
+        }
+        const bool bSameType = isValue ? (!bCandString && bCandLogical == bRefLogical)
+                                       : (!bCandNumber || aRefStr.isEmpty());
         if ( isValue )
             fVal = GetDouble();
         else
             aStr = GetString();
         nParamCount--;
         if ((nGlobalError != FormulaError::NONE && nParamCount < 2)
-                || (isValue && rtl::math::approxEqual( fRefVal, fVal))
-                || (!isValue && aRefStr.getDataIgnoreCase() == aStr.getDataIgnoreCase()))
+                || (isValue && bSameType && rtl::math::approxEqual( fRefVal, fVal))
+                || (!isValue && bSameType && aRefStr.getDataIgnoreCase() == aStr.getDataIgnoreCase()))
         {
             // TRUE
             bFinished = true;
