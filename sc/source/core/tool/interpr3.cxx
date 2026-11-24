@@ -1424,7 +1424,8 @@ void ScInterpreter::ScCritBinom()
     double p      = GetDouble();
     double n      = ::rtl::math::approxFloor(GetDouble());
     // weboffice: like Excel, alpha must be strictly between 0 and 1
-    if (n < 0.0 || alpha <= 0.0 || alpha >= 1.0 || p < 0.0 || p > 1.0)
+    // and p too (BINOM.INV(10;0;0.5) is #NUM! in Excel 2021)
+    if (n < 0.0 || alpha <= 0.0 || alpha >= 1.0 || p <= 0.0 || p >= 1.0)
         PushIllegalArgument();
     else if ( alpha == 0.0 )
         PushDouble( 0.0 );
@@ -1778,12 +1779,14 @@ void ScInterpreter::ScWeibull()
     if ( !MustHaveParamCount( GetByte(), 4 ) )
         return;
 
-    double kum   = GetDouble();                 // 0 or 1
+    double kum   = GetBool() ? 1.0 : 0.0;     // 0 or 1
     double beta  = GetDouble();                 // beta
     double alpha = GetDouble();                 // alpha
     double x     = GetDouble();                 // x
     if (alpha <= 0.0 || beta <= 0.0 || x < 0.0)
         PushIllegalArgument();
+    else if (kum == 0.0 && x == 0.0)
+        PushDouble(0.0); // weboffice: the density at 0 is 0 in Excel whatever the shape
     else if (kum == 0.0)                        // Density
         PushDouble(alpha/pow(beta,alpha)*pow(x,alpha-1.0)*
                    exp(-pow(x/beta,alpha)));
@@ -2124,6 +2127,8 @@ void ScInterpreter::ScGammaDist( bool bODFF )
     double fX = GetDouble();                    // x
     if ((!bODFF && fX < 0) || fAlpha <= 0.0 || fBeta <= 0.0)
         PushIllegalArgument();
+    else if (!bODFF && !bCumulative && fX == 0.0)
+        PushError( FormulaError::IllegalFPOperation ); // weboffice: GAMMA.DIST(0;a;b;FALSE) is #NUM! in Excel
     else
     {
         if (bCumulative)                        // distribution
