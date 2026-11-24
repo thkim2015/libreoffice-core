@@ -2959,6 +2959,7 @@ void ScInterpreter::ScHarMean()
     {
         switch (GetStackType())
         {
+            case svString    : // weboffice: a text number argument counts like Excel, HARMEAN(1;"4")
             case svDouble    :
             {
                 double x = GetDouble();
@@ -3082,6 +3083,7 @@ void ScInterpreter::ScGeoMean()
     {
         switch (GetStackType())
         {
+            case svString    : // weboffice: a text number argument counts like Excel, HARMEAN(1;"4")
             case svDouble    :
             {
                 double x = GetDouble();
