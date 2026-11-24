@@ -8613,159 +8613,175 @@ void ScInterpreter::ScLookup()
         // Do not propagate errors from matrix while copying to vector.
         pDataMat->SetErrorInterpreter( nullptr);
 
-        // Excel has an undocumented behaviour in that it seems to internally
-        // sort an interim array (i.e. error values specifically #DIV/0! are
-        // sorted to the end) or ignore error values that makes these "get last
-        // non-empty" searches work, e.g. =LOOKUP(2,1/NOT(ISBLANK(A:A)),A:A)
-        // see tdf#117016
-        // Instead of sorting a million entries of which mostly only a bunch of
-        // rows are filled and moving error values to the end which most are
-        // already anyway, assume the matrix to be sorted except error values
-        // and omit the coded DoubleError values.
-        // Do this only for a numeric matrix (that includes errors coded as
-        // doubles), which covers the case in question.
-        /* TODO: it's unclear whether this really matches Excel behaviour in
-         * all constellations or if there are cases that include unsorted error
-         * values and thus yield arbitrary binary search results or something
-         * different or whether there are cases where error values are also
-         * omitted from mixed numeric/string arrays or if it's not an interim
-         * matrix but a cell range reference instead. */
-        const bool bOmitErrorValues = (eDataArrayType == svMatrix && pDataMat->IsNumeric());
-
-        // In case of non-vector matrix, only search the first row or column.
-        ScMatrixRef pDataMat2;
-        std::vector<SCCOLROW> vIndex;
-        if (bOmitErrorValues)
+        // weboffice: Excel's binary search over the array (see ExcelMatrixLookup) - error elements
+        // are stepped over, so LOOKUP(2;1/(A1:A9<>"");B1:B9) still finds the last one
+        SCCOLROW nDelta = -1;
+        const sal_Int32 nExcelIdx = ExcelMatrixLookup(*pDataMat, bVertical, 0, rEntry.GetQueryItem(), false, 0);
+        if (nExcelIdx != -2)
         {
-            std::vector<double> vArray;
-            VectorMatrixAccessor aMatAcc(*pDataMat, bVertical);
-            const SCSIZE nElements = aMatAcc.GetElementCount();
-            for (SCSIZE i=0; i < nElements; ++i)
-            {
-                const double fVal = aMatAcc.GetDouble(i);
-                if (std::isfinite(fVal))
-                {
-                    vArray.push_back(fVal);
-                    vIndex.push_back(i);
-                }
-            }
-            if (vArray.empty())
+            if (nExcelIdx < 0)
             {
                 PushNA();
                 return;
             }
-            const size_t nElems = vArray.size();
-            if (nElems == nElements)
-            {
-                // No error value omitted, use as is.
-                pDataMat2 = pDataMat;
-                std::vector<SCCOLROW>().swap( vIndex);
-            }
-            else
-            {
-                nLenMajor = nElems;
-                if (bVertical)
-                {
-                    ScMatrixRef pTempMat = GetNewMat( 1, nElems, /*bEmpty*/true );
-                    pTempMat->PutDoubleVector( vArray, 0, 0);
-                    pDataMat2 = std::move(pTempMat);
-                }
-                else
-                {
-                    ScMatrixRef pTempMat = GetNewMat( nElems, 1, /*bEmpty*/true );
-                    for (size_t i=0; i < nElems; ++i)
-                        pTempMat->PutDouble( vArray[i], i, 0);
-                    pDataMat2 = std::move(pTempMat);
-                }
-            }
+            nDelta = nExcelIdx;
         }
         else
         {
-            // Just use as is with the VectorMatrixAccessor.
-            pDataMat2 = pDataMat;
-        }
 
-        // Do not propagate errors from matrix while searching.
-        pDataMat2->SetErrorInterpreter( nullptr);
+            // Excel has an undocumented behaviour in that it seems to internally
+            // sort an interim array (i.e. error values specifically #DIV/0! are
+            // sorted to the end) or ignore error values that makes these "get last
+            // non-empty" searches work, e.g. =LOOKUP(2,1/NOT(ISBLANK(A:A)),A:A)
+            // see tdf#117016
+            // Instead of sorting a million entries of which mostly only a bunch of
+            // rows are filled and moving error values to the end which most are
+            // already anyway, assume the matrix to be sorted except error values
+            // and omit the coded DoubleError values.
+            // Do this only for a numeric matrix (that includes errors coded as
+            // doubles), which covers the case in question.
+            /* TODO: it's unclear whether this really matches Excel behaviour in
+             * all constellations or if there are cases that include unsorted error
+             * values and thus yield arbitrary binary search results or something
+             * different or whether there are cases where error values are also
+             * omitted from mixed numeric/string arrays or if it's not an interim
+             * matrix but a cell range reference instead. */
+            const bool bOmitErrorValues = (eDataArrayType == svMatrix && pDataMat->IsNumeric());
 
-        VectorMatrixAccessor aMatAcc2(*pDataMat2, bVertical);
-
-        // binary search for non-equality mode (the source data is
-        // assumed to be sorted in ascending order).
-
-        SCCOLROW nDelta = -1;
-        bool bMatchWholeCell = mrDoc.GetDocOptions().IsMatchWholeCell();
-
-        SCSIZE nFirst = 0, nLast = nLenMajor-1; //, nHitIndex = 0;
-        for (SCSIZE nLen = nLast-nFirst; nLen > 0; nLen = nLast-nFirst)
-        {
-            SCSIZE nMid = nFirst + nLen/2;
-            sal_Int32 nCmp = lcl_CompareMatrix2Query( nMid, aMatAcc2, aParam, rEntry, bMatchWholeCell,
-                    false /* bEmptyIsLess, instead empty are sorted to end */);
-            if (nCmp == 0)
+            // In case of non-vector matrix, only search the first row or column.
+            ScMatrixRef pDataMat2;
+            std::vector<SCCOLROW> vIndex;
+            if (bOmitErrorValues)
             {
-                // exact match.  find the last item with the same value.
-                lcl_GetLastMatch( nMid, aMatAcc2, nLenMajor);
-                nDelta = nMid;
-                bFound = true;
-                break;
+                std::vector<double> vArray;
+                VectorMatrixAccessor aMatAcc(*pDataMat, bVertical);
+                const SCSIZE nElements = aMatAcc.GetElementCount();
+                for (SCSIZE i=0; i < nElements; ++i)
+                {
+                    const double fVal = aMatAcc.GetDouble(i);
+                    if (std::isfinite(fVal))
+                    {
+                        vArray.push_back(fVal);
+                        vIndex.push_back(i);
+                    }
+                }
+                if (vArray.empty())
+                {
+                    PushNA();
+                    return;
+                }
+                const size_t nElems = vArray.size();
+                if (nElems == nElements)
+                {
+                    // No error value omitted, use as is.
+                    pDataMat2 = pDataMat;
+                    std::vector<SCCOLROW>().swap( vIndex);
+                }
+                else
+                {
+                    nLenMajor = nElems;
+                    if (bVertical)
+                    {
+                        ScMatrixRef pTempMat = GetNewMat( 1, nElems, /*bEmpty*/true );
+                        pTempMat->PutDoubleVector( vArray, 0, 0);
+                        pDataMat2 = std::move(pTempMat);
+                    }
+                    else
+                    {
+                        ScMatrixRef pTempMat = GetNewMat( nElems, 1, /*bEmpty*/true );
+                        for (size_t i=0; i < nElems; ++i)
+                            pTempMat->PutDouble( vArray[i], i, 0);
+                        pDataMat2 = std::move(pTempMat);
+                    }
+                }
             }
-
-            if (nLen == 1) // first and last items are next to each other.
-            {
-                nDelta = nCmp < 0 ? nLast - 1 : nFirst - 1;
-                // If already the 1st item is greater there's nothing found.
-                bFound = (nDelta >= 0);
-                break;
-            }
-
-            if (nCmp < 0)
-                nFirst = nMid;
             else
-                nLast = nMid;
-        }
-
-        if (nDelta == static_cast<SCCOLROW>(nLenMajor-2)) // last item
-        {
-            sal_Int32 nCmp = lcl_CompareMatrix2Query(nDelta+1, aMatAcc2, aParam, rEntry, bMatchWholeCell,
-                    false /* bEmptyIsLess, instead empty are sorted to end */);
-            if (nCmp <= 0)
             {
-                // either the last item is an exact match or the real
-                // hit is beyond the last item.
-                nDelta += 1;
+                // Just use as is with the VectorMatrixAccessor.
+                pDataMat2 = pDataMat;
+            }
+
+            // Do not propagate errors from matrix while searching.
+            pDataMat2->SetErrorInterpreter( nullptr);
+
+            VectorMatrixAccessor aMatAcc2(*pDataMat2, bVertical);
+
+            // binary search for non-equality mode (the source data is
+            // assumed to be sorted in ascending order).
+
+            bool bMatchWholeCell = mrDoc.GetDocOptions().IsMatchWholeCell();
+
+            SCSIZE nFirst = 0, nLast = nLenMajor-1; //, nHitIndex = 0;
+            for (SCSIZE nLen = nLast-nFirst; nLen > 0; nLen = nLast-nFirst)
+            {
+                SCSIZE nMid = nFirst + nLen/2;
+                sal_Int32 nCmp = lcl_CompareMatrix2Query( nMid, aMatAcc2, aParam, rEntry, bMatchWholeCell,
+                        false /* bEmptyIsLess, instead empty are sorted to end */);
+                if (nCmp == 0)
+                {
+                    // exact match.  find the last item with the same value.
+                    lcl_GetLastMatch( nMid, aMatAcc2, nLenMajor);
+                    nDelta = nMid;
+                    bFound = true;
+                    break;
+                }
+
+                if (nLen == 1) // first and last items are next to each other.
+                {
+                    nDelta = nCmp < 0 ? nLast - 1 : nFirst - 1;
+                    // If already the 1st item is greater there's nothing found.
+                    bFound = (nDelta >= 0);
+                    break;
+                }
+
+                if (nCmp < 0)
+                    nFirst = nMid;
+                else
+                    nLast = nMid;
+            }
+
+            if (nDelta == static_cast<SCCOLROW>(nLenMajor-2)) // last item
+            {
+                sal_Int32 nCmp = lcl_CompareMatrix2Query(nDelta+1, aMatAcc2, aParam, rEntry, bMatchWholeCell,
+                        false /* bEmptyIsLess, instead empty are sorted to end */);
+                if (nCmp <= 0)
+                {
+                    // either the last item is an exact match or the real
+                    // hit is beyond the last item.
+                    nDelta += 1;
+                    bFound = true;
+                }
+            }
+            else if (nDelta > 0) // valid hit must be 2nd item or higher
+            {
+                // non-exact match
                 bFound = true;
             }
-        }
-        else if (nDelta > 0) // valid hit must be 2nd item or higher
-        {
-            // non-exact match
-            bFound = true;
-        }
 
-        // With 0-9 < A-Z, if query is numeric and data found is string, or
-        // vice versa, the (yet another undocumented) Excel behavior is to
-        // return #N/A instead.
+            // With 0-9 < A-Z, if query is numeric and data found is string, or
+            // vice versa, the (yet another undocumented) Excel behavior is to
+            // return #N/A instead.
 
-        if (bFound)
-        {
-            if (!vIndex.empty())
-                nDelta = vIndex[nDelta];
+            if (bFound)
+            {
+                if (!vIndex.empty())
+                    nDelta = vIndex[nDelta];
 
-            VectorMatrixAccessor aMatAcc(*pDataMat, bVertical);
-            SCCOLROW i = nDelta;
-            SCSIZE n = aMatAcc.GetElementCount();
-            if (o3tl::make_unsigned(i) >= n)
-                i = static_cast<SCCOLROW>(n);
-            bool bByString = rEntry.GetQueryItem().meType == ScQueryEntry::ByString;
-            if (bByString == aMatAcc.IsValue(i))
-                bFound = false;
-        }
+                VectorMatrixAccessor aMatAcc(*pDataMat, bVertical);
+                SCCOLROW i = nDelta;
+                SCSIZE n = aMatAcc.GetElementCount();
+                if (o3tl::make_unsigned(i) >= n)
+                    i = static_cast<SCCOLROW>(n);
+                bool bByString = rEntry.GetQueryItem().meType == ScQueryEntry::ByString;
+                if (bByString == aMatAcc.IsValue(i))
+                    bFound = false;
+            }
 
-        if (!bFound)
-        {
-            PushNA();
-            return;
+            if (!bFound)
+            {
+                PushNA();
+                return;
+            }
         }
 
         // Now that we've found the delta, push the result back to the cell.
@@ -9103,6 +9119,88 @@ sal_Int32 lcl_ExcelApproximateSearch( sal_Int32 nSize, const Cmp& rCmp, sal_Int3
 }
 }
 
+namespace {
+// weboffice: the nMode result of ExcelRangeLookup/ExcelMatrixLookup over a comparison (see there)
+template<typename Cmp>
+sal_Int32 lcl_ExcelLookupIndex( sal_Int32 nSize, const Cmp& aCmp, int nMode )
+{
+    if (nMode == 3)
+    {
+        sal_Int32 nBest = -1;
+        for (sal_Int32 i = 0; i < nSize; ++i)
+        {
+            const int nRes = aCmp(i);  // negated: -1 means the cell is less than the value
+            if (nRes == -2)
+                continue;
+            if (nRes == 0)
+                return i;
+            if (nRes == -1)
+                break;
+            nBest = i;
+        }
+        return nBest;
+    }
+    const sal_Int32 nIdx = lcl_ExcelApproximateSearch(nSize, aCmp);
+    switch (nMode)
+    {
+        case 1:
+            return (nIdx >= 0 && aCmp(nIdx) == 0) ? nIdx : -1;
+        case 2:
+            if (nIdx >= 0 && aCmp(nIdx) == 0)
+                return nIdx;
+            return (nIdx + 1 < nSize) ? nIdx + 1 : -1;
+        default:
+            return nIdx;
+    }
+}
+}
+
+// weboffice: the same Excel search over the elements of an inline or computed array (one row,
+// one column, or the first column/row of VLOOKUP/HLOOKUP) - Calc searched the array linearly, so
+// MATCH(5;{6;3;4;6;3;3};1) was 3 instead of 6 and VLOOKUP(3;{5;"a";1;"b";3;"c";2;"d";4;"e"};2)
+// #N/A instead of "c" (Excel 2021 measured, 80 cases: tests/tmp/fnprobe/bs-cases.txt). An empty
+// element, an error, a logical value (when a number is looked up) or an element of the other type
+// is stepped over like such a cell.
+sal_Int32 ScInterpreter::ExcelMatrixLookup( const ScMatrix& rMat, bool bVertical, SCSIZE nFixed,
+                                            const ScQueryEntry::Item& rItem, bool bDescending, int nMode )
+{
+    if (rItem.meType != ScQueryEntry::ByValue && rItem.meType != ScQueryEntry::ByString)
+        return -2;
+    SCSIZE nC = 0, nR = 0;
+    rMat.GetDimensions(nC, nR);
+    const bool bByString = rItem.meType == ScQueryEntry::ByString;
+    const double fLookup = bByString ? 0.0 : rItem.mfVal;
+    const OUString aLookupStr = bByString ? rItem.maString.getString() : OUString();
+    CollatorWrapper& rCollator = ScGlobal::GetCollator();
+    const sal_Int32 nSize = static_cast<sal_Int32>(bVertical ? nR : nC);
+    auto aCmp = [&](sal_Int32 i) -> int
+    {
+        const SCSIZE nCol = bVertical ? nFixed : static_cast<SCSIZE>(i);
+        const SCSIZE nRow = bVertical ? static_cast<SCSIZE>(i) : nFixed;
+        if (rMat.IsEmpty(nCol, nRow))
+            return -2;
+        int nRes;
+        if (bByString)
+        {
+            if (!rMat.IsStringOrEmpty(nCol, nRow))
+                return -2;
+            const sal_Int32 n = rCollator.compareString(aLookupStr, rMat.GetString(nCol, nRow).getString());
+            nRes = n < 0 ? -1 : (n > 0 ? 1 : 0);
+        }
+        else
+        {
+            if (rMat.IsStringOrEmpty(nCol, nRow) || rMat.IsBoolean(nCol, nRow))
+                return -2;
+            const double f = rMat.GetDouble(nCol, nRow);
+            if (!std::isfinite(f))
+                return -2; // an error element
+            nRes = fLookup < f ? -1 : (fLookup > f ? 1 : 0);
+        }
+        return bDescending ? -nRes : nRes;
+    };
+    return lcl_ExcelLookupIndex(nSize, aCmp, nMode);
+}
+
 // weboffice: MATCH(;;1/-1), LOOKUP and the binary modes of XLOOKUP/XMATCH over a cell range search
 // like Excel also when the cells are not sorted (Excel 365 measured, 74 cases). nMode: 0 = the
 // position the binary search ends at (the next smaller one ascending, the next larger one
@@ -9151,34 +9249,7 @@ sal_Int32 ScInterpreter::ExcelRangeLookup( SCCOL nCol1, SCROW nRow1, SCCOL nCol2
         }
         return bDescending ? -nRes : nRes;
     };
-    if (nMode == 3)
-    {
-        sal_Int32 nBest = -1;
-        for (sal_Int32 i = 0; i < nSize; ++i)
-        {
-            const int nRes = aCmp(i);  // negated: -1 means the cell is less than the value
-            if (nRes == -2)
-                continue;
-            if (nRes == 0)
-                return i;
-            if (nRes == -1)
-                break;
-            nBest = i;
-        }
-        return nBest;
-    }
-    const sal_Int32 nIdx = lcl_ExcelApproximateSearch(nSize, aCmp);
-    switch (nMode)
-    {
-        case 1:
-            return (nIdx >= 0 && aCmp(nIdx) == 0) ? nIdx : -1;
-        case 2:
-            if (nIdx >= 0 && aCmp(nIdx) == 0)
-                return nIdx;
-            return (nIdx + 1 < nSize) ? nIdx + 1 : -1;
-        default:
-            return nIdx;
-    }
+    return lcl_ExcelLookupIndex(nSize, aCmp, nMode);
 }
 
 void ScInterpreter::CalculateLookup(bool bHLookup)
@@ -9386,7 +9457,15 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
     {
         SCSIZE nMatCount = bHLookup ? nC : nR;
         SCSIZE nDelta = SCSIZE_MAX;
-        if (rItem.meType == ScQueryEntry::ByString)
+        // weboffice: the approximate lookup in an array searches like Excel (see ExcelMatrixLookup)
+        const sal_Int32 nExcelIdx = bSorted ? ExcelMatrixLookup(*pMat, !bHLookup, 0, rItem, false, 0) : -2;
+        if (nExcelIdx >= 0)
+            nDelta = static_cast<SCSIZE>(nExcelIdx);
+        if (nExcelIdx != -2)
+        {
+            // found or not found like Excel
+        }
+        else if (rItem.meType == ScQueryEntry::ByString)
         {
 //!!!!!!!
 //TODO: enable regex on matrix strings
@@ -16247,7 +16326,16 @@ void ScInterpreter::ScText()
         const bool bNegativeDate = !bString && fVal < 0.0 && lcl_ExcelNegativeDateTimeCode( sFormatString );
         // weboffice: TEXT(x;"ddd") / "AM/PM" in English like Excel ko-KR (aaa/aaaa for the Korean names)
         bool bInvalidCode = false;
+        // weboffice: like Excel, [$-x-sysdate] / [$-F800] is the system long date whatever follows
+        // (TEXT(A1;"[$-x-sysdate]dddd") is "2026년 11월 24일 화요일" in Excel ko-KR, measured)
+        const OUString aLowerCode = sFormatString.toAsciiLowerCase();
+        const bool bSysDate = aLowerCode.indexOf("[$-x-sysdate]") >= 0 || aLowerCode.indexOf("[$-f800]") >= 0;
         sFormatString = ScGlobal::ExcelTextFunctionFormatCode( sFormatString, eCellLang, bInvalidCode );
+        if (bSysDate && !bInvalidCode)
+        {
+            if (const SvNumberformat* pLong = mrContext.NFGetFormatEntry(mrContext.NFGetFormatIndex(NF_DATE_SYSTEM_LONG, eCellLang)))
+                sFormatString = pLong->GetFormatstring();
+        }
         if (bInvalidCode || bNegativeDate)
             PushNoValue();
         else if (bString)
@@ -16927,9 +17015,12 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
     // search like Excel (see ExcelRangeLookup)
     const bool bBinary = vsa.eSearchMode == LookupSearchMode::BinaryAscending
         || vsa.eSearchMode == LookupSearchMode::BinaryDescending;
-    if (!vsa.pMatSrc && bBinary && !vsa.isEmptySearch
+    SCSIZE nMatC = 0, nMatR = 0;
+    if (vsa.pMatSrc)
+        vsa.pMatSrc->GetDimensions(nMatC, nMatR);
+    if (bBinary && !vsa.isEmptySearch
         && (vsa.eMatchMode == exactorNA || vsa.eMatchMode == exactorS || vsa.eMatchMode == exactorG)
-        && (vsa.nCol1 == vsa.nCol2 || vsa.nRow1 == vsa.nRow2))
+        && (vsa.pMatSrc ? (nMatC == 1 || nMatR == 1) : (vsa.nCol1 == vsa.nCol2 || vsa.nRow1 == vsa.nRow2)))
     {
         const bool bDescending = vsa.eSearchMode == LookupSearchMode::BinaryDescending;
         int nMode;
@@ -16941,8 +17032,10 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
             nMode = 0;
         else
             nMode = 2;
-        const sal_Int32 nIdx = ExcelRangeLookup(vsa.nCol1, vsa.nRow1, vsa.nCol2, vsa.nRow2, vsa.nTab1,
-                                                rItem, bDescending, nMode);
+        const sal_Int32 nIdx = vsa.pMatSrc
+            ? ExcelMatrixLookup(*vsa.pMatSrc, nMatC == 1, 0, rItem, bDescending, nMode)
+            : ExcelRangeLookup(vsa.nCol1, vsa.nRow1, vsa.nCol2, vsa.nRow2, vsa.nTab1,
+                               rItem, bDescending, nMode);
         if (nIdx != -2)
         {
             vsa.bVLookup = ( vsa.nCol1 == vsa.nCol2 );
