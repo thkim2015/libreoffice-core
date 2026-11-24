@@ -18,6 +18,8 @@
  */
 
 #include <memory>
+#include <algorithm>
+#include <tuple>
 #include <interpre.hxx>
 
 #include <comphelper/string.hxx>
@@ -1596,6 +1598,7 @@ void ScInterpreter::ScNPV()
             switch (GetStackType())
             {
                 case svDouble :
+                case svString : // weboffice: NPV(0.1;300;TRUE;"5") counts "5" in Excel
                 {
                     fVal += GetDouble() / pow(1.0 + fRate, fCount);
                     fCount++;
@@ -1606,7 +1609,7 @@ void ScInterpreter::ScNPV()
                     ScAddress aAdr;
                     PopSingleRef( aAdr );
                     ScRefCellValue aCell(mrDoc, aAdr);
-                    if (!aCell.hasEmptyValue() && aCell.hasNumeric())
+                    if (!aCell.hasEmptyValue() && aCell.hasNumeric() && !IsLogicalCell(aAdr, aCell))
                     {
                         double fCellVal = GetCellValue(aAdr, aCell);
                         fVal += fCellVal / pow(1.0 + fRate, fCount);
@@ -1620,9 +1623,22 @@ void ScInterpreter::ScNPV()
                     FormulaError nErr = FormulaError::NONE;
                     double fCellVal;
                     PopDoubleRef( aRange, nParamCount, nRefInList);
-                    ScHorizontalValueIterator aValIter( mrDoc, aRange );
-                    while ((nErr == FormulaError::NONE) && aValIter.GetNext(fCellVal, nErr))
+                    // weboffice: like Excel, TRUE/FALSE cells in a range are skipped (row by row)
+                    std::vector<std::tuple<SCTAB, SCROW, SCCOL, double>> aVals;
+                    ScCellIterator aCellIter( mrDoc, aRange );
+                    for (bool bHas = aCellIter.first(); bHas && nErr == FormulaError::NONE; bHas = aCellIter.next())
                     {
+                        const ScAddress& rAdr = aCellIter.GetPos();
+                        ScRefCellValue aCell( aCellIter.getRefCellValue());
+                        if (aCell.getType() == CELLTYPE_FORMULA && aCell.getFormula()->GetErrCode() != FormulaError::NONE)
+                            nErr = aCell.getFormula()->GetErrCode();
+                        else if (!aCell.hasEmptyValue() && aCell.hasNumeric() && !IsLogicalCell(rAdr, aCell))
+                            aVals.emplace_back(rAdr.Tab(), rAdr.Row(), rAdr.Col(), GetCellValue(rAdr, aCell));
+                    }
+                    std::sort(aVals.begin(), aVals.end());
+                    for (const auto& rVal : aVals)
+                    {
+                        fCellVal = std::get<3>(rVal);
                         fVal += fCellVal / pow(1.0 + fRate, fCount);
                         fCount++;
                     }
