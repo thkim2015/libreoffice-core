@@ -3757,12 +3757,16 @@ bool ScInterpreter::IsEven()
 
 void ScInterpreter::ScIsEven()
 {
-    PushInt( int(IsEven()) );
+    const bool b = (IsEven());
+    nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL; // weboffice: TRUE/FALSE like Excel
+    PushInt( b );
 }
 
 void ScInterpreter::ScIsOdd()
 {
-    PushInt( int(!IsEven()) );
+    const bool b = (!IsEven());
+    nCurFmtType = nFuncFmtType = SvNumFormatType::LOGICAL; // weboffice: TRUE/FALSE like Excel
+    PushInt( b );
 }
 
 void ScInterpreter::ScN()
