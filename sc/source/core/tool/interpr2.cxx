@@ -1913,8 +1913,10 @@ void ScInterpreter::ScISPMT()
 
         if( nGlobalError != FormulaError::NONE )
             PushError( nGlobalError);
+        else if (fTotal == 0.0) // weboffice: #DIV/0! like Excel
+            PushError( FormulaError::DivisionByZero);
         else
-            PushDouble( fInvest * fRate * (o3tl::div_allow_zero(fPeriod, fTotal) - 1.0) );
+            PushDouble( fInvest * fRate * (fPeriod / fTotal - 1.0) );
     }
 }
 
@@ -2131,14 +2133,14 @@ void ScInterpreter::ScVDB()
         PushError( FormulaError::IllegalFPOperation );
         return;
     }
+    if (fLife == 0.0) // weboffice: before the salvage check, VDB(100;0;0;0;0) is #DIV/0! in Excel
+    {
+        PushError( FormulaError::DivisionByZero );
+        return;
+    }
     if (fSalvage >= fCost)
     {
         PushDouble( 0.0 );
-        return;
-    }
-    if (fLife == 0.0)
-    {
-        PushError( FormulaError::DivisionByZero );
         return;
     }
     {
@@ -2266,7 +2268,10 @@ void ScInterpreter::ScRRI()
         double fFutureValue = GetDouble();
         double fPresentValue = GetDouble();
         double fNrOfPeriods = GetDouble();
-        if ( fNrOfPeriods <= 0.0  || fPresentValue == 0.0 )
+        // weboffice: like Excel, RRI(n;0;0) is 0
+        if ( fNrOfPeriods > 0.0 && fPresentValue == 0.0 && fFutureValue == 0.0 )
+            PushDouble(0.0);
+        else if ( fNrOfPeriods <= 0.0  || fPresentValue == 0.0 )
             PushIllegalArgument();
         else
             PushDouble(pow(fFutureValue / fPresentValue, 1.0 / fNrOfPeriods) - 1.0);
@@ -2451,6 +2456,11 @@ void ScInterpreter::ScRate()
         PushError(FormulaError::IllegalFPOperation);
         return;
     }
+    if (fPayment == 0.0 && fPv == 0.0) // weboffice: no cash flow to solve, #NUM! like Excel
+    {
+        PushError(FormulaError::IllegalFPOperation);
+        return;
+    }
     if (fGuess <= -1.0) // Excel: #VALUE!
     {
         PushNoValue();
@@ -2519,7 +2529,8 @@ void ScInterpreter::ScIpmt()
     double fNper = GetDouble();
     double fPer  = GetDouble();
     double fRate = GetDouble();
-    if (fPer < 1.0 || fPer > fNper)
+    // weboffice: like Excel, the last period may be the partial one (IPMT(0.1;3;2.5;1000) is a value)
+    if (fPer < 1.0 || fPer > ::rtl::math::approxCeil(fNper))
         PushIllegalArgument();
     else
     {
@@ -2540,7 +2551,8 @@ void ScInterpreter::ScPpmt()
     double fNper = GetDouble();
     double fPer  = GetDouble();
     double fRate = GetDouble();
-    if (fPer < 1.0 || fPer > fNper)
+    // weboffice: like Excel, the last period may be the partial one (IPMT(0.1;3;2.5;1000) is a value)
+    if (fPer < 1.0 || fPer > ::rtl::math::approxCeil(fNper))
         PushIllegalArgument();
     else
     {
