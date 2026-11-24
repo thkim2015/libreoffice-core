@@ -1793,8 +1793,21 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
             { OUString(), OUString(), m_aFootnoteNumbering, m_aEndnoteNumbering });
 
     // The default section type is nextPage.
+    bool bColumnBreakAtStart = false;
     if ( m_nBreakType == -1 )
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_nextPage;
+    else if (m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_nextColumn && pPrevSection
+             && !rDM_Impl.IsInComments() && m_nColumnCount > 1
+             && m_nColumnCount == pPrevSection->ColumnCount()
+             && pPrevSection->m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_continuous)
+    {
+        // weboffice: Word 2021 starts a new-column section with the same number of columns in
+        // the next column of the same page, also in Word 2013+ compatibility mode. When the
+        // previous section is a Writer section (continuous), open it as a continuous section
+        // whose first paragraph has a column break, like a column break typed at the section start.
+        m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_continuous;
+        bColumnBreakAtStart = true;
+    }
     else if ( m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_nextColumn )
     {
         // Word 2013+ seems to treat a section column break as a page break all the time.
@@ -1902,6 +1915,14 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
             ApplySectionProperties( xSection, rDM_Impl );  //depends on InheritOrFinalizePageStyles
 
             EmulateSectPrBelowSpacing(rDM_Impl);
+
+            if (bColumnBreakAtStart && m_xStartingRange.is())
+            {
+                uno::Reference<beans::XPropertySet> xFirstPara(m_xStartingRange, uno::UNO_QUERY);
+                if (xFirstPara.is())
+                    xFirstPara->setPropertyValue(getPropertyName(PROP_BREAK_TYPE),
+                                                 uno::Any(style::BreakType_COLUMN_BEFORE));
+            }
 
             uno::Reference< beans::XPropertySet > xRangeProperties( lcl_GetRangeProperties( m_bIsFirstSection, rDM_Impl, m_xStartingRange ) );
             if ( m_bIsFirstSection && !m_sPageStyleName.isEmpty() && xRangeProperties.is() )
