@@ -3124,7 +3124,43 @@ svl::SharedString ScInterpreter::GetStringFromDouble( double fVal )
     sal_uLong nIndex = mrContext.NFGetStandardFormat(
                         SvNumFormatType::NUMBER,
                         ScGlobal::eLnge);
-    return mrStrPool.intern(mrContext.NFGetInputLineString(fVal, nIndex));
+    OUString aStr = mrContext.NFGetInputLineString(fVal, nIndex);
+    // weboffice: like Excel, the exponent has no leading zeros (1E+20&"" is "1E+20", not
+    // "1E+020") and a whole number below 1E+20 is written out (12345678901234567890&"" is
+    // "12345678901234500000", 1E+15+0.3&"" is "1000000000000000")
+    const sal_Int32 nE = aStr.indexOf('E');
+    if (nE > 0 && nE + 2 < aStr.getLength())
+    {
+        const sal_Unicode cSign = aStr[nE + 1];
+        sal_Int32 nExpStart = nE + 2;
+        while (nExpStart < aStr.getLength() - 1 && aStr[nExpStart] == '0')
+            ++nExpStart;
+        const OUString aExp = aStr.copy(nExpStart);
+        const sal_Int32 nExp = aExp.toInt32();
+        const OUString aMant = aStr.copy(0, nE);
+        if (cSign == '+' && nExp < 20)
+        {
+            const bool bNeg = aMant.startsWith("-");
+            OUString aDigits = aMant.copy(bNeg ? 1 : 0);
+            const sal_Int32 nDot = aDigits.indexOf('.');
+            if (nDot < 0 || nDot == 1)
+            {
+                aDigits = aDigits.replaceAll(".", "");
+                if (aDigits.getLength() <= nExp + 1)
+                {
+                    OUStringBuffer aBuf;
+                    if (bNeg)
+                        aBuf.append('-');
+                    aBuf.append(aDigits);
+                    for (sal_Int32 i = aDigits.getLength(); i < nExp + 1; ++i)
+                        aBuf.append('0');
+                    return mrStrPool.intern(aBuf.makeStringAndClear());
+                }
+            }
+        }
+        aStr = aMant + "E" + OUStringChar(cSign) + aExp;
+    }
+    return mrStrPool.intern(aStr);
 }
 
 formula::FormulaCallableRef ScInterpreter::GetCallable()
