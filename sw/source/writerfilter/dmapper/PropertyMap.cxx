@@ -1798,13 +1798,14 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_nextPage;
     else if (m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_nextColumn && pPrevSection
              && !rDM_Impl.IsInComments() && m_nColumnCount > 1
-             && m_nColumnCount == pPrevSection->ColumnCount()
-             && pPrevSection->m_nBreakType == NS_ooxml::LN_Value_ST_SectionMark_continuous)
+             && m_nColumnCount == pPrevSection->ColumnCount())
     {
         // weboffice: Word 2021 starts a new-column section with the same number of columns in
-        // the next column of the same page, also in Word 2013+ compatibility mode. When the
-        // previous section is a Writer section (continuous), open it as a continuous section
-        // whose first paragraph has a column break, like a column break typed at the section start.
+        // the next column of the same page, also in Word 2013+ compatibility mode. The previous
+        // section keeps its columns in a Writer section (also a page break section, see "prefer
+        // setting column properties into a section" below), so open this one as a continuous
+        // section whose first paragraph has a column break, like a column break typed at the
+        // section start.
         m_nBreakType = NS_ooxml::LN_Value_ST_SectionMark_continuous;
         bColumnBreakAtStart = true;
     }
