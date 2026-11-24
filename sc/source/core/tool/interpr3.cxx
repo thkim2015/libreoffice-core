@@ -2127,7 +2127,7 @@ void ScInterpreter::ScGammaDist( bool bODFF )
     double fX = GetDouble();                    // x
     if ((!bODFF && fX < 0) || fAlpha <= 0.0 || fBeta <= 0.0)
         PushIllegalArgument();
-    else if (!bODFF && !bCumulative && fX == 0.0)
+    else if (!bCumulative && fX == 0.0)
         PushError( FormulaError::IllegalFPOperation ); // weboffice: GAMMA.DIST(0;a;b;FALSE) is #NUM! in Excel
     else
     {
