@@ -10806,6 +10806,11 @@ static void lcl_FillCell(const ScMatrixRef& pMatSource, const ScMatrixRef& pMatD
     {
         pMatDest->PutEmpty(ndC, ndR);
     }
+    else if (pMatSource->IsBoolean(nsC, nsR))
+    {
+        // weboffice: keep TRUE/FALSE (UNIQUE, TAKE, DROP, FILTER results show TRUE like Excel)
+        pMatDest->PutBoolean(pMatSource->GetDouble(nsC, nsR) != 0.0, ndC, ndR);
+    }
     else if (!pMatSource->IsStringOrEmpty(nsC, nsR))
     {
         pMatDest->PutDouble(pMatSource->GetDouble(nsC, nsR), ndC, ndR);
@@ -12562,7 +12567,12 @@ void ScInterpreter::ScUnique()
         {
             OUString aCellStr = bByRow ? pMatSource->GetString(mrContext, j, i).getString() :
                 pMatSource->GetString(mrContext, i, j).getString();
-            aStr += aCellStr + u"\x0001";
+            // weboffice: like Excel, 1, "1" and TRUE are different values (UNIQUE({1;"1";TRUE}))
+            const SCSIZE nTC = bByRow ? j : i, nTR = bByRow ? i : j;
+            const sal_Unicode cType = pMatSource->IsEmpty(nTC, nTR) ? 'e'
+                : pMatSource->IsBoolean(nTC, nTR) ? 'b'
+                : pMatSource->IsValue(nTC, nTR) ? 'n' : 's';
+            aStr += OUStringChar(cType) + aCellStr + u"\x0001";
         }
 
         if (aStrSet.insert(ScGlobal::getCharClass().lowercase(aStr)).second) // unique if inserted
