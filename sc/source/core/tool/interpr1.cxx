@@ -6758,7 +6758,7 @@ bool lcl_ExcelWildcardMatch( std::u16string_view aPat, std::u16string_view aStr 
     while (s < aStr.size())
     {
         if (p < aPat.size() && aPat[p] == '~' && p + 1 < aPat.size()
-            && (aPat[p + 1] == '*' || aPat[p + 1] == '?' || aPat[p + 1] == '~'))
+            && (aPat[p + 1] == '*' || aPat[p + 1] == '?')) // weboffice: COUNTIF(A1:A5;"~~x") does not match ~x in Excel
         {
             if (aPat[p + 1] == aStr[s]) { p += 2; ++s; continue; }
         }
