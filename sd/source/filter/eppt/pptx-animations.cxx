@@ -57,6 +57,7 @@
 #include <com/sun/star/presentation/EffectNodeType.hpp>
 #include <com/sun/star/presentation/EffectPresetClass.hpp>
 #include <com/sun/star/presentation/ParagraphTarget.hpp>
+#include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
 #include <com/sun/star/presentation/TextAnimationType.hpp>
 #include <com/sun/star/text/XSimpleText.hpp>
 #include <com/sun/star/drawing/XShape.hpp>
@@ -512,6 +513,8 @@ class PPTXAnimationExport
         sal_Int16 nNodeType = -1;
         sal_Int16 nPresetClass = 0;
         OUString aPresetId;
+        /// weboffice: the effect animates only the shape behind the text (p:spTgt/p:bg)
+        bool bBackground = false;
     };
     /// Effects of one shape that PowerPoint treats as one build (p:bldP, p:cTn grpId).
     struct BuildGroup
@@ -521,6 +524,7 @@ class PPTXAnimationExport
         Reference<XShape> xShape;
         std::vector<size_t> aItems;
         bool bParagraphs = false;
+        bool bBackground = false;
     };
     void CollectBuildEffects(const NodeContext* pContext,
                              const Reference<XAnimationNode>& xSequence,
@@ -538,7 +542,7 @@ class PPTXAnimationExport
     /// Handles XAudio nodes, used for both video and audio.
     void WriteAnimationNodeMedia(const sal_Int16 nParentNodeType);
     void WriteAnimationNodeCommonPropsStart();
-    void WriteAnimationTarget(const Any& rTarget);
+    void WriteAnimationTarget(const Any& rTarget, sal_Int16 nSubItem = 0);
     void WriteAnimationCondList(const std::vector<Cond>& rList, sal_Int32 nToken);
     void WriteAnimationCond(const Cond& rCond);
     const Reference<XAnimationNode>& getCurrentNode() const;
@@ -594,6 +598,28 @@ Any lcl_findEffectTarget(const Reference<XAnimationNode>& xNode)
     return Any();
 }
 
+/// Sub item (ShapeAnimationSubType) of the first animation of an effect.
+sal_Int16 lcl_findEffectSubItem(const Reference<XAnimationNode>& xNode)
+{
+    Reference<XIterateContainer> xIterate(xNode, UNO_QUERY);
+    if (xIterate.is() && xIterate->getTarget().hasValue())
+        return xIterate->getSubItem();
+    Reference<XAnimate> xAnimate(xNode, UNO_QUERY);
+    if (xAnimate.is() && xAnimate->getTarget().hasValue())
+        return xAnimate->getSubItem();
+    Reference<XEnumerationAccess> xAccess(xNode, UNO_QUERY);
+    if (!xAccess.is())
+        return ShapeAnimationSubType::AS_WHOLE;
+    Reference<XEnumeration> xEnum(xAccess->createEnumeration());
+    while (xEnum.is() && xEnum->hasMoreElements())
+    {
+        Reference<XAnimationNode> xChild(xEnum->nextElement(), UNO_QUERY);
+        if (lcl_findEffectTarget(xChild).hasValue())
+            return lcl_findEffectSubItem(xChild);
+    }
+    return ShapeAnimationSubType::AS_WHOLE;
+}
+
 /// Outline depth (NumberingLevel) of every paragraph of the shape text.
 std::vector<sal_Int16> lcl_paragraphDepths(const Reference<XShape>& xShape)
 {
@@ -643,7 +669,7 @@ const Reference<XAnimationNode>& PPTXAnimationExport::getCurrentNode() const
     return mpContext->getNode();
 }
 
-void PPTXAnimationExport::WriteAnimationTarget(const Any& rTarget)
+void PPTXAnimationExport::WriteAnimationTarget(const Any& rTarget, sal_Int16 nSubItem)
 {
     sal_Int32 nParagraph = -1;
     bool bParagraphTarget = false;
@@ -681,6 +707,10 @@ void PPTXAnimationExport::WriteAnimationTarget(const Any& rTarget)
                               OString::number(nParagraph));
         mpFS->endElementNS(XML_p, XML_txEl);
     }
+    // weboffice: 'Animate attached shape' of an effect animated by paragraph is an effect of
+    // the shape background only (PowerPoint p:bg)
+    else if (nSubItem == ShapeAnimationSubType::ONLY_BACKGROUND)
+        mpFS->singleElementNS(XML_p, XML_bg);
     mpFS->endElementNS(XML_p, XML_spTgt);
     mpFS->endElementNS(XML_p, XML_tgtEl);
 }
@@ -889,7 +919,8 @@ void PPTXAnimationExport::WriteAnimationNodeAnimateInside(bool bSimple, bool bWr
     WriteAnimationNodeCommonPropsStart();
 
     Reference<XIterateContainer> xIterate(rXNode->getParent(), UNO_QUERY);
-    WriteAnimationTarget(xIterate.is() ? xIterate->getTarget() : rXAnimate->getTarget());
+    WriteAnimationTarget(xIterate.is() ? xIterate->getTarget() : rXAnimate->getTarget(),
+                         xIterate.is() ? xIterate->getSubItem() : rXAnimate->getSubItem());
 
     Reference<XAnimateTransform> xTransform(rXNode, UNO_QUERY);
 
@@ -1390,7 +1421,11 @@ void PPTXAnimationExport::CollectBuildEffects(const NodeContext* pContext,
             aEffect.nParagraph = aParagraph.Paragraph;
         }
         else
+        {
             aTarget >>= aEffect.xShape;
+            aEffect.bBackground = lcl_findEffectSubItem(pChild->getNode())
+                                  == ShapeAnimationSubType::ONLY_BACKGROUND;
+        }
         if (!aEffect.xShape.is())
             continue;
         aEffect.nShapeID = mrPowerPointExport.GetShapeID(aEffect.xShape);
@@ -1414,10 +1449,17 @@ PPTXAnimationExport::CreateBuildGroups(const std::vector<BuildEffect>& rEffects)
         if (rEffect.nParagraph >= 0 && i > 0 && !aGroups.empty())
         {
             const BuildEffect& rPrev = rEffects[i - 1];
-            bJoin = aGroups.back().bParagraphs && rPrev.xSequence == rEffect.xSequence
-                    && rPrev.nShapeID == rEffect.nShapeID && rPrev.nParagraph >= 0
+            // weboffice: or the background effect of the same shape just before (animate
+            // attached shape - PowerPoint writes it first, in the same build)
+            const bool bAfterBackground = rPrev.bBackground && aGroups.back().aItems.size() == 1;
+            bJoin = (aGroups.back().bParagraphs || bAfterBackground)
+                    && rPrev.xSequence == rEffect.xSequence
+                    && rPrev.nShapeID == rEffect.nShapeID
+                    && (rPrev.nParagraph >= 0 || bAfterBackground)
                     && rPrev.aPresetId == rEffect.aPresetId
                     && rPrev.nPresetClass == rEffect.nPresetClass;
+            if (bJoin)
+                aGroups.back().bParagraphs = true;
         }
         if (!bJoin)
         {
@@ -1426,6 +1468,7 @@ PPTXAnimationExport::CreateBuildGroups(const std::vector<BuildEffect>& rEffects)
             aGroup.nGroupId = aNextGroupId[rEffect.nShapeID]++;
             aGroup.xShape = rEffect.xShape;
             aGroup.bParagraphs = rEffect.nParagraph >= 0;
+            aGroup.bBackground = rEffect.bBackground;
             aGroups.push_back(aGroup);
         }
         aGroups.back().aItems.push_back(i);
@@ -1468,10 +1511,13 @@ void PPTXAnimationExport::WriteBuildList(const std::vector<BuildEffect>& rEffect
             for (size_t k = 0; k < rGroup.aItems.size(); ++k)
             {
                 const BuildEffect& rEffect = rEffects[rGroup.aItems[k]];
-                aOrder.push_back(rEffect.nParagraph);
-                if (k == 0 || rEffect.nNodeType != EffectNodeType::WITH_PREVIOUS)
+                if (rEffect.bBackground)
+                    continue;
+                if (aOrder.empty() || rEffect.nNodeType != EffectNodeType::WITH_PREVIOUS)
                     aHeads.push_back(rEffect.nParagraph);
+                aOrder.push_back(rEffect.nParagraph);
             }
+            bAnimBg = rGroup.bBackground;
             auto descending = [](const std::vector<sal_Int32>& rList) {
                 for (size_t k = 1; k < rList.size(); ++k)
                     if (rList[k] >= rList[k - 1])
