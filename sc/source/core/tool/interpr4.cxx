@@ -1744,7 +1744,11 @@ bool ScInterpreter::ConvertMatrixParameters()
                             // has ForceArray or ReferenceOrForceArray
                             // parameter *somewhere else*) pick a normal
                             // position dependent implicit intersection later.
-                            (eType != formula::ParamClass::Value || IsInArrayContext()))
+                            (eType != formula::ParamClass::Value || IsInArrayContext()) &&
+                            // weboffice: keep the range for the outermost TRANSPOSE of a legacy
+                            // (non-array) formula, ScMatTrans takes its implicit intersection
+                            !(pCur->GetOpCode() == ocMatTrans && !bMatrixFormula && !pJumpMatrix
+                              && !aCode.PeekNextOperator()))
                     {
                         SCCOL nCol1, nCol2;
                         SCROW nRow1, nRow2;
