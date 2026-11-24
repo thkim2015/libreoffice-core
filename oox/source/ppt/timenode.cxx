@@ -39,6 +39,7 @@
 #include <com/sun/star/frame/XModel.hpp>
 #include <com/sun/star/io/WrongFormatException.hpp>
 #include <com/sun/star/presentation/EffectNodeType.hpp>
+#include <com/sun/star/presentation/ShapeAnimationSubType.hpp>
 #include <com/sun/star/uno/XComponentContext.hpp>
 
 #include <oox/core/xmlfilterbase.hxx>
@@ -403,6 +404,13 @@ namespace oox::ppt {
                     if ( xNode->getType() == AnimationNodeType::ANIMATE ||
                             xNode->getType() == AnimationNodeType::ITERATE )
                     {
+                        maNodeProperties[ NP_SUBITEM ] <<= nSubItem;
+                    }
+                    else if ( nSubItem == ShapeAnimationSubType::ONLY_BACKGROUND
+                              && Reference<XAnimate>( xNode, UNO_QUERY ).is() )
+                    {
+                        // weboffice: p:bg (animate attached shape) of p:set / p:animEffect - keep
+                        // the background sub item on the node itself, it is the whole effect
                         maNodeProperties[ NP_SUBITEM ] <<= nSubItem;
                     }
                     else
