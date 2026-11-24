@@ -5591,6 +5591,11 @@ public:
         return mbColVec ? mrMat.IsStringOrEmpty(0, i) : mrMat.IsStringOrEmpty(i, 0);
     }
 
+    bool IsBoolean(SCSIZE i) const
+    {
+        return mbColVec ? mrMat.IsBoolean(0, i) : mrMat.IsBoolean(i, 0);
+    }
+
     double GetDouble(SCSIZE i) const
     {
         return mbColVec ? mrMat.GetDouble(0, i) : mrMat.GetDouble(i, 0);
@@ -5643,8 +5648,12 @@ sal_Int32 lcl_CompareMatrix2Query( SCSIZE i, const VectorMatrixAccessor& rMat, c
             return 1;   // error always greater than numeric or string
         }
 
+        // weboffice: Excel orders number < text < TRUE/FALSE, a TRUE/FALSE element is its own type
+        const bool bElemLogical = rParam.mbExcelLookup && rMat.IsBoolean(i);
         if (bByString)
-            return -1;  // numeric always less than string
+            return bElemLogical ? 1 : -1;  // numeric always less than string
+        if (rParam.mbExcelLookup && bElemLogical != rParam.mbLookupLogical)
+            return bElemLogical ? 1 : -1;
 
         const double nVal2 = rEntry.GetQueryItem().mfVal;
         // XXX Querying for error values is not required, otherwise we'd need
@@ -9610,23 +9619,17 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
             }
             else
             {
-                if (bHLookup)
+                // weboffice: like Excel, a number matches no TRUE/FALSE element and TRUE/FALSE
+                // only TRUE/FALSE (VLOOKUP(1;{TRUE;"t";1;"one"};2;FALSE) is "one" in Excel 2021)
+                for (SCSIZE i = 0; i < nMatCount; i++)
                 {
-                    for (SCSIZE i = 0; i < nMatCount; i++)
+                    const SCSIZE nC = bHLookup ? i : 0, nRr = bHLookup ? 0 : i;
+                    if (!pMat->IsStringOrEmpty(nC, nRr) && pMat->IsBoolean(nC, nRr) == aParam.mbLookupLogical
+                        && pMat->GetDouble(nC, nRr) == rItem.mfVal)
                     {
-                        if (! pMat->IsStringOrEmpty(i, 0) )
-                        {
-                            if ( pMat->GetDouble(i,0) == rItem.mfVal)
-                            {
-                                nDelta = i;
-                                i = nMatCount + 1;
-                            }
-                        }
+                        nDelta = i;
+                        break;
                     }
-                }
-                else
-                {
-                    nDelta = pMat->MatchDoubleInColumns(rItem.mfVal, 0, 0);
                 }
             }
         }
