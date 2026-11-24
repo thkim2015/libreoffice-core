@@ -158,6 +158,12 @@ void ScInterpreter::ScGCD()
     size_t nRefInList = 0;
     while (nGlobalError == FormulaError::NONE && nParamCount-- > 0)
     {
+        // weboffice: like Excel, a TRUE/FALSE argument is #VALUE! (GCD(4;TRUE))
+        if ((GetStackType() == svDouble || GetStackType() == svSingleRef) && IsStackTopLogical())
+        {
+            PushNoValue();
+            return;
+        }
         switch (GetStackType())
         {
             case svDouble :
@@ -182,6 +188,23 @@ void ScInterpreter::ScGCD()
                 {
                     PushNoValue(); // weboffice: like Excel
                     return;
+                }
+                // weboffice: like Excel, a TRUE/FALSE cell in the range is #VALUE! (GCD(A1:A3)
+                // with TRUE in A2, measured)
+                {
+                    bool bLogical = false;
+                    ScCellIterator aLogicalIter( mrDoc, aRange );
+                    for (bool bHas = aLogicalIter.first(); bHas && !bLogical; bHas = aLogicalIter.next())
+                    {
+                        ScRefCellValue aCell( aLogicalIter.getRefCellValue());
+                        bLogical = (aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                                   && IsLogicalCell( aLogicalIter.GetPos(), aCell);
+                    }
+                    if (bLogical)
+                    {
+                        PushNoValue();
+                        return;
+                    }
                 }
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
@@ -238,6 +261,12 @@ void ScInterpreter:: ScLCM()
     size_t nRefInList = 0;
     while (nGlobalError == FormulaError::NONE && nParamCount-- > 0)
     {
+        // weboffice: like Excel, a TRUE/FALSE argument is #VALUE! (GCD(4;TRUE))
+        if ((GetStackType() == svDouble || GetStackType() == svSingleRef) && IsStackTopLogical())
+        {
+            PushNoValue();
+            return;
+        }
         switch (GetStackType())
         {
             case svDouble :
@@ -265,6 +294,29 @@ void ScInterpreter:: ScLCM()
                 {
                     PushNoValue(); // weboffice: like Excel
                     return;
+                }
+                // weboffice: like Excel, a TRUE/FALSE cell in the range is #VALUE! (GCD(A1:A3)
+                // with TRUE in A2, measured) and LCM counts an empty cell as 0
+                {
+                    bool bLogical = false;
+                    sal_uInt64 nCells = 0;
+                    ScCellIterator aLogicalIter( mrDoc, aRange );
+                    for (bool bHas = aLogicalIter.first(); bHas && !bLogical; bHas = aLogicalIter.next())
+                    {
+                        ++nCells;
+                        ScRefCellValue aCell( aLogicalIter.getRefCellValue());
+                        bLogical = (aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                                   && IsLogicalCell( aLogicalIter.GetPos(), aCell);
+                    }
+                    if (bLogical)
+                    {
+                        PushNoValue();
+                        return;
+                    }
+                    if ( nCells < static_cast<sal_uInt64>(aRange.aEnd.Col() - aRange.aStart.Col() + 1)
+                            * static_cast<sal_uInt64>(aRange.aEnd.Row() - aRange.aStart.Row() + 1)
+                            * static_cast<sal_uInt64>(aRange.aEnd.Tab() - aRange.aStart.Tab() + 1))
+                        fy = 0.0;
                 }
                 double nCellVal;
                 ScValueIterator aValIter( mrContext, aRange, mnSubTotalFlags );
