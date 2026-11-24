@@ -335,13 +335,13 @@ bool ScInterpreter::IsStackTopLogical()
                 == SvNumFormatType::LOGICAL;
         case svSingleRef:
         {
-            const ScAddress aAdr = p->GetSingleRef()->toAbs(mrDoc, aPos);
+            const ScAddress aAdr = static_cast<const ScSingleRefToken*>(p)->GetSingleRef().toAbs(mrDoc, aPos);
             ScRefCellValue aCell(mrDoc, aAdr);
             return IsLogicalCell(aAdr, aCell);
         }
         case svMatrix:
         {
-            const ScMatrix* pMat = p->GetMatrix();
+            const ScMatrix* pMat = static_cast<const ScMatrixToken*>(p)->GetMatrix();
             return pMat && pMat->IsBoolean(0, 0);
         }
         default:
