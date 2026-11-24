@@ -3679,6 +3679,24 @@ void ScInterpreter::ScExternal()
                                 if (nGlobalError == FormulaError::NONE && lcl_ZetaRangeHasText(mrDoc, aRange))
                                     // weboffice: text in the numbers is #VALUE! like Excel (XNPV: #NUM!)
                                     SetError(aUnoName.endsWith(".getXnpv") ? FormulaError::IllegalFPOperation : FormulaError::NoValue);
+                                else if (nGlobalError == FormulaError::NONE && aUnoName.endsWith(".getSeriessum"))
+                                {
+                                    // weboffice: like Excel, SERIESSUM skips empty coefficient cells
+                                    // (the next coefficient takes the power), row by row
+                                    std::vector<double> aCoeffs;
+                                    for (SCTAB nT = aRange.aStart.Tab(); nT <= aRange.aEnd.Tab(); ++nT)
+                                        for (SCROW nR = aRange.aStart.Row(); nR <= aRange.aEnd.Row(); ++nR)
+                                            for (SCCOL nC = aRange.aStart.Col(); nC <= aRange.aEnd.Col(); ++nC)
+                                            {
+                                                const ScAddress aCoeffAdr( nC, nR, nT);
+                                                ScRefCellValue aCoeffCell( mrDoc, aCoeffAdr);
+                                                if (!aCoeffCell.isEmpty())
+                                                    aCoeffs.push_back( GetCellValue( aCoeffAdr, aCoeffCell));
+                                            }
+                                    uno::Sequence<double> aInner( aCoeffs.data(), aCoeffs.size());
+                                    uno::Sequence< uno::Sequence<double> > aOuter( &aInner, 1 );
+                                    aParam <<= aOuter;
+                                }
                                 else if (!ScRangeToSequence::FillDoubleArray( aParam, mrDoc, aRange ))
                                     SetError(FormulaError::IllegalParameter);
                             }
