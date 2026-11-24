@@ -3537,7 +3537,9 @@ void ScInterpreter::ScExternal()
                                 bLogical = pLogicalMat->IsBoolean( i, j);
                     }
                 }
-                else if (nStackType == svDouble || nStackType == svSingleRef)
+                else if ((nStackType == svDouble || nStackType == svSingleRef)
+                         && (eType == SC_ADDINARG_INTEGER || eType == SC_ADDINARG_DOUBLE || eType == SC_ADDINARG_STRING))
+                    // an optional (Any) argument takes TRUE/FALSE: ACCRINT(...;TRUE)
                     bLogical = IsStackTopLogical();
                 if (bLogical)
                 {
