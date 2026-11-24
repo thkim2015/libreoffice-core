@@ -14562,7 +14562,8 @@ void ScInterpreter::ScAddressFunc()
     }
 
     FormulaGrammar::AddressConvention eConv = FormulaGrammar::CONV_OOO;      // default
-    if (nParamCount >= 4 && 0.0 == GetDoubleWithDefault( 1.0))
+    // weboffice: the a1 argument takes "TRUE"/"FALSE" text like Excel, ADDRESS(1;1;1;"FALSE")
+    if (nParamCount >= 4 && !GetBoolWithDefault( true))
         eConv = FormulaGrammar::CONV_XL_R1C1;
     else
     {

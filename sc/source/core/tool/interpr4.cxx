@@ -3573,9 +3573,11 @@ void ScInterpreter::ScExternal()
                                 bLogical = pLogicalMat->IsBoolean( i, j);
                     }
                 }
-                else if ((nStackType == svDouble || nStackType == svSingleRef)
-                         && (eType == SC_ADDINARG_INTEGER || eType == SC_ADDINARG_DOUBLE || eType == SC_ADDINARG_STRING))
-                    // an optional (Any) argument takes TRUE/FALSE: ACCRINT(...;TRUE)
+                else if (nStackType == svSingleRef
+                         || (nStackType == svDouble
+                             && (eType == SC_ADDINARG_INTEGER || eType == SC_ADDINARG_DOUBLE || eType == SC_ADDINARG_STRING)))
+                    // an optional (Any) argument takes a TRUE/FALSE literal: ACCRINT(...;TRUE), but not a
+                    // TRUE/FALSE cell: WORKDAY(45000;3;C1) is #VALUE!
                     bLogical = IsStackTopLogical();
                 if (bLogical)
                 {
