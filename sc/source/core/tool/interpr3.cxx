@@ -896,7 +896,7 @@ double ScInterpreter::GetBetaDistPDF(double fX, double fA, double fB)
     {
         if (fA < 1.0 && fX == 0.0)
         {
-            SetError(FormulaError::IllegalArgument);
+            SetError(FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
             return HUGE_VAL;
         }
         else
@@ -906,7 +906,7 @@ double ScInterpreter::GetBetaDistPDF(double fX, double fA, double fB)
     {
         if (fB < 1.0 && fX == 1.0)
         {
-            SetError(FormulaError::IllegalArgument);
+            SetError(FormulaError::IllegalFPOperation); // weboffice: #NUM! like Excel
             return HUGE_VAL;
         }
         else
