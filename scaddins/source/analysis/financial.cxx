@@ -559,6 +559,10 @@ double SAL_CALL AnalysisAddIn::getXirr(
 
     if( (aValues.Count() < 2) || (aValues.Count() != aDates.Count()) )
         throw css::lang::IllegalArgumentException();
+    // weboffice: like Excel, a date before the first one is #NUM!
+    for( sal_uInt32 i = 1 ; i < aDates.Count() ; i++ )
+        if( aDates.Get( i ) < aDates.Get( 0 ) )
+            throw css::lang::IllegalArgumentException();
 
     // result interest rate, initialized with passed guessed rate, or 10%
     double fResultRate = aAnyConv.getDouble( xOpt, rGuessRate, 0.1 );
@@ -626,6 +630,10 @@ double SAL_CALL AnalysisAddIn::getXnpv(
 
     double              fRet = 0.0;
     double              fNull = aDateList.Get( 0 );
+    // weboffice: like Excel, a date before the first one is #NUM!
+    for( sal_uInt32 i = 1 ; i < nNum ; i++ )
+        if( aDateList.Get( i ) < fNull )
+            throw css::lang::IllegalArgumentException();
     fRate++;
 
     for( sal_uInt32 i = 0 ; i < nNum ; i++ )

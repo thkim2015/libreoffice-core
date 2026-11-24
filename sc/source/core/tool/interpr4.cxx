@@ -3441,6 +3441,63 @@ void ScInterpreter::ScExternal()
 
             StackVar nStackType = GetStackType();
             ScAddInArgumentType eType = aCall.GetArgType( nPar );
+            // weboffice: like Excel, the Analysis ToolPak functions reject TRUE/FALSE arguments and
+            // TRUE/FALSE cells in ranges (#VALUE!, XNPV #NUM!): SQRTPI(TRUE), MULTINOMIAL(A1:A3)
+            if (eType != SC_ADDINARG_STRING && eType != SC_ADDINARG_STRING_ARRAY && eType != SC_ADDINARG_CELLRANGE
+                && aUnoName.indexOf(".Analysis.") >= 0)
+            {
+                bool bLogical = false;
+                if (nStackType == svDoubleRef)
+                {
+                    FormulaConstTokenRef xLogicalTok( pStack[sp - 1]);
+                    ScRange aLogicalRange;
+                    PopDoubleRef( aLogicalRange);
+                    PushTokenRef( xLogicalTok);
+                    if (nGlobalError != FormulaError::NONE)
+                        nGlobalError = FormulaError::NONE;
+                    else
+                    {
+                        ScCellIterator aLogicalIter( mrDoc, aLogicalRange );
+                        for (bool bHas = aLogicalIter.first(); bHas && !bLogical; bHas = aLogicalIter.next())
+                        {
+                            ScRefCellValue aCell( aLogicalIter.getRefCellValue());
+                            bLogical = (aCell.getType() == CELLTYPE_VALUE || aCell.getType() == CELLTYPE_FORMULA)
+                                       && IsLogicalCell( aLogicalIter.GetPos(), aCell);
+                        }
+                        // and XNPV is #NUM! for an empty cell in its values or dates
+                        if (!bLogical && aUnoName.endsWith(".getXnpv"))
+                        {
+                            sal_uInt64 nCells = 0;
+                            ScCellIterator aCountIter( mrDoc, aLogicalRange );
+                            for (bool bHas = aCountIter.first(); bHas; bHas = aCountIter.next())
+                                ++nCells;
+                            const sal_uInt64 nSize = static_cast<sal_uInt64>(aLogicalRange.aEnd.Col() - aLogicalRange.aStart.Col() + 1)
+                                * static_cast<sal_uInt64>(aLogicalRange.aEnd.Row() - aLogicalRange.aStart.Row() + 1)
+                                * static_cast<sal_uInt64>(aLogicalRange.aEnd.Tab() - aLogicalRange.aStart.Tab() + 1);
+                            bLogical = nCells < nSize;
+                        }
+                    }
+                }
+                else if (nStackType == svMatrix)
+                {
+                    if (const ScMatrix* pLogicalMat = static_cast<const ScMatrixToken*>(pStack[sp - 1])->GetMatrix())
+                    {
+                        SCSIZE nLC, nLR;
+                        pLogicalMat->GetDimensions( nLC, nLR);
+                        for (SCSIZE i = 0; i < nLC && !bLogical; ++i)
+                            for (SCSIZE j = 0; j < nLR && !bLogical; ++j)
+                                bLogical = pLogicalMat->IsBoolean( i, j);
+                    }
+                }
+                else if (nStackType == svDouble || nStackType == svSingleRef)
+                    bLogical = IsStackTopLogical();
+                if (bLogical)
+                {
+                    Pop();
+                    SetError( aUnoName.endsWith(".getXnpv") ? FormulaError::IllegalFPOperation : FormulaError::NoValue);
+                    break;
+                }
+            }
             switch (eType)
             {
                 case SC_ADDINARG_INTEGER:
