@@ -240,6 +240,19 @@ void ScInterpreter::ScGetDay()
     }
 }
 
+// weboffice: like Excel, HOUR/MINUTE/SECOND round the time of day to the nearest second and
+// carry (HOUR(1.99999999) is 0, MINUTE of 0:00:59.6 is 1)
+static void lcl_ExcelClock( double fClock, sal_uInt16& rHour, sal_uInt16& rMinute, sal_uInt16& rSecond )
+{
+    const double fFrac = fClock - ::rtl::math::approxFloor( fClock);
+    sal_Int64 nSec = static_cast<sal_Int64>( std::round( fFrac * 86400.0)) % 86400;
+    if (nSec < 0)
+        nSec += 86400;
+    rHour = static_cast<sal_uInt16>( nSec / 3600);
+    rMinute = static_cast<sal_uInt16>( (nSec / 60) % 60);
+    rSecond = static_cast<sal_uInt16>( nSec % 60);
+}
+
 void ScInterpreter::ScGetMin()
 {
     sal_uInt16 nHour, nMinute, nSecond;
@@ -250,7 +263,8 @@ void ScInterpreter::ScGetMin()
         PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         return;
     }
-    tools::Time::GetClock( fClock, nHour, nMinute, nSecond, fFractionOfSecond, 0);
+    (void)fFractionOfSecond;
+    lcl_ExcelClock( fClock, nHour, nMinute, nSecond);
     PushDouble( nMinute);
 }
 
@@ -264,9 +278,8 @@ void ScInterpreter::ScGetSec()
         PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         return;
     }
-    tools::Time::GetClock( fClock, nHour, nMinute, nSecond, fFractionOfSecond, 0);
-    if ( fFractionOfSecond >= 0.5 )
-        nSecond = ( nSecond + 1 ) % 60;
+    (void)fFractionOfSecond;
+    lcl_ExcelClock( fClock, nHour, nMinute, nSecond);
     PushDouble( nSecond );
 
 }
@@ -281,7 +294,8 @@ void ScInterpreter::ScGetHour()
         PushError( FormulaError::IllegalFPOperation ); // weboffice: #NUM! like Excel
         return;
     }
-    tools::Time::GetClock( fClock, nHour, nMinute, nSecond, fFractionOfSecond, 0);
+    (void)fFractionOfSecond;
+    lcl_ExcelClock( fClock, nHour, nMinute, nSecond);
     PushDouble( nHour);
 }
 
@@ -545,6 +559,9 @@ FormulaError ScInterpreter::GetWeekendAndHolidayMasks(
 
     if ( nParamCount >= 3 )
     {
+        // weboffice: a TRUE/FALSE holiday is #VALUE! in Excel (NETWORKDAYS(A1;B1;C1) with TRUE in C1)
+        if ( IsStackTopLogical() )
+            return FormulaError::NoValue;
         GetSortArray( 1, rSortArray, nullptr, true, true );
         size_t nMax = rSortArray.size();
         for ( size_t i = 0; i < nMax; i++ )
@@ -562,6 +579,9 @@ FormulaError ScInterpreter::GetWeekendAndHolidayMasks_MS(
     OUString aWeekendDays;
     if ( nParamCount == 4 )
     {
+        // weboffice: a TRUE/FALSE holiday is #VALUE! in Excel (NETWORKDAYS(A1;B1;C1) with TRUE in C1)
+        if ( IsStackTopLogical() )
+            return FormulaError::NoValue;
         GetSortArray( 1, rSortArray, nullptr, true, true );
         size_t nMax = rSortArray.size();
         for ( size_t i = 0; i < nMax; i++ )
