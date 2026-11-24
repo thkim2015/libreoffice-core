@@ -1939,6 +1939,39 @@ void ScInterpreter::ScNot()
                 PushNoValue();
         }
         break;
+        case svSingleRef:
+        {
+            // and the same for a text cell (NOT(A1) with '1 in A1 is #VALUE!, with 'TRUE is FALSE)
+            ScAddress aAdr;
+            PopSingleRef( aAdr );
+            if (nGlobalError != FormulaError::NONE)
+            {
+                PushError( nGlobalError);
+                break;
+            }
+            ScRefCellValue aCell( mrDoc, aAdr);
+            if (aCell.hasString())
+            {
+                svl::SharedString aSStr;
+                GetCellString( aSStr, aCell);
+                const OUString aStr = aSStr.getString();
+                if (aStr.equalsIgnoreAsciiCase("TRUE"))
+                    PushInt(0);
+                else if (aStr.equalsIgnoreAsciiCase("FALSE"))
+                    PushInt(1);
+                else
+                    PushNoValue();
+            }
+            else
+            {
+                const double fVal = GetCellValue( aAdr, aCell);
+                if (nGlobalError != FormulaError::NONE)
+                    PushError( nGlobalError);
+                else
+                    PushInt( int(fVal == 0.0) );
+            }
+        }
+        break;
         default:
             PushInt( int(GetDouble() == 0.0) );
     }
