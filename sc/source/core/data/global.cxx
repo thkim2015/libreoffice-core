@@ -470,8 +470,12 @@ static OUString lcl_ExcelLiteralRAndLocaleMonths(const OUString& rCode)
     const bool bTagKorean = eTag != LANGUAGE_DONTKNOW && nPrimary == 0x12;
     const bool bTagJapanese = eTag != LANGUAGE_DONTKNOW && nPrimary == 0x11;
     const bool bHasR = rCode.indexOf('r') >= 0 || rCode.indexOf('R') >= 0;
-    if (!bHasR && !bTagKorean && !bTagJapanese)
+    const bool bHasB1 = rCode.indexOf(u"B1") >= 0 || rCode.indexOf(u"b1") >= 0;
+    if (!bHasR && !bHasB1 && !bTagKorean && !bTagJapanese)
         return rCode;
+    // a month name made a number: a currency symbol in the locale bracket ([$₩-412]mmmm is "₩11월")
+    // would make Calc read the code as currency and M as a literal, so the symbol becomes a quoted text
+    const bool bMonthNames = (bTagKorean || bTagJapanese) && rCode.toAsciiLowerCase().indexOf("mmm") >= 0;
     OUStringBuffer aBuf(nLen + 8);
     for (sal_Int32 i = 0; i < nLen; ++i)
     {
@@ -492,7 +496,16 @@ static OUString lcl_ExcelLiteralRAndLocaleMonths(const OUString& rCode)
         {
             const sal_Int32 nEnd = rCode.indexOf(']', i);
             const sal_Int32 nTo = nEnd < 0 ? nLen - 1 : nEnd;
-            aBuf.append(rCode.subView(i, nTo - i + 1));
+            const sal_Int32 nDash = rCode.indexOf('-', i);
+            if (bMonthNames && nEnd > 0 && i + 2 < nLen && rCode[i + 1] == '$' && nDash > i + 2 && nDash < nEnd)
+            {
+                aBuf.append('"');
+                aBuf.append(rCode.subView(i + 2, nDash - i - 2));
+                aBuf.append("\"[$");
+                aBuf.append(rCode.subView(nDash, nEnd - nDash + 1));
+            }
+            else
+                aBuf.append(rCode.subView(i, nTo - i + 1));
             i = nTo;
         }
         else if ((c == 'g' || c == 'G') && rCode.matchIgnoreAsciiCase(u"general", i))
@@ -500,6 +513,9 @@ static OUString lcl_ExcelLiteralRAndLocaleMonths(const OUString& rCode)
             aBuf.append(rCode.subView(i, 7));
             i += 6;
         }
+        else if ((c == 'B' || c == 'b') && i + 1 < nLen && rCode[i + 1] == '1'
+                 && (i == 0 || rCode[i - 1] == ']' || rCode[i - 1] == ';'))
+            ++i; // B1 (Gregorian calendar) prefix: TEXT(A1;"B1yyyy") is "2026" in Excel
         else if (c == 'r' || c == 'R')
             aBuf.append(OUStringChar('"') + OUStringChar(c) + OUStringChar('"'));
         else if ((c == 'm' || c == 'M') && (bTagKorean || bTagJapanese))
