@@ -2625,7 +2625,7 @@ bool ScInterpreter::CalculateTest(bool _bTemplin
     for (i = 0; i < nC1; i++)
         for (j = 0; j < nR1; j++)
         {
-            if (!pMat1->IsStringOrEmpty(i,j))
+            if (!pMat1->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j)) // weboffice: like Excel
             {
                 fVal = pMat1->GetDouble(i,j);
                 fSum1    += fVal;
@@ -2636,7 +2636,7 @@ bool ScInterpreter::CalculateTest(bool _bTemplin
     for (i = 0; i < nC2; i++)
         for (j = 0; j < nR2; j++)
         {
-            if (!pMat2->IsStringOrEmpty(i,j))
+            if (!pMat2->IsStringOrEmpty(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: like Excel
             {
                 fVal = pMat2->GetDouble(i,j);
                 fSum2    += fVal;
@@ -2716,7 +2716,7 @@ void ScInterpreter::ScTTest()
         for (i = 0; i < nC1; i++)
             for (j = 0; j < nR1; j++)
             {
-                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
                 {
                     fVal1 = pMat1->GetDouble(i,j);
                     fVal2 = pMat2->GetDouble(i,j);
@@ -4972,7 +4972,9 @@ void ScInterpreter::ScProbability()
         SCSIZE nR1, nR2;
         pMatP->GetDimensions(nC1, nR1);
         pMatW->GetDimensions(nC2, nR2);
-        if (nC1 != nC2 || nR1 != nR2 || nC1 == 0 || nR1 == 0 ||
+        // weboffice: like Excel, only the counts must match (a column of values with a row of
+        // probabilities, PROB(A1:A5;{0.1,0.2,0.3,0.2,0.2};2;4) is 0.7 in Excel 2021)
+        if (nC1 * nR1 != nC2 * nR2 || nC1 == 0 || nR1 == 0 ||
             nC2 == 0 || nR2 == 0)
             PushNA();
         else
@@ -4981,13 +4983,15 @@ void ScInterpreter::ScProbability()
             KahanSum fRes = 0.0;
             bool bStop = false;
             double fP, fW;
-            for ( SCSIZE i = 0; i < nC1 && !bStop; i++ )
+            const SCSIZE nCount = nC1 * nR1;
+            for (SCSIZE k = 0; k < nCount && !bStop; ++k)
             {
-                for (SCSIZE j = 0; j < nR1 && !bStop; ++j )
                 {
-                    if (pMatP->IsValue(i,j) && pMatW->IsValue(i,j))
+                    const SCSIZE i = k / nR2, j = k % nR2;   // values (pMatW, nC2 x nR2)
+                    const SCSIZE iP = k / nR1, jP = k % nR1; // probabilities (pMatP, nC1 x nR1)
+                    if (pMatP->IsValue(iP,jP) && pMatW->IsValue(i,j))
                     {
-                        fP = pMatP->GetDouble(i,j);
+                        fP = pMatP->GetDouble(iP,jP);
                         fW = pMatW->GetDouble(i,j);
                         // weboffice: like Excel, only the sum of the probabilities is checked
                         fSum += fP;
@@ -5044,7 +5048,7 @@ void ScInterpreter::CalculatePearsonCovar( bool _bPearson, bool _bStexy, bool _b
     pMat2->GetDimensions(nC2, nR2);
     if (nR1 != nR2 || nC1 != nC2)
     {
-        PushIllegalArgument();
+        PushNA(); // weboffice: different sizes are #N/A in Excel
         return;
     }
     /* #i78250#
@@ -5060,7 +5064,7 @@ void ScInterpreter::CalculatePearsonCovar( bool _bPearson, bool _bStexy, bool _b
     {
         for (SCSIZE j = 0; j < nR1; j++)
         {
-            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
             {
                 fSumX += pMat1->GetDouble(i,j);
                 fSumY += pMat2->GetDouble(i,j);
@@ -5081,7 +5085,7 @@ void ScInterpreter::CalculatePearsonCovar( bool _bPearson, bool _bStexy, bool _b
         {
             for (SCSIZE j = 0; j < nR1; j++)
             {
-                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
                 {
                     const double fValX = pMat1->GetDouble(i,j);
                     const double fValY = pMat2->GetDouble(i,j);
@@ -5158,7 +5162,7 @@ void ScInterpreter::CalculateSlopeIntercept(bool bSlope)
     pMat2->GetDimensions(nC2, nR2);
     if (nR1 != nR2 || nC1 != nC2)
     {
-        PushIllegalArgument();
+        PushNA(); // weboffice: different sizes are #N/A in Excel
         return;
     }
     // #i78250# numerical stability improved
@@ -5170,7 +5174,7 @@ void ScInterpreter::CalculateSlopeIntercept(bool bSlope)
     {
         for (SCSIZE j = 0; j < nR1; j++)
         {
-            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
             {
                 fSumX += pMat1->GetDouble(i,j);
                 fSumY += pMat2->GetDouble(i,j);
@@ -5190,7 +5194,7 @@ void ScInterpreter::CalculateSlopeIntercept(bool bSlope)
         {
             for (SCSIZE j = 0; j < nR1; j++)
             {
-                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
                 {
                     double fValX = pMat1->GetDouble(i,j);
                     double fValY = pMat2->GetDouble(i,j);
@@ -5238,7 +5242,7 @@ void ScInterpreter::ScForecast()
     pMat2->GetDimensions(nC2, nR2);
     if (nR1 != nR2 || nC1 != nC2)
     {
-        PushIllegalArgument();
+        PushNA(); // weboffice: different sizes are #N/A in Excel
         return;
     }
     double fVal = GetDouble();
@@ -5251,7 +5255,7 @@ void ScInterpreter::ScForecast()
     {
         for (SCSIZE j = 0; j < nR1; j++)
         {
-            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+            if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
             {
                 fSumX += pMat1->GetDouble(i,j);
                 fSumY += pMat2->GetDouble(i,j);
@@ -5271,7 +5275,7 @@ void ScInterpreter::ScForecast()
         {
             for (SCSIZE j = 0; j < nR1; j++)
             {
-                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j))
+                if (!pMat1->IsStringOrEmpty(i,j) && !pMat2->IsStringOrEmpty(i,j) && !pMat1->IsBoolean(i,j) && !pMat2->IsBoolean(i,j)) // weboffice: TRUE/FALSE cells are skipped like Excel
                 {
                     double fValX = pMat1->GetDouble(i,j);
                     double fValY = pMat2->GetDouble(i,j);
