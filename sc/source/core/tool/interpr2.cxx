@@ -1991,7 +1991,7 @@ void ScInterpreter::ScPV()
     if ( !MustHaveParamCount( nParamCount, 3, 5 ) )
         return;
 
-    bool bPayInAdvance = nParamCount == 5 && GetBool();
+    bool bPayInAdvance = nParamCount == 5 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fFv   = nParamCount >= 4 ? GetDouble() : 0;
     double fPmt  = GetDouble();
     double fNper = GetDouble();
@@ -2296,7 +2296,7 @@ void ScInterpreter::ScPMT()
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 3, 5 ) )
         return;
-    bool bPayInAdvance = nParamCount == 5 && GetBool();
+    bool bPayInAdvance = nParamCount == 5 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fFv   = nParamCount >= 4 ? GetDouble() : 0;
     double fPv   = GetDouble();
     double fNper = GetDouble();
@@ -2345,7 +2345,7 @@ void ScInterpreter::ScFV()
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 3, 5 ) )
         return;
-    bool bPayInAdvance = nParamCount == 5 && GetBool();
+    bool bPayInAdvance = nParamCount == 5 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fPv   = nParamCount >= 4 ? GetDouble() : 0;
     double fPmt  = GetDouble();
     double fNper = GetDouble();
@@ -2358,7 +2358,7 @@ void ScInterpreter::ScNper()
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 3, 5 ) )
         return;
-    bool bPayInAdvance = nParamCount == 5 && GetBool();
+    bool bPayInAdvance = nParamCount == 5 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fFV   = nParamCount >= 4 ? GetDouble() : 0;
     double fPV   = GetDouble();      // Present Value
     double fPmt  = GetDouble();      // Payment
@@ -2488,7 +2488,7 @@ void ScInterpreter::ScRate()
     // defaults for missing arguments, see ODFF spec
     double fGuess = nParamCount == 6 ? GetDouble() : 0.1;
     bool bDefaultGuess = nParamCount != 6;
-    bool bPayType = nParamCount >= 5 && GetBool();
+    bool bPayType = nParamCount >= 5 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fFv = nParamCount >= 4 ? GetDouble() : 0;
     double fPv = GetDouble();
     double fPayment = GetDouble();
@@ -2567,7 +2567,7 @@ void ScInterpreter::ScIpmt()
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 4, 6 ) )
         return;
-    bool bPayInAdvance = nParamCount == 6 && GetBool();
+    bool bPayInAdvance = nParamCount == 6 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fFv   = nParamCount >= 5 ? GetDouble() : 0;
     double fPv   = GetDouble();
     double fNper = GetDouble();
@@ -2589,7 +2589,7 @@ void ScInterpreter::ScPpmt()
     sal_uInt8 nParamCount = GetByte();
     if ( !MustHaveParamCount( nParamCount, 4, 6 ) )
         return;
-    bool bPayInAdvance = nParamCount == 6 && GetBool();
+    bool bPayInAdvance = nParamCount == 6 && GetDouble() != 0.0; // weboffice: a number, "1" works
     double fFv   = nParamCount >= 5 ? GetDouble() : 0;
     double fPv   = GetDouble();
     double fNper = GetDouble();
