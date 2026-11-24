@@ -1774,7 +1774,10 @@ bool ScInterpreter::ConvertMatrixParameters()
                             // weboffice: keep the range for the outermost TRANSPOSE of a legacy
                             // (non-array) formula, ScMatTrans takes its implicit intersection
                             !(pCur->GetOpCode() == ocMatTrans && !bMatrixFormula && !pJumpMatrix
-                              && !aCode.PeekNextOperator()))
+                              && !aCode.PeekNextOperator()) &&
+                            // and for N, which takes the first cell of a range even in an array
+                            // (SUMPRODUCT(N(A1:A8)) is N(A1) in Excel 2021, measured)
+                            pCur->GetOpCode() != ocN)
                     {
                         SCCOL nCol1, nCol2;
                         SCROW nRow1, nRow2;

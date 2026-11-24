@@ -3779,7 +3779,7 @@ void ScInterpreter::ScN()
     mnStringNoValueError = FormulaError::CellNoValue;
     // weboffice: like Excel, N of a range is N of its first cell, not the implicit intersection
     // (N(A2:A10) is A2 in every row in Excel 2021, measured; Calc intersected or gave #VALUE!)
-    if (GetStackType() == svDoubleRef && !IsInArrayContext() && !pJumpMatrix)
+    if (GetStackType() == svDoubleRef)
     {
         ScRange aRange;
         PopDoubleRef(aRange);
