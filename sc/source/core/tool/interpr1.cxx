@@ -6796,6 +6796,26 @@ void ScInterpreter::ScCountIf()
     double fVal = 0.0;
     bool bIsString = true;
     bool bLogicalCrit = false; // weboffice: TRUE/FALSE criterion
+    // weboffice: a criterion cell holding an error is that error criterion (COUNTIF(A1:A10;A8)
+    // with #N/A in A8 counts the #N/A cells)
+    if (GetStackType() == svSingleRef)
+    {
+        FormulaConstTokenRef xCritTok( pStack[sp - 1]);
+        ScAddress aCritAdr;
+        PopSingleRef( aCritAdr);
+        FormulaError eCellErr = FormulaError::NONE;
+        if (nGlobalError == FormulaError::NONE)
+        {
+            ScRefCellValue aCritCell( mrDoc, aCritAdr);
+            if (aCritCell.getType() == CELLTYPE_FORMULA)
+                eCellErr = aCritCell.getFormula()->GetErrCode();
+        }
+        nGlobalError = FormulaError::NONE;
+        if (eCellErr != FormulaError::NONE)
+            PushTempTokenWithoutError( new FormulaErrorToken( eCellErr));
+        else
+            PushTokenRef( xCritTok);
+    }
     // weboffice: an error as criterion (COUNTIF(A1:A9;1/0)) counts the cells with that error
     if (GetStackType() == svError)
     {
