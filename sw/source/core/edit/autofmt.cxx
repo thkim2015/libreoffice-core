@@ -24,6 +24,7 @@
 
 #include <editeng/boxitem.hxx>
 #include <editeng/lrspitem.hxx>
+#include <editeng/ulspitem.hxx>
 #include <editeng/formatbreakitem.hxx>
 #include <editeng/adjustitem.hxx>
 #include <editeng/tstpitem.hxx>
@@ -1754,6 +1755,33 @@ void SwAutoFormat::BuildEnum( sal_uInt16 nLvl, sal_uInt16 nDigitLevel )
 
             // start new list
             m_pDoc->SetNumRule(m_aDelPam, aRule, SwDoc::SetNumRuleMode::CreateNewList, m_pEditShell->GetLayout());
+
+            // weboffice: Word (AutoFormat As You Type) puts the Normal paragraphs it turns into a list into
+            // "List Paragraph" (left 36pt, no space between paragraphs of the same style); create it like Word's
+            if (m_aFlags.bAFormatByInput)
+            {
+                SwTextFormatColl* pListPara = m_pDoc->FindTextFormatCollByName(UIName(u"List Paragraph"_ustr));
+                SwTextFormatColl* pStd = m_pDoc->getIDocumentStylePoolAccess().GetTextCollFromPool(SwPoolFormatId::COLL_STANDARD);
+                if (!pListPara && pStd)
+                {
+                    pListPara = m_pDoc->MakeTextFormatColl(UIName(u"List Paragraph"_ustr), pStd);
+                    pListPara->SetFormatAttr(SvxTextLeftMarginItem(SvxIndentValue::twips(720), RES_MARGIN_TEXTLEFT));
+                    SvxULSpaceItem aUL(pStd->GetULSpace());
+                    aUL.SetContextValue(true);
+                    pListPara->SetFormatAttr(aUL);
+                }
+                if (pListPara)
+                {
+                    const SwNodeOffset nFrom = m_aDelPam.Start()->GetNodeIndex();
+                    const SwNodeOffset nTo = m_aDelPam.End()->GetNodeIndex();
+                    for (SwNodeOffset n = nFrom; n <= nTo; ++n)
+                    {
+                        SwTextNode* pNode = m_pDoc->GetNodes()[n]->GetTextNode();
+                        if (pNode && pNode->GetTextColl() == pStd)
+                            m_pDoc->SetTextFormatColl(SwPaM(*pNode), pListPara, false);
+                    }
+                }
+            }
             m_aDelPam.DeleteMark();
 
             *m_aDelPam.GetPoint() = m_pCurTextFrame->MapViewToModelPos(TextFrameIndex(0));

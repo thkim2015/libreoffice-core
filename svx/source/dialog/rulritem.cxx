@@ -25,6 +25,7 @@
 #include <tools/UnitConversion.hxx>
 #include <osl/diagnose.h>
 #include <sal/log.hxx>
+#include <com/sun/star/uno/Sequence.hxx>
 #include <com/sun/star/awt/Rectangle.hpp>
 #include <com/sun/star/frame/status/LeftRightMargin.hpp>
 #include <com/sun/star/frame/status/UpperLowerMargin.hpp>
@@ -459,9 +460,24 @@ bool SvxColumnItem::QueryValue( css::uno::Any& rVal, sal_uInt8 nMemberId ) const
     switch ( nMemberId )
     {
         case 0:
-            // SfxDispatchController_Impl::StateChanged calls this with hardcoded 0 triggering this;
-            SAL_INFO("svx", "SvxColumnItem::QueryValue with nMemberId of 0");
-            return false;
+        {
+            // weboffice: SfxDispatchController_Impl::StateChanged calls this with hardcoded 0 - give the web
+            // ruler the whole item as { left, right, actual column, table, start0, end0, start1, end1, ... }
+            // (twips) so the vertical ruler can draw table row markers (.uno:RulerRowsVertical)
+            css::uno::Sequence<sal_Int32> aSeq(4 + 2 * m_aColumns.size());
+            sal_Int32* p = aSeq.getArray();
+            p[0] = m_nLeft;
+            p[1] = m_nRight;
+            p[2] = m_nActColumn;
+            p[3] = m_bTable ? 1 : 0;
+            for (size_t i = 0; i < m_aColumns.size(); ++i)
+            {
+                p[4 + 2 * i] = m_aColumns[i].nStart;
+                p[5 + 2 * i] = m_aColumns[i].nEnd;
+            }
+            rVal <<= aSeq;
+            break;
+        }
         case MID_COLUMNARRAY:
             return false;
         case MID_RIGHT:
