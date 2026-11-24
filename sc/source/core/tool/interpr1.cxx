@@ -3216,7 +3216,7 @@ void ScInterpreter::ScIsValue()
             else if ( !pJumpMatrix )
             {
                 if (pMat->GetErrorIfNotString( 0, 0) == FormulaError::NONE)
-                    bRes = pMat->IsValue( 0, 0);
+                    bRes = pMat->IsValue( 0, 0) && !pMat->IsBoolean( 0, 0); // weboffice: like Excel
             }
             else
             {
@@ -3225,7 +3225,7 @@ void ScInterpreter::ScIsValue()
                 pJumpMatrix->GetPos( nC, nR);
                 if ( nC < nCols && nR < nRows )
                     if (pMat->GetErrorIfNotString( nC, nR) == FormulaError::NONE)
-                        bRes = pMat->IsValue( nC, nR);
+                        bRes = pMat->IsValue( nC, nR) && !pMat->IsBoolean( nC, nR); // weboffice: like Excel
             }
         }
         break;
