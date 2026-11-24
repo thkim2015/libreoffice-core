@@ -4346,10 +4346,18 @@ ScMatrixRef ScInterpreter::CreateSortedMatrix( const ScSortParam& rSortParam, co
                 {
                     if (pMatSrc->IsEmptyCell(ci, rj))
                     {
+                        // weboffice: like Excel, an empty cell sorts to the end as 0
                         if (rSortParam.bByRow)
-                            pResMat->PutEmpty(ci, aPosTable[rj]);
+                            pResMat->PutDouble(0.0, ci, aPosTable[rj]);
                         else
-                            pResMat->PutEmpty(aPosTable[ci], rj);
+                            pResMat->PutDouble(0.0, aPosTable[ci], rj);
+                    }
+                    else if (pMatSrc->IsBoolean(ci, rj))
+                    {
+                        if (rSortParam.bByRow)
+                            pResMat->PutBoolean(pMatSrc->GetDouble(ci, rj) != 0.0, ci, aPosTable[rj]);
+                        else
+                            pResMat->PutBoolean(pMatSrc->GetDouble(ci, rj) != 0.0, aPosTable[ci], rj);
                     }
                     else if (pMatSrc->IsStringOrEmpty(ci, rj))
                     {
@@ -4590,7 +4598,12 @@ short ScInterpreter::CompareMatrixCell( const ScMatrixRef& pMatSrc, sal_uInt16 n
     {
         if (!bCell2Empty)
         {
-            if ( !bCell1Value && !bCell2Value )           // only compare strings as strings!
+            // weboffice: like Excel, numbers < text < FALSE < TRUE
+            const bool bCell1Bool = bCell1Value && pMatSrc->IsBoolean(nCell1Col, nCell1Row);
+            const bool bCell2Bool = bCell2Value && pMatSrc->IsBoolean(nCell2Col, nCell2Row);
+            if (bCell1Bool != bCell2Bool)
+                nRes = bCell1Bool ? 1 : -1;
+            else if ( !bCell1Value && !bCell2Value )           // only compare strings as strings!
             {
                 OUString aStr1 = pMatSrc->GetString(nCell1Col, nCell1Row).getString();
                 OUString aStr2 = pMatSrc->GetString(nCell2Col, nCell2Row).getString();

@@ -10473,8 +10473,20 @@ void ScInterpreter::ScSort()
                 PushIllegalParameter();
                 return;
             }
-            nsC = aSortData.nCol2 - aSortData.nCol1 + 1;
-            nsR = aSortData.nRow2 - aSortData.nRow1 + 1;
+            // weboffice: sort the range as an array, whose TRUE/FALSE elements sort after text and
+            // whose empty cells sort last as 0, like Excel
+            PushDoubleRef(aSortData.nCol1, aSortData.nRow1, aSortData.nSourceTab, aSortData.nCol2, aSortData.nRow2, nTab2);
+            pMatSrc = GetMatrix();
+            if (!pMatSrc)
+            {
+                PushIllegalParameter();
+                return;
+            }
+            pMatSrc->GetDimensions(nsC, nsR);
+            aSortData.nCol1 = 0;
+            aSortData.nRow1 = 0;
+            aSortData.nCol2 = nsC - 1;
+            aSortData.nRow2 = nsR - 1;
         }
         break;
         case svMatrix:
@@ -17106,7 +17118,9 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
     ScQueryEntry::Item& rItem = rEntry.GetQueryItem();
     // allow to match empty cells as result if we are looking for the next smaller
     // or larger values in case of the new lookup functions
-    if (rEntry.eOp != SC_EQUAL && (vsa.nSearchOpCode == ocXLookup ||
+    // weboffice: not in Excel, an empty cell is no candidate for the next smaller or larger value
+    // (XMATCH(2;A1:A7;1) with an empty A4 and 3 in A1 is 1 in Excel 2021, measured)
+    if (false && rEntry.eOp != SC_EQUAL && (vsa.nSearchOpCode == ocXLookup ||
         vsa.nSearchOpCode == ocXMatch))
         rItem.mbMatchEmpty = true;
 
