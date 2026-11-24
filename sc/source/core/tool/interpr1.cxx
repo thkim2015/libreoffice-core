@@ -8985,7 +8985,7 @@ void ScInterpreter::ScLookup()
     SCROW nR = nRow1;
     // weboffice: Excel's binary search also over cells that are not sorted (see ExcelRangeLookup)
     const sal_Int32 nExcelIdx = ExcelRangeLookup(aParam.nCol1, aParam.nRow1, aParam.nCol2, aParam.nRow2,
-                                                 nTab1, rEntry.GetQueryItem(), false, 0);
+                                                 nTab1, rEntry.GetQueryItem(), false, 0, aParam.mbLookupLogical);
     if (nExcelIdx == -1)
     {
         PushNA();
@@ -9286,7 +9286,8 @@ sal_Int32 ScInterpreter::ExcelMatrixLookup( const ScMatrix& rMat, bool bVertical
 // value (an equal one is taken at once). Returns the 0-based position, -1 when not found, or -2
 // when the item is not a number or a text (the caller searches as before).
 sal_Int32 ScInterpreter::ExcelRangeLookup( SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW nRow2, SCTAB nTab,
-                                           const ScQueryEntry::Item& rItem, bool bDescending, int nMode )
+                                           const ScQueryEntry::Item& rItem, bool bDescending, int nMode,
+                                           bool bLogical )
 {
     if (rItem.meType != ScQueryEntry::ByValue && rItem.meType != ScQueryEntry::ByString)
         return -2;
@@ -9319,7 +9320,8 @@ sal_Int32 ScInterpreter::ExcelRangeLookup( SCCOL nCol1, SCROW nRow1, SCCOL nCol2
         }
         else
         {
-            if (!aCell.hasNumeric() || IsLogicalCell(aAdr, aCell))
+            // weboffice: a TRUE/FALSE looked up value compares only with TRUE/FALSE cells
+            if (!aCell.hasNumeric() || IsLogicalCell(aAdr, aCell) != bLogical)
                 return -2;
             const double f = aCell.getValue();
             nRes = fLookup < f ? -1 : (fLookup > f ? 1 : 0);
@@ -9694,7 +9696,7 @@ void ScInterpreter::CalculateLookup(bool bHLookup)
                     const sal_Int32 n = rCollator.compareString(aLookupStr, aCell.getString(mrDoc));
                     return n < 0 ? -1 : (n > 0 ? 1 : 0);
                 }
-                if (!aCell.hasNumeric() || IsLogicalCell(aAdr, aCell))
+                if (!aCell.hasNumeric() || IsLogicalCell(aAdr, aCell) != aParam.mbLookupLogical)
                     return -2;
                 const double f = aCell.getValue();
                 return fLookup < f ? -1 : (fLookup > f ? 1 : 0);
@@ -17147,7 +17149,7 @@ bool ScInterpreter::SearchVectorForValue( VectorSearchArguments& vsa )
         const sal_Int32 nIdx = vsa.pMatSrc
             ? ExcelMatrixLookup(*vsa.pMatSrc, nMatC == 1, 0, rItem, bDescending, nMode)
             : ExcelRangeLookup(vsa.nCol1, vsa.nRow1, vsa.nCol2, vsa.nRow2, vsa.nTab1,
-                               rItem, bDescending, nMode);
+                               rItem, bDescending, nMode, vsa.isLogicalSearch);
         if (nIdx != -2)
         {
             vsa.bVLookup = ( vsa.nCol1 == vsa.nCol2 );
