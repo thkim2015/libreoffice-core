@@ -1125,7 +1125,9 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
         else if( !sColorFillScheme.isEmpty() )
         {
             // the line had a scheme color and the user didn't change it
-            WriteSolidFill( aResolvedColorFillScheme, aTransformations );
+            // ZETA: pptx keeps it as the theme colour (schemeClr + transformations), not the resolved RGB
+            if (GetDocumentType() != DOCUMENT_PPTX || !WriteSchemeColor(u"LineComplexColor"_ustr, rXPropSet))
+                WriteSolidFill( aResolvedColorFillScheme, aTransformations );
         }
         else
         {
