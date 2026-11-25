@@ -2142,6 +2142,13 @@ bool checkForAll0s(const T& rString, sal_Int32 nIdx=0)
 //  - digit codes (0, #,##0) and the year of a date: digit by digit
 //  - month and day of a date: units without the leading one before 十 (十一)
 // DBNum3 drops the one before 十/百/千 also in General (十, 百１, 十万, １万).
+// Japanese [DBNum1]..[DBNum3] in General (Excel 2021, weboffice
+// tests/e2e/excel-dbnum-ja.e2e.js) use the same scheme with their own
+// characters: DBNum1 〇一二 十百千 万億兆 without the one before 十/百/千
+// (千, 一万千), DBNum2 〇壱弐参四伍 拾百阡 萬億兆 always with the one (壱拾,
+// 壱阡), DBNum3 full width digits with 十百千 万億兆 (十１, １万２千).
+// LibreOffice wrote 一千, 拾/百壱/零 and plain full width digits. The
+// Japanese tables are indexes 5..7 (nDB + 4).
 enum class ZetaDBNumMode { General, Digits, DateField };
 
 // The Excel DBNum (1..4) of a Korean NatNum, else 0.
@@ -2155,13 +2162,27 @@ int lcl_ZetaKoreanDBNum(const SvNumberNatNum& rNum)
     return (1 <= nDB && nDB <= 4) ? nDB : 0;
 }
 
+// The table index (5..7) of a Japanese DBNum1..3 NatNum, else 0. General only.
+int lcl_ZetaJapaneseDBNum(const SvNumberNatNum& rNum)
+{
+    if (!rNum.IsComplete() || !rNum.GetParams().isEmpty())
+        return 0;
+    if (primary(MsLangId::getRealLanguage(rNum.GetLang())) != primary(LANGUAGE_JAPANESE))
+        return 0;
+    const int nDB = rNum.GetDBNum();
+    return (1 <= nDB && nDB <= 3) ? nDB + 4 : 0;
+}
+
 OUString lcl_ZetaDBNumDigits(std::u16string_view aStr, int nDB)
 {
-    static const char16_t* const aDigits[4] = {
+    static const char16_t* const aDigits[7] = {
         // Excel uses the CJK compatibility ideographs for 六 零 參 拾 (U+F9D1
         // U+F9B2 U+F96B U+F973), the Korean hanja code points
         u"０一二三四五六七八九", u"零壹貳參四伍六七八九",
-        u"０１２３４５６７８９", u"영일이삼사오육칠팔구" };
+        u"０１２３４５６７８９", u"영일이삼사오육칠팔구",
+        // Japanese DBNum1..3
+        u"〇一二三四五六七八九", u"〇壱弐参四伍六七八九",
+        u"０１２３４５６７８９" };
     OUStringBuffer aBuf(static_cast<sal_Int32>(aStr.size()));
     for (char16_t c : aStr)
         aBuf.append((c >= '0' && c <= '9') ? aDigits[nDB - 1][c - '0'] : c);
@@ -2171,8 +2192,8 @@ OUString lcl_ZetaDBNumDigits(std::u16string_view aStr, int nDB)
 // Units for an integer written in ASCII digits.
 OUString lcl_ZetaDBNumUnits(std::u16string_view aInt, int nDB, bool bDropOne)
 {
-    static const char16_t* const aSmall[4] = { u"十百千", u"拾百阡", u"十百千", u"십백천" };
-    static const char16_t* const aLarge[4] = { u"万億兆", u"萬億兆", u"万億兆", u"만억조" };
+    static const char16_t* const aSmall[7] = { u"十百千", u"拾百阡", u"十百千", u"십백천", u"十百千", u"拾百阡", u"十百千" };
+    static const char16_t* const aLarge[7] = { u"万億兆", u"萬億兆", u"万億兆", u"만억조", u"万億兆", u"萬億兆", u"万億兆" };
     size_t nStart = 0;
     while (nStart + 1 < aInt.size() && aInt[nStart] == '0')
         ++nStart;
@@ -2226,7 +2247,7 @@ OUString lcl_ZetaDBNum(const OUString& rStr, int nDB, ZetaDBNumMode eMode)
     std::u16string_view aInt = rStr.subView(nBegin, nEnd - nBegin);
     if (eMode == ZetaDBNumMode::DateField && aInt.size() > 1 && aInt[0] == '0')
         return lcl_ZetaDBNumDigits(rStr, nDB); // MM, DD with a leading zero
-    const bool bDropOne = nDB == 3 || eMode == ZetaDBNumMode::DateField;
+    const bool bDropOne = nDB == 3 || nDB == 5 || nDB == 7 || eMode == ZetaDBNumMode::DateField;
     OUStringBuffer aBuf(rStr.subView(0, nBegin));
     aBuf.append(lcl_ZetaDBNumUnits(aInt, nDB, bDropOne));
     aBuf.append(lcl_ZetaDBNumDigits(rStr.subView(nEnd), nDB));
@@ -2288,6 +2309,8 @@ void SvNumberformat::ImpGetOutputStdToPrecision(double& rNumber, OUString& rOutS
     const sal_uInt16 nStdIx = g_nZetaStdIx < 4 ? g_nZetaStdIx : 0;
     if (const int nDB = lcl_ZetaKoreanDBNum(NumFor[nStdIx].GetNatNum()))
         rOutString = lcl_ZetaDBNum(rOutString, nDB, ZetaDBNumMode::General);
+    else if (const int nJa = lcl_ZetaJapaneseDBNum(NumFor[nStdIx].GetNatNum()))
+        rOutString = lcl_ZetaDBNum(rOutString, nJa, ZetaDBNumMode::General);
     else
         rOutString = ::impTransliterate(rOutString, NumFor[nStdIx].GetNatNum(), rNatNum);
 }
