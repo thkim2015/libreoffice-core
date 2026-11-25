@@ -527,9 +527,10 @@ void TextParagraphProperties::pushToPropSet( const ::oox::core::XmlFilterBase* p
     if ( noFirstLineIndentation )
     {
         aPropSet.setProperty( PROP_ParaFirstLineIndent, *noFirstLineIndentation );
-        if( bPushDefaultValues )
+        if( bPushDefaultValues && !maTextParagraphPropertyMap.hasProperty( PROP_ParaTabStops ) )
         {
             // Reset TabStops - these would be auto calculated by Impress
+            // ZETA: but keep the a:tabLst read for this paragraph (PowerPoint tab stops were lost when the paragraph had a first-line indent)
             TabStop aTabStop;
             aTabStop.Position = 0;
             Sequence< TabStop > aSeq { aTabStop };
