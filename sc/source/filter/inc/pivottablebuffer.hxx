@@ -106,6 +106,7 @@ struct PTDataFieldModel
     sal_Int32           mnField;            /// Base pivot field.
     sal_Int32           mnSubtotal;         /// Subtotal aggregation function.
     sal_Int32           mnShowDataAs;       /// Show data as, based on another field.
+    sal_Int32           mnZetaShowAs = 0;   /// ZETA: x14:dataField pivotShowAs (dpzetashowas.hxx), 0 = none
     sal_Int32           mnBaseField;        /// Base field for 'show data as'.
     sal_Int32           mnBaseItem;         /// Base item for 'show data as'.
     sal_Int32           mnNumFmtId;         /// Number format for the result.
@@ -313,6 +314,8 @@ public:
     void                importPageField( const AttributeList& rAttribs );
     /** Reads the settings of a field located in the data dimension from the dataField element. */
     void                importDataField( const AttributeList& rAttribs );
+    /** ZETA: x14:dataField (Excel 2010 'show values as') of the last data field. */
+    void                importDataFieldExt( const AttributeList& rAttribs );
     /** Reads global pivot table settings from the PTDEFINITION record. */
     void                importPTDefinition( SequenceInputStream& rStrm );
     /** Reads the location of the pivot table from the PTLOCATION record. */

@@ -18,6 +18,7 @@
  */
 
 #include <dptabsrc.hxx>
+#include <dpzetashowas.hxx>
 
 #include <algorithm>
 #include <climits>
@@ -906,7 +907,8 @@ void ScDPSource::AddDataDimsToResultData(sheet::DataPilotFieldOrientation nDataO
         if (eRefType == sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE
             || eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE
             || eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE
-            || eRefType == sheet::DataPilotFieldReferenceType::RUNNING_TOTAL)
+            || eRefType == sheet::DataPilotFieldReferenceType::RUNNING_TOTAL
+            || ZetaDPRef::needsBaseField(eRefType))
         {
             sal_Int32 nColumn = comphelper::findValue(pDimsObj->getElementNames(),
                                                       aDataRefValues.back().ReferenceField);
@@ -1713,6 +1715,12 @@ uno::Any SAL_CALL ScDPDimension::getPropertyValue( const OUString& aPropertyName
             break;
         case sheet::DataPilotFieldReferenceType::INDEX:
             nFormat = pSource->GetData()->GetNumberFormatByIdx( NF_NUMBER_SYSTEM );
+            break;
+        case ZetaDPRef::PARENT_ROW_PERCENTAGE:
+        case ZetaDPRef::PARENT_COLUMN_PERCENTAGE:
+        case ZetaDPRef::PARENT_PERCENTAGE:
+        case ZetaDPRef::RUNNING_TOTAL_PERCENTAGE:
+            nFormat = mnZetaNumFmt >= 0 ? mnZetaNumFmt : pSource->GetData()->GetNumberFormatByIdx( NF_PERCENT_DEC2 );
             break;
         default:
             // ZetaOffice: the data field's own number format (Excel dataField numFmtId)

@@ -18,6 +18,7 @@
  */
 
 #include <dptabres.hxx>
+#include <dpzetashowas.hxx>
 
 #include <dptabdat.hxx>
 #include <dptabsrc.hxx>
@@ -2463,7 +2464,8 @@ void ScDPDataMember::UpdateDataRow(
 
                 if ( eRefType == sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE ||
                      eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE ||
-                     eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE )
+                     eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE ||
+                     ZetaDPRef::isZeta(eRefType) )
                 {
                     // copy the result into auxiliary value, so differences can be
                     // calculated in any order
@@ -2516,6 +2518,199 @@ void ScDPDataMember::ResetResults()
         pDataChild->ResetResults();
 }
 
+namespace {
+
+// ZETA: Excel 2010 'show values as' (dpzetashowas.hxx). The cell is addressed by the
+// sorted member indexes of its row and column path (as in ScDPRunningTotalState);
+// other cells' original results are read from their auxiliary values.
+using ZetaPath = std::vector<sal_Int32>;
+
+ZetaPath lcl_ZetaPath(const ScDPRunningTotalState::IndexArray& rArr)
+{
+    ZetaPath aPath;
+    for (sal_Int32 n : rArr)
+    {
+        if (n < 0)
+            break;
+        aPath.push_back(n);
+    }
+    return aPath;
+}
+
+const ScDPResultMember* lcl_ZetaResultMember(const ScDPResultMember* pRoot, const ZetaPath& rPath, size_t nDepth)
+{
+    const ScDPResultMember* pMember = pRoot;
+    for (size_t i = 0; i < nDepth && pMember; ++i)
+    {
+        const ScDPResultDimension* pDim = pMember->GetChildDimension();
+        if (!pDim || rPath[i] >= pDim->GetMemberCount())
+            return nullptr;
+        pMember = pDim->GetMember(rPath[i]);
+    }
+    return pMember;
+}
+
+// the data member of (row path prefix, column path prefix)
+const ScDPDataMember* lcl_ZetaCell(const ScDPRunningTotalState& rRunning, const ZetaPath& rRow, size_t nRowDepth,
+                                   const ZetaPath& rCol, size_t nColDepth)
+{
+    const ScDPResultMember* pRow = lcl_ZetaResultMember(rRunning.GetRowResRoot(), rRow, nRowDepth);
+    if (!pRow || !pRow->GetDataRoot())
+        return nullptr;
+    const ScDPDataMember* pCell = pRow->GetDataRoot();
+    for (size_t i = 0; i < nColDepth && pCell; ++i)
+    {
+        const ScDPDataDimension* pDim = pCell->GetChildDimension();
+        if (!pDim || rCol[i] >= pDim->GetMemberCount())
+            return nullptr;
+        pCell = pDim->GetMember(rCol[i]);
+    }
+    return pCell;
+}
+
+// depth of the dimension named rName along the path (-1: not reached by the path)
+sal_Int32 lcl_ZetaDimDepth(const ScDPResultMember* pRoot, const ZetaPath& rPath, const OUString& rName)
+{
+    const ScDPResultMember* pMember = pRoot;
+    for (size_t i = 0; pMember; ++i)
+    {
+        const ScDPResultDimension* pDim = pMember->GetChildDimension();
+        if (!pDim)
+            return -1;
+        if (pDim->GetName() == rName)
+            return i < rPath.size() ? static_cast<sal_Int32>(i) : -1;
+        if (i >= rPath.size() || rPath[i] >= pDim->GetMemberCount())
+            return -1;
+        pMember = pDim->GetMember(rPath[i]);
+    }
+    return -1;
+}
+
+void lcl_ZetaShowAs(ScDPAggData* pAggData, sal_Int32 eRefType, const sheet::DataPilotFieldReference& rRef,
+                    sheet::DataPilotFieldOrientation eRefOrient, tools::Long nMeasure,
+                    const ScDPSubTotalState& rSubState, const ScDPRunningTotalState& rRunning)
+{
+    const ZetaPath aRow = lcl_ZetaPath(rRunning.GetRowSorted());
+    const ZetaPath aCol = lcl_ZetaPath(rRunning.GetColSorted());
+    auto valueOf = [&](const ScDPDataMember* pCell, bool* pHasData) -> double
+    {
+        const ScDPAggData* pData = pCell ? pCell->GetConstAggData(nMeasure, rSubState) : nullptr;
+        bool bHas = pData && pData->HasData() && !pData->HasError();
+        if (pHasData)
+            *pHasData = bHas;
+        return bHas ? pData->GetAuxiliary() : 0.0;
+    };
+    const double fThis = pAggData->HasError() ? 0.0 : pAggData->GetAuxiliary();
+    const bool bThisHasData = pAggData->HasData() && !pAggData->HasError();
+    auto setRatio = [&](double fDen)
+    {
+        if (fDen == 0.0)
+            pAggData->SetEmpty(true);
+        else
+        {
+            pAggData->SetResult(fThis / fDen);
+            pAggData->SetEmpty(false);
+        }
+    };
+
+    if (eRefType == ZetaDPRef::PARENT_ROW_PERCENTAGE)
+    {
+        // the row one level up (the grand total row is its own parent)
+        size_t nDepth = aRow.empty() ? 0 : aRow.size() - 1;
+        setRatio(aRow.empty() ? fThis : valueOf(lcl_ZetaCell(rRunning, aRow, nDepth, aCol, aCol.size()), nullptr));
+        return;
+    }
+    if (eRefType == ZetaDPRef::PARENT_COLUMN_PERCENTAGE)
+    {
+        size_t nDepth = aCol.empty() ? 0 : aCol.size() - 1;
+        setRatio(aCol.empty() ? fThis : valueOf(lcl_ZetaCell(rRunning, aRow, aRow.size(), aCol, nDepth), nullptr));
+        return;
+    }
+
+    // base field types: only cells whose path includes the base field
+    const bool bInRow = eRefOrient == sheet::DataPilotFieldOrientation_ROW;
+    const bool bInCol = eRefOrient == sheet::DataPilotFieldOrientation_COLUMN;
+    if (!bInRow && !bInCol)
+    {
+        pAggData->SetError();
+        return;
+    }
+    const ZetaPath& rPath = bInRow ? aRow : aCol;
+    const ScDPResultMember* pRoot = bInRow ? rRunning.GetRowResRoot() : rRunning.GetColResRoot();
+    sal_Int32 nBase = lcl_ZetaDimDepth(pRoot, rPath, rRef.ReferenceField);
+    if (nBase < 0)
+    {
+        pAggData->SetEmpty(true);
+        return;
+    }
+
+    if (eRefType == ZetaDPRef::PARENT_PERCENTAGE)
+    {
+        const ScDPDataMember* pDen = bInRow ? lcl_ZetaCell(rRunning, aRow, nBase + 1, aCol, aCol.size())
+                                            : lcl_ZetaCell(rRunning, aRow, aRow.size(), aCol, nBase + 1);
+        setRatio(valueOf(pDen, nullptr));
+        return;
+    }
+
+    // running total % and rank: the same cell for every visible member of the base field
+    const ScDPResultMember* pParent = lcl_ZetaResultMember(pRoot, rPath, nBase);
+    const ScDPResultDimension* pBaseDim = pParent ? pParent->GetChildDimension() : nullptr;
+    if (!pBaseDim)
+    {
+        pAggData->SetEmpty(true);
+        return;
+    }
+    double fRunning = 0.0, fTotal = 0.0;
+    bool bPassed = false;
+    std::vector<double> aValues;
+    ZetaPath aOther = rPath;
+    for (tools::Long nPos = 0; nPos < pBaseDim->GetMemberCount(); ++nPos)
+    {
+        tools::Long nIndex = pBaseDim->GetSortedIndex(nPos);
+        const ScDPResultMember* pMember = pBaseDim->GetMember(nIndex);
+        if (!pMember || !pMember->IsVisible())
+            continue;
+        aOther[nBase] = nIndex;
+        const ScDPDataMember* pCell = bInRow ? lcl_ZetaCell(rRunning, aOther, aOther.size(), aCol, aCol.size())
+                                             : lcl_ZetaCell(rRunning, aRow, aRow.size(), aOther, aOther.size());
+        bool bHas = false;
+        double fVal = valueOf(pCell, &bHas);
+        fTotal += fVal;
+        if (!bPassed)
+            fRunning += fVal;
+        if (nIndex == rPath[nBase])
+            bPassed = true;
+        if (bHas)
+            aValues.push_back(fVal);
+    }
+    if (eRefType == ZetaDPRef::RUNNING_TOTAL_PERCENTAGE)
+    {
+        if (fTotal == 0.0)
+            pAggData->SetEmpty(true);
+        else
+        {
+            pAggData->SetResult(fRunning / fTotal);
+            pAggData->SetEmpty(false);
+        }
+        return;
+    }
+    // rank: empty cells are not ranked; equal values share the rank
+    if (!bThisHasData)
+    {
+        pAggData->SetEmpty(true);
+        return;
+    }
+    bool bAsc = eRefType == ZetaDPRef::RANK_ASCENDING;
+    double fRank = 1.0;
+    for (double f : aValues)
+        if (bAsc ? f < fThis : f > fThis)
+            fRank += 1.0;
+    pAggData->SetResult(fRank);
+    pAggData->SetEmpty(false);
+}
+
+}
+
 void ScDPDataMember::UpdateRunningTotals(
     ScDPResultMember* pRefMember, tools::Long nMeasure, bool bIsSubTotalRow,
     const ScDPSubTotalState& rSubState, ScDPRunningTotalState& rRunning,
@@ -2566,7 +2761,13 @@ void ScDPDataMember::UpdateRunningTotals(
                     sheet::DataPilotFieldReference aReferenceValue = pResultData->GetMeasureRefVal( nMemberMeasure );
                     sal_Int32 eRefType = aReferenceValue.ReferenceType;
 
-                    if ( eRefType == sheet::DataPilotFieldReferenceType::RUNNING_TOTAL ||
+                    if ( ZetaDPRef::isZeta(eRefType) )
+                    {
+                        lcl_ZetaShowAs( pAggData, eRefType, aReferenceValue,
+                                        pResultData->GetMeasureRefOrient( nMemberMeasure ),
+                                        nMemberMeasure, aLocalSubState, rRunning );
+                    }
+                    else if ( eRefType == sheet::DataPilotFieldReferenceType::RUNNING_TOTAL ||
                          eRefType == sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE ||
                          eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE ||
                          eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE )
@@ -2959,7 +3160,8 @@ std::unique_ptr<ScTokenArray> ScDPDataMember::ReplaceTokenMeasuresWithValues(con
 
                     if (eRefType == sheet::DataPilotFieldReferenceType::ITEM_DIFFERENCE
                         || eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE
-                        || eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE)
+                        || eRefType == sheet::DataPilotFieldReferenceType::ITEM_PERCENTAGE_DIFFERENCE
+                        || ZetaDPRef::isZeta(eRefType))
                     {
                         pAggData->SetAuxiliary(pAggData->GetResult());
                     }
