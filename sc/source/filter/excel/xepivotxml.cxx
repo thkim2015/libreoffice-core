@@ -1028,6 +1028,32 @@ void XclExpXmlPivotTableManager::Initialize()
             it = r.first;
         }
 
+        // ZETA: register the data fields' number formats now - styles.xml is written before
+        // the pivot table parts, so a format first met while writing a dataField got a
+        // numFmtId that styles.xml never defined
+        if (const ScDPSaveData* pSave = rDPObj.GetSaveData())
+        {
+            css::uno::Reference<css::container::XNameAccess> xDims;
+            if (auto xDimSupplier = const_cast<ScDPObject&>(rDPObj).GetSource())
+                xDims = xDimSupplier->getDimensions();
+            for (const auto& pDim : pSave->GetDimensions())
+            {
+                if (!xDims || pDim->GetOrientation() != sheet::DataPilotFieldOrientation_DATA
+                    || !xDims->hasByName(pDim->GetName()))
+                    continue;
+                try
+                {
+                    css::uno::Reference<css::beans::XPropertySet> xDimProps(
+                        xDims->getByName(pDim->GetName()), uno::UNO_QUERY_THROW);
+                    GetNumFmtBuffer().Insert(
+                        xDimProps->getPropertyValue(SC_UNONAME_NUMFMT).get<sal_uInt32>());
+                }
+                catch (uno::Exception&)
+                {
+                }
+            }
+        }
+
         XclExpXmlPivotTables *const p = it->second.get();
         p->AppendTable(&rDPObj, nCacheId, i+1);
     }
