@@ -18,6 +18,9 @@
  */
 
 #include <pivottablebuffer.hxx>
+#include <dpzetashowas.hxx>
+#include <com/sun/star/xml/Attribute.hpp>
+#include <sax/fastattribs.hxx>
 #include <dputil.hxx>
 
 #include <set>
@@ -763,6 +766,8 @@ void PivotTableField::convertDataField( const PTDataFieldModel& rDataField )
         case XML_percentOfTotal:    aReference.ReferenceType = DataPilotFieldReferenceType::TOTAL_PERCENTAGE;           break;
         case XML_index:             aReference.ReferenceType = DataPilotFieldReferenceType::INDEX;                      break;
     }
+    if( rDataField.mnZetaShowAs != 0 )
+        aReference.ReferenceType = rDataField.mnZetaShowAs;
     if( aReference.ReferenceType == DataPilotFieldReferenceType::NONE )
         return;
 
@@ -1268,6 +1273,27 @@ void PivotTable::importDataField( const AttributeList& rAttribs )
     aModel.mnBaseItem   = rAttribs.getInteger( XML_baseItem, -1 );
     aModel.mnNumFmtId   = rAttribs.getInteger( XML_numFmtId, 0 );
     maDataFields.push_back( aModel );
+}
+
+void PivotTable::importDataFieldExt( const AttributeList& rAttribs )
+{
+    if( maDataFields.empty() )
+        return;
+    // pivotShowAs has no token: read it from the unknown attributes
+    const css::uno::Sequence< css::xml::Attribute > aUnknown = rAttribs.getFastAttributeList()->getUnknownAttributes();
+    for( const auto& rAttr : aUnknown )
+    {
+        if( !rAttr.Name.endsWith( u"pivotShowAs" ) )
+            continue;
+        sal_Int32 nType = 0;
+        if( rAttr.Value == u"percentOfParentRow" ) nType = ZetaDPRef::PARENT_ROW_PERCENTAGE;
+        else if( rAttr.Value == u"percentOfParentCol" ) nType = ZetaDPRef::PARENT_COLUMN_PERCENTAGE;
+        else if( rAttr.Value == u"percentOfParent" ) nType = ZetaDPRef::PARENT_PERCENTAGE;
+        else if( rAttr.Value == u"percentOfRunningTotal" ) nType = ZetaDPRef::RUNNING_TOTAL_PERCENTAGE;
+        else if( rAttr.Value == u"rankAscending" ) nType = ZetaDPRef::RANK_ASCENDING;
+        else if( rAttr.Value == u"rankDescending" ) nType = ZetaDPRef::RANK_DESCENDING;
+        maDataFields.back().mnZetaShowAs = nType;
+    }
 }
 
 void PivotTable::importPTDefinition( SequenceInputStream& rStrm )

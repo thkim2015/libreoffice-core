@@ -218,7 +218,17 @@ ContextHandlerRef PivotTableFragment::onCreateContext( sal_Int32 nElement, const
             if( nElement == XLS_TOKEN( pageField ) ) mrPivotTable.importPageField( rAttribs );
         break;
         case XLS_TOKEN( dataFields ):
-            if( nElement == XLS_TOKEN( dataField ) ) mrPivotTable.importDataField( rAttribs );
+            if( nElement == XLS_TOKEN( dataField ) ) { mrPivotTable.importDataField( rAttribs ); return this; }
+        break;
+        // ZETA: Excel 2010 'show values as' in <dataField><extLst><ext><x14:dataField pivotShowAs>
+        case XLS_TOKEN( dataField ):
+            if( nElement == XLS_TOKEN( extLst ) ) return this;
+        break;
+        case XLS_TOKEN( extLst ):
+            if( nElement == XLS_TOKEN( ext ) ) return this;
+        break;
+        case XLS_TOKEN( ext ):
+            if( nElement == XLS14_TOKEN( dataField ) ) mrPivotTable.importDataFieldExt( rAttribs );
         break;
         case XLS_TOKEN( filters ):
             if( nElement == XLS_TOKEN( filter ) ) return new PivotTableFilterContext( *this, mrPivotTable.createTableFilter() );

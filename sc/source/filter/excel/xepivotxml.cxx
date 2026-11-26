@@ -8,6 +8,7 @@
  */
 
 #include <xepivotxml.hxx>
+#include <dpzetashowas.hxx>
 #include <dpcache.hxx>
 #include <pivot/PivotTableFormats.hxx>
 #include <pivot/PivotTableResultTraverser.hxx>
@@ -2147,6 +2148,7 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
             const char* pSubtotal = toOOXMLSubtotalType(rDim.GetFunction());
             if (pSubtotal)
                 pItemAttList->add(XML_subtotal, pSubtotal);
+            const char* pZetaShowAs = nullptr;
             // ZetaOffice: 'Show values as' (read into Reference, was not written)
             if (const sheet::DataPilotFieldReference* pRef = rDim.GetReferenceValue();
                 pRef && pRef->ReferenceType != sheet::DataPilotFieldReferenceType::NONE)
@@ -2163,6 +2165,24 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                     case sheet::DataPilotFieldReferenceType::TOTAL_PERCENTAGE: pShowAs = "percentOfTotal"; break;
                     case sheet::DataPilotFieldReferenceType::INDEX: pShowAs = "index"; break;
                     default: break;
+                }
+                // ZETA: Excel 2010 types go to <x14:dataField pivotShowAs> (no showDataAs)
+                if (ZetaDPRef::isZeta(pRef->ReferenceType))
+                {
+                    switch (pRef->ReferenceType)
+                    {
+                        case ZetaDPRef::PARENT_ROW_PERCENTAGE: pZetaShowAs = "percentOfParentRow"; break;
+                        case ZetaDPRef::PARENT_COLUMN_PERCENTAGE: pZetaShowAs = "percentOfParentCol"; break;
+                        case ZetaDPRef::PARENT_PERCENTAGE: pZetaShowAs = "percentOfParent"; break;
+                        case ZetaDPRef::RUNNING_TOTAL_PERCENTAGE: pZetaShowAs = "percentOfRunningTotal"; break;
+                        case ZetaDPRef::RANK_ASCENDING: pZetaShowAs = "rankAscending"; break;
+                        case ZetaDPRef::RANK_DESCENDING: pZetaShowAs = "rankDescending"; break;
+                    }
+                    size_t nBaseField = 0;
+                    if (auto it = aNameToIdMap.find(pRef->ReferenceField); it != aNameToIdMap.end())
+                        nBaseField = it->second;
+                    pItemAttList->add(XML_baseField, OString::number(nBaseField));
+                    pItemAttList->add(XML_baseItem, "0");
                 }
                 if (pShowAs)
                 {
@@ -2204,7 +2224,19 @@ void XclExpXmlPivotTables::SavePivotTableXml( XclExpXmlStream& rStrm, const ScDP
                     // Just skip exporting number format
                 }
             }
-            pPivotStrm->singleElement(XML_dataField, pItemAttList);
+            if (pZetaShowAs)
+            {
+                pPivotStrm->startElement(XML_dataField, pItemAttList);
+                // pivotShowAs has no token: written as raw markup inside <dataField>
+                OString aExt = "<extLst><ext uri=\"{E15A36E0-9728-4e99-A89B-3F7291B0FE68}\" "
+                               "xmlns:x14=\"http://schemas.microsoft.com/office/spreadsheetml/2009/9/main\">"
+                               "<x14:dataField pivotShowAs=\""_ostr
+                               + OString(pZetaShowAs) + "\"/></ext></extLst>";
+                pPivotStrm->write(std::string_view(aExt));
+                pPivotStrm->endElement(XML_dataField);
+            }
+            else
+                pPivotStrm->singleElement(XML_dataField, pItemAttList);
         }
 
         pPivotStrm->endElement(XML_dataFields);
