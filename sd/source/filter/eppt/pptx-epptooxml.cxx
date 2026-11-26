@@ -20,6 +20,7 @@
 #include <config_features.h>
 
 #include <stdio.h>
+#include <set>
 #include <oox/drawingml/clrscheme.hxx>
 #include <oox/token/namespaces.hxx>
 #include <oox/token/tokens.hxx>
@@ -181,11 +182,14 @@ class PowerPointShapeExport : public ShapeExport
     bool                mbMaster;
     /// True while writing a slideMaster part; a slideLayout part also uses PageType::MASTER.
     bool                mbSlideMasterPart = false;
+    /// Placeholder types this exporter has written so far (one exporter per shape tree).
+    std::set<PlaceholderType> maWrittenPlaceholders;
 public:
     PowerPointShapeExport(FSHelperPtr pFS, ShapeHashMap* pShapeMap, PowerPointExport* pFB);
     void                SetMaster(bool bMaster);
     void                SetPageType(PageType ePageType);
     void                SetSlideMasterPart(bool bSlideMasterPart) { mbSlideMasterPart = bSlideMasterPart; }
+    bool                HasWrittenPlaceholder(PlaceholderType ePlaceholder) const { return maWrittenPlaceholders.count(ePlaceholder) != 0; }
     ShapeExport&        WriteNonVisualProperties(const Reference< XShape >& xShape) override;
     ShapeExport&        WriteTextShape(const Reference< XShape >& xShape) override;
     ShapeExport&        WriteUnknownShape(const Reference< XShape >& xShape) override;
@@ -3248,6 +3252,7 @@ bool PowerPointShapeExport::WritePlaceholder(const Reference< XShape >& xShape, 
 
 ShapeExport& PowerPointShapeExport::WritePlaceholderShape(const Reference< XShape >& xShape, PlaceholderType ePlaceholder)
 {
+    maWrittenPlaceholders.insert(ePlaceholder);
     Reference<XPropertySet> xProps(xShape, UNO_QUERY);
     bool bUseBackground(false);
     if (xProps.is() && xProps->getPropertySetInfo()->hasPropertyByName(u"FillUseSlideBackground"_ustr))
@@ -3901,8 +3906,8 @@ void PowerPointExport::WriteMasterOwnPlaceholders(PowerPointShapeExport& rDML,
          { std::pair(Title, PresObjKind::Title), std::pair(Outliner, PresObjKind::Outline) })
     {
         assert(isPlaceholderAllowedOnSlideMaster(ePlaceholder));
-        if (pPage->GetPresObj(ePresObjKind))
-            continue; // the shape tree has written the page's own
+        if (pPage->GetPresObj(ePresObjKind) || rDML.HasWrittenPlaceholder(ePlaceholder))
+            continue; // the shape tree has written the page's own (an imported one need not be a PresObj)
 
         // The pages standing for one slide master are its layouts, and a layout placeholder was
         // imported with the geometry and the formatting it inherits from the master, so the first
