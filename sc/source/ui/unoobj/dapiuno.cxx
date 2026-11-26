@@ -2300,6 +2300,11 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
         ScDPSaveDimension* pDim = GetDPDimension();
         aRet <<= pDim ? pDim->GetZetaNumFmt() : sal_Int32( -1 );
     }
+    else if ( aPropertyName == "ZetaShowAsTypes" )
+    {
+        // ZETA: this build computes the Excel 2010 'show values as' types (dpzetashowas.hxx)
+        aRet <<= true;
+    }
     else if ( aPropertyName == "ZetaHiddenItems" )
     {
         std::vector< OUString > aOut;
