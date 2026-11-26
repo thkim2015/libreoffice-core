@@ -1416,6 +1416,69 @@ namespace //local functions originally from docfmt.cxx
         }
     }
 
+    // weboffice: Word records direct paragraph formatting (alignment, indents, spacing, ...)
+    // made while tracking changes as a paragraph property revision (DOCX w:pPrChange).
+    // Writer only tracked character attributes (RedlineType::Format), so these changes
+    // were applied untracked.
+    bool lcl_IsTrackedParaItem(sal_uInt16 nWhich)
+    {
+        if (isPARATR(nWhich))
+            return nWhich != RES_PARATR_RSID;
+        switch (nWhich)
+        {
+            case RES_MARGIN_FIRSTLINE:
+            case RES_MARGIN_TEXTLEFT:
+            case RES_MARGIN_RIGHT:
+            case RES_UL_SPACE:
+            case RES_BREAK:
+            case RES_KEEP:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    bool lcl_HasTrackedParaItem(const SfxItemSet& rSet)
+    {
+        for (SfxItemIter aIter(rSet); !aIter.IsAtEnd(); aIter.NextItem())
+        {
+            const SfxPoolItem* pItem = aIter.GetCurItem();
+            if (pItem && !IsInvalidItem(pItem) && lcl_IsTrackedParaItem(pItem->Which()))
+                return true;
+        }
+        return false;
+    }
+
+    // one ParagraphFormat redline per paragraph (AppendRedline() does not support
+    // multi-paragraph ones, see SwEditShell::SetTextFormatColl()); the extra data keeps
+    // the previous values of the changed items, so rejecting restores them
+    void lcl_SetParaFormatRedlines(SwDoc& rDoc, const SwPaM& rRg, const SfxItemSet& rNewSet)
+    {
+        SwNodeIndex aIdx(rRg.Start()->GetNode());
+        const SwNodeIndex aEndNd(rRg.End()->GetNode());
+        for (; aIdx <= aEndNd; ++aIdx)
+        {
+            SwTextNode* pNode = aIdx.GetNode().GetTextNode();
+            if (!pNode)
+                continue;
+            auto pOld = std::make_shared<SfxItemSet>(rDoc.GetAttrPool(), rNewSet.GetRanges());
+            for (SfxItemIter aIter(rNewSet); !aIter.IsAtEnd(); aIter.NextItem())
+            {
+                const SfxPoolItem* pItem = aIter.GetCurItem();
+                if (pItem && !IsInvalidItem(pItem) && lcl_IsTrackedParaItem(pItem->Which()))
+                    pOld->Put(pNode->GetAttr(pItem->Which()));
+            }
+            SwPaM aPam(*pNode, 0, *pNode, pNode->GetText().getLength());
+            SwRangeRedline* pRedline = new SwRangeRedline(RedlineType::ParagraphFormat, aPam);
+            auto const result(rDoc.getIDocumentRedlineAccess().AppendRedline(pRedline, true));
+            if (IDocumentRedlineAccess::AppendResult::IGNORED == result)
+                continue;
+            std::unique_ptr<SwRedlineExtraData_FormatColl> xExtra(
+                new SwRedlineExtraData_FormatColl(UIName(u""_ustr), SwPoolFormatId::UNKNOWN, pOld));
+            pRedline->SetExtraData(xExtra.get());
+        }
+    }
+
     /// Insert Hints according to content types;
     // Is used in SwDoc::Insert(..., SwFormatHint &rHt)
 
@@ -1494,6 +1557,15 @@ namespace //local functions originally from docfmt.cxx
         bool bRet = false;
         const SwPosition *pStart = rRg.Start(), *pEnd = rRg.End();
         SwContentNode* pNode = pStart->GetNode().GetContentNode();
+
+        // weboffice: track direct paragraph formatting, see lcl_SetParaFormatRedlines()
+        if (rDoc.getIDocumentRedlineAccess().IsRedlineOn() && pOtherSet
+            && lcl_HasTrackedParaItem(*pOtherSet))
+        {
+            if (pUndo && !(pCharSet && pCharSet->Count()))
+                pUndo->SaveRedlineData(rRg, false);
+            lcl_SetParaFormatRedlines(rDoc, rRg, *pOtherSet);
+        }
 
         if( pNode && pNode->IsTextNode() )
         {
