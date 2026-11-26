@@ -2294,6 +2294,12 @@ Any SAL_CALL ScDataPilotFieldObj::getPropertyValue( const OUString& aPropertyNam
         ScDPSaveDimension* pDim = GetDPDimension();
         aRet <<= pDim ? pDim->GetZetaFilter() : OUString();
     }
+    else if ( aPropertyName == "ZetaNumberFormat" )
+    {
+        // ZETA: the data field's own number format (-1 = the source cells' format)
+        ScDPSaveDimension* pDim = GetDPDimension();
+        aRet <<= pDim ? pDim->GetZetaNumFmt() : sal_Int32( -1 );
+    }
     else if ( aPropertyName == "ZetaHiddenItems" )
     {
         std::vector< OUString > aOut;
