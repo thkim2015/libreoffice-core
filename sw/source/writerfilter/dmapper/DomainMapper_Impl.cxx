@@ -6149,6 +6149,34 @@ void DomainMapper_Impl::SetNumberFormat( const OUString& rCommand,
                 DBG_UNHANDLED_EXCEPTION("writerfilter.dmapper");
             }
         }
+        else if (sCommand == "TIME" && !bDetectFormat)
+        {
+            // weboffice: Word shows a TIME field without \@ in the default time (with AM/PM)
+            // of the field language; the DOCX/DOC export writes it without a switch again
+            try
+            {
+                css::uno::Reference<css::i18n::XNumberFormatCode> const xNumberFormatCode =
+                    i18n::NumberFormatMapper::create(m_xComponentContext);
+                OUString sCode = xNumberFormatCode->getFormatCode(
+                    css::i18n::NumberFormatIndex::TIME_HHMMAMPM, aCurrentLocale).Code;
+                uno::Reference<util::XNumberFormatsSupplier> xSupplier(
+                    static_cast<cppu::OWeakObject*>(m_xTextDocument.get()), uno::UNO_QUERY);
+                if (xSupplier && !sCode.isEmpty())
+                {
+                    uno::Reference<util::XNumberFormats> xFormats = xSupplier->getNumberFormats();
+                    sal_Int32 nKey = xFormats->queryKey(sCode, aCurrentLocale, false);
+                    if (nKey == -1)
+                        nKey = xFormats->addNew(sCode, aCurrentLocale);
+                    xPropertySet->setPropertyValue(getPropertyName(PROP_NUMBER_FORMAT),
+                                                   uno::Any(nKey));
+                    return;
+                }
+            }
+            catch (const uno::Exception&)
+            {
+                DBG_UNHANDLED_EXCEPTION("writerfilter.dmapper");
+            }
+        }
         else if (sCommand == "DATE" && !bDetectFormat)
         {
             // Word shows a DATE field without \@ in the default short date of the field

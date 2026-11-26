@@ -2865,6 +2865,20 @@ bool MSWordExportBase::IsWordDefaultDateFormat(const SwField& rField)
     return pFormat->GetFormatstring() == sCode;
 }
 
+bool MSWordExportBase::IsWordDefaultTimeFormat(const SwField& rField)
+{
+    // weboffice: the format the import gives a TIME field without \@ (see
+    // DomainMapper_Impl::SetNumberFormat): the time with AM/PM of the field language.
+    SvNumberFormatter* pFormatter = m_rDoc.GetNumberFormatter();
+    const LanguageType nLng = rField.GetLanguage();
+    const SvNumberformat* pFormat = pFormatter->GetEntry(rField.GetUntypedFormat());
+    if (!pFormat || pFormat->GetLanguage() != nLng)
+        return false;
+    const SvNumberformat* pTime
+        = pFormatter->GetEntry(pFormatter->GetFormatIndex(NF_TIME_HHMMAMPM, nLng));
+    return pTime && pFormat->GetFormatstring() == pTime->GetFormatstring();
+}
+
 bool MSWordExportBase::GetNumberFormat(const SwField& rField, OUString& rStr)
 {
     // Returns a date or time format string by using the US NfKeywordTable
@@ -3296,6 +3310,12 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
             {
                 // imported from a DATE field without \@: keep it without a format switch
                 GetExport().OutputField(pField, ww::eDATE, FieldString(ww::eDATE));
+            }
+            else if (!(SwDateTimeSubType::Date & nSubType)
+                     && GetExport().IsWordDefaultTimeFormat(*pField))
+            {
+                // weboffice: imported from (or inserted like) a TIME field without \@
+                GetExport().OutputField(pField, ww::eTIME, FieldString(ww::eTIME));
             }
             else if (!GetExport().GetNumberFormat(*pField, sStr))
                 bWriteExpand = true;
