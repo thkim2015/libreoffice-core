@@ -2192,6 +2192,19 @@ SwXTextField::setPropertyValue(
 {
     SolarMutexGuard aGuard;
     SwField const*const pField = m_pImpl->GetField();
+    // weboffice: Word 'Preserve formatting during updates' (field dialog) - DOCX export writes
+    // "\* MERGEFORMAT" from SwField::IsWordMergeFormat(), which had no UNO access
+    if (rPropertyName == u"ZetaWordMergeFormat")
+    {
+        bool bMerge = false;
+        rValue >>= bMerge;
+        if (pField)
+            SetWordSwitches(bMerge, pField->IsWordNoHyperlink(), pField->GetWordNumberPicture(),
+                            pField->IsWordPageRelative());
+        else if (m_pImpl->m_pProps)
+            m_pImpl->m_pProps->bWordMergeFormat = bMerge;
+        return;
+    }
     const SfxItemPropertySet* _pPropSet = aSwMapProvider.GetPropertySet(
                 lcl_GetPropertyMapOfService(m_pImpl->m_nServiceId));
     const SfxItemPropertyMapEntry*   pEntry = _pPropSet->getPropertyMap().getByName(rPropertyName);
@@ -2356,6 +2369,13 @@ uno::Any SAL_CALL SwXTextField::getPropertyValue(const OUString& rPropertyName)
     SolarMutexGuard aGuard;
     uno::Any aRet;
     SwField const*const pField = m_pImpl->GetField();
+    // weboffice: see setPropertyValue - "\* MERGEFORMAT" switch for DOCX
+    if (rPropertyName == u"ZetaWordMergeFormat")
+    {
+        if (pField)
+            return uno::Any(pField->IsWordMergeFormat());
+        return uno::Any(m_pImpl->m_pProps && m_pImpl->m_pProps->bWordMergeFormat);
+    }
     const SfxItemPropertySet* _pPropSet = aSwMapProvider.GetPropertySet(
                 lcl_GetPropertyMapOfService(m_pImpl->m_nServiceId));
     const SfxItemPropertyMapEntry*   pEntry = _pPropSet->getPropertyMap().getByName(rPropertyName);
