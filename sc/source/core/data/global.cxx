@@ -403,9 +403,11 @@ OUString ScGlobal::GetErrorString(FormulaError nErr)
         case FormulaError::PairExpected:
         case FormulaError::VariableExpected:
         case FormulaError::ParameterExpected:
-        case FormulaError::CircularReference:
         case FormulaError::UnknownToken:
             return ScCompiler::GetNativeSymbol(ocErrValue);
+        // ZETA: Excel shows a circular reference cell as 0 (warning dialog only)
+        case FormulaError::CircularReference:
+            return u"0"_ustr;
         default:
             // weboffice: no "Err:nnn" in Excel; any other Calc-only error is shown as #VALUE!
             return ScCompiler::GetNativeSymbol(ocErrValue);

@@ -78,6 +78,11 @@
 #include <comphelper/lok.hxx>
 #include <conditio.hxx>
 #include <columnspanset.hxx>
+#ifdef EMSCRIPTEN
+#include <emscripten.h>
+#include <emscripten/em_js.h>
+EM_JS_DEPS(zetaFormulaCorrection, "$UTF8ToString");
+#endif
 #include <stringutil.hxx>
 #include <SparklineList.hxx>
 #include <SheetViewManager.hxx>
@@ -631,8 +636,40 @@ void parseAndCorrectFormula(std::shared_ptr<FormulaProcessingContext> context)
     finalizeFormulaProcessing(context);
 }
 
+#ifdef EMSCRIPTEN
+// ZETA: ask the page (Excel "Microsoft Excel" dialog) instead of the Qt query box.
+// 1 = accept, 0 = reject, -1 = page hook unavailable (fall back to the Qt box)
+static int lcl_zetaFormulaCorrection(const OUString& rCorrected, const OUString& rTyped)
+{
+    OString aCorrected = OUStringToOString(rCorrected, RTL_TEXTENCODING_UTF8);
+    OString aTyped = OUStringToOString(rTyped, RTL_TEXTENCODING_UTF8);
+    return EM_ASM_INT({
+        try {
+            const ui = globalThis.zetaBasicUi;
+            if (!ui || typeof ui.formulaCorrection !== 'function') return -1;
+            return ui.formulaCorrection(UTF8ToString($0), UTF8ToString($1)) ? 1 : 0;
+        } catch (e) { return -1; }
+    }, aCorrected.getStr(), aTyped.getStr());
+}
+#endif
+
 void runAutoCorrectQueryAsync(const std::shared_ptr<FormulaProcessingContext>& context)
 {
+#ifdef EMSCRIPTEN
+    const int nZeta = lcl_zetaFormulaCorrection(context->aCorrectedFormula, context->aFormula);
+    if (nZeta >= 0)
+    {
+        if (nZeta == 1) {
+            context->aFormula = context->aCorrectedFormula;
+            parseAndCorrectFormula(context);
+        } else {
+            if (context->pArrFirst)
+                context->pArr = context->pArrFirst;
+            finalizeFormulaProcessing(context);
+        }
+        return;
+    }
+#endif
     auto aQueryBox = std::make_shared<AutoCorrectQuery>(context->GetViewData().GetDialogParent(), context->aCorrectedFormula);
     weld::DialogController::runAsync(aQueryBox, [context] (int nResult)
     {

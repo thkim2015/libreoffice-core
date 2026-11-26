@@ -680,6 +680,13 @@ void XclXmlUtils::GetFormulaTypeAndValue( ScFormulaCell& rCell, const char*& rsT
     switch (aResValue.meType)
     {
         case sc::FormulaResultValue::Error:
+            // ZETA: Excel writes a circular reference cell as the number 0
+            if (aResValue.mnError == FormulaError::CircularReference)
+            {
+                rsType = "n";
+                rsValue = u"0"_ustr;
+                break;
+            }
             rsType = "e";
             rsValue = ToOUString(lcl_GetErrorString(aResValue.mnError));
         break;
