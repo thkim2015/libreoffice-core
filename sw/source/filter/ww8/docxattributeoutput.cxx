@@ -9630,7 +9630,13 @@ void DocxAttributeOutput::WriteField_Impl(const SwField *const pField,
             lcl_Append("\\# \"" + rPicture + "\" ");
         if (pField->IsWordMergeFormat()
             && infos.sCmd.toAsciiUpperCase().indexOf("MERGEFORMAT") < 0)
-            lcl_Append(u"\\* MERGEFORMAT "_ustr);
+        {
+            // weboffice: Word's field dialog separates the switch with two spaces ("PAGE  \\* MERGEFORMAT")
+            sal_Int32 nEnd = infos.sCmd.getLength();
+            while (nEnd > 0 && infos.sCmd[nEnd - 1] == ' ')
+                --nEnd;
+            infos.sCmd = OUString::Concat(infos.sCmd.subView(0, nEnd)) + u"  \\* MERGEFORMAT ";
+        }
     }
     infos.eType = eType;
     infos.bClose = bool(FieldFlags::Close & nMode);
