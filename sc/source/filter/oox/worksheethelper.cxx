@@ -375,6 +375,10 @@ private:
 
     /** Converts outline grouping for the passed column or row. */
     void                convertOutlines( OutlineLevelVec& orLevels, sal_Int32 nColRow, sal_Int32 nLevel, bool bCollapsed, bool bRows );
+    // ZETA: summary above/left - collapse flag of the column/row before each open level, and of the previous range
+    ::std::vector< bool > maColCollapse, maRowCollapse;
+    bool                mbPrevColCollapsed = false;
+    bool                mbPrevRowCollapsed = false;
     /** Groups columns or rows for the given range. */
     void                groupColumnsOrRows( sal_Int32 nFirstColRow, sal_Int32 nLastColRow, bool bCollapsed, bool bRows );
 
@@ -1202,6 +1206,8 @@ void WorksheetGlobals::convertColumns()
     sal_Int32 nMaxCol = mrMaxApiPos.Col();
     // stores first grouped column index for each level
     OutlineLevelVec aColLevels;
+    maColCollapse.clear();
+    mbPrevColCollapsed = false;
 
     for (auto const& colModel : maColModels)
     {
@@ -1261,6 +1267,8 @@ void WorksheetGlobals::convertRows(const std::vector<sc::ColRowSpan>& rSpans)
     sal_Int32 nMaxRow = mrMaxApiPos.Row();
     // stores first grouped row index for each level
     OutlineLevelVec aRowLevels;
+    maRowCollapse.clear();
+    mbPrevRowCollapsed = false;
 
     for (auto const& rowModel : maRowModels)
     {
@@ -1338,11 +1346,21 @@ void WorksheetGlobals::convertOutlines( OutlineLevelVec& orLevels,
     OSL_ENSURE( nLevel >= 0, "WorksheetGlobals::convertOutlines - negative outline level" );
     nLevel = ::std::max< sal_Int32 >( nLevel, 0 );
 
+    // ZETA: with summary rows above (summaryBelow="0") or summary columns left (summaryRight="0"),
+    // Excel writes the collapsed flag on the row/column before the group, not after it
+    const bSummaryBefore = bRows ? !maSheetSett.isSummaryBelow() : !maSheetSett.isSummaryRight();
+    ::std::vector< bool >& rCollapse = bRows ? maRowCollapse : maColCollapse;
+    bool& rbPrevCollapsed = bRows ? mbPrevRowCollapsed : mbPrevColCollapsed;
+    const bool bThisCollapsed = bCollapsed;
+
     sal_Int32 nSize = orLevels.size();
     if( nSize < nLevel )
     {
         // Outline level increased. Push the begin column position.
         orLevels.insert(orLevels.end(), nLevel - nSize, nColRow);
+        // the summary before the group belongs to the outermost opened level only
+        for( sal_Int32 nIndex = nSize; nIndex < nLevel; ++nIndex )
+            rCollapse.push_back( (nIndex == nSize) && rbPrevCollapsed );
     }
     else if( nLevel < nSize )
     {
@@ -1351,10 +1369,18 @@ void WorksheetGlobals::convertOutlines( OutlineLevelVec& orLevels,
         {
             sal_Int32 nFirstInLevel = orLevels.back();
             orLevels.pop_back();
-            groupColumnsOrRows( nFirstInLevel, nColRow - 1, bCollapsed, bRows );
+            bool bLevelCollapsed = bCollapsed;
+            if( !rCollapse.empty() )
+            {
+                if( bSummaryBefore )
+                    bLevelCollapsed = rCollapse.back();
+                rCollapse.pop_back();
+            }
+            groupColumnsOrRows( nFirstInLevel, nColRow - 1, bLevelCollapsed, bRows );
             bCollapsed = false; // collapse only once
         }
     }
+    rbPrevCollapsed = bThisCollapsed;
 }
 
 void WorksheetGlobals::groupColumnsOrRows( sal_Int32 nFirstColRow, sal_Int32 nLastColRow, bool bCollapse, bool bRows )
