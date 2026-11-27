@@ -2287,6 +2287,21 @@ Reference< XShape > const & Shape::createAndInsert(
                 aProperties.push_back(comphelper::makePropertyValue(u"SpPrLnSolidFillResolvedSchemeClr"_ustr, aResolvedSchemeClr.getColor(rGraphicHelper, nFillPhClr)));
                 aProperties.push_back(comphelper::makePropertyValue(u"SpPrLnSolidFillSchemeClrTransformations"_ustr, aLineProperties.maLineFill.maFillColor.getTransformations()));
             }
+            // ZETA: an srgbClr (or other non-scheme colour) with transformations (tint, shade, satMod ...)
+            // is flattened to one RGB on import; keep the base colour and the transformations so that
+            // the pptx export can write them back unchanged when the user did not change the colour
+            auto lcl_keepSrgb = [&](const Color& rColor, ::Color nPhClr, const OUString& rKey)
+            {
+                if (rColor.isPlaceHolder() || !rColor.isUsed() || !rColor.getSchemeColorName().isEmpty()
+                    || !rColor.getTransformations().hasElements())
+                    return;
+                Color aBase(rColor);
+                aBase.clearTransformations();
+                aProperties.push_back(comphelper::makePropertyValue(rKey, aBase.getColor(rGraphicHelper, nPhClr)));
+                aProperties.push_back(comphelper::makePropertyValue(rKey + "Transformations", rColor.getTransformations()));
+            };
+            lcl_keepSrgb(aFillProperties.maFillColor, nFillPhClr, u"ZetaSpPrSolidFillSrgbClr"_ustr);
+            lcl_keepSrgb(aLineProperties.maLineFill.maFillColor, nLinePhClr, u"ZetaSpPrLnSolidFillSrgbClr"_ustr);
             putPropertiesToGrabBag(comphelper::containerToSequence(aProperties));
 
             // Store original gradient fill of the shape to InteropGrabBag
