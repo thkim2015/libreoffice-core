@@ -8,6 +8,7 @@
  */
 
 #include "docxsdrexport.hxx"
+#include <cmath>
 #include <com/sun/star/beans/XPropertySet.hpp>
 #include <com/sun/star/drawing/PointSequenceSequence.hpp>
 #include <editeng/lrspitem.hxx>
@@ -1551,8 +1552,9 @@ void DocxSdrExport::writeDMLDrawing(const SdrObject* pSdrObject, const SwFrameFo
         }
         pFS->startElementNS(XML_wp14, XML_sizeRelH, XML_relativeFrom, sValue);
         pFS->startElementNS(XML_wp14, XML_pctWidth);
-        pFS->writeEscaped(
-            OUString::number(*pSdrObject->GetRelativeWidth() * 100 * oox::drawingml::PER_PERCENT));
+        // weboffice: 소수 %도 정수 천분율로(부동 소수 꼬리 없이)
+        pFS->writeEscaped(OUString::number(static_cast<sal_Int64>(
+            std::round(*pSdrObject->GetRelativeWidth() * 100 * oox::drawingml::PER_PERCENT))));
         pFS->endElementNS(XML_wp14, XML_pctWidth);
         pFS->endElementNS(XML_wp14, XML_sizeRelH);
     }
@@ -1577,8 +1579,8 @@ void DocxSdrExport::writeDMLDrawing(const SdrObject* pSdrObject, const SwFrameFo
         }
         pFS->startElementNS(XML_wp14, XML_sizeRelV, XML_relativeFrom, sValue);
         pFS->startElementNS(XML_wp14, XML_pctHeight);
-        pFS->writeEscaped(
-            OUString::number(*pSdrObject->GetRelativeHeight() * 100 * oox::drawingml::PER_PERCENT));
+        pFS->writeEscaped(OUString::number(static_cast<sal_Int64>(
+            std::round(*pSdrObject->GetRelativeHeight() * 100 * oox::drawingml::PER_PERCENT))));
         pFS->endElementNS(XML_wp14, XML_pctHeight);
         pFS->endElementNS(XML_wp14, XML_sizeRelV);
     }

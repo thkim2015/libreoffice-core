@@ -1690,6 +1690,19 @@ void GraphicImport::lcl_sprm(Sprm& rSprm)
                     {
                         xPropertySet->setPropertyValue(aProperty,
                                                        uno::Any(nPositivePercentage));
+                        // weboffice: Word는 상대 크기를 소수 %(53.8%)로 쓴다 — 틀 서식은 정수 %지만
+                        // 그리기 개체에는 정확한 비율을 둬서 배치·DOCX 내보내기가 Word 값을 쓰게 한다
+                        const double fExact = m_rPositivePercentages.front().toDouble() / oox::drawingml::PER_PERCENT;
+                        if (fExact != double(nPositivePercentage))
+                        {
+                            if (SdrObject* pObj = SdrObject::getSdrObjectFromXShape(m_xShape))
+                            {
+                                if (nSprmId == NS_ooxml::LN_CT_SizeRelH_pctWidth)
+                                    pObj->SetRelativeWidth(fExact / 100.0);
+                                else
+                                    pObj->SetRelativeHeight(fExact / 100.0);
+                            }
+                        }
                     }
                 }
             }
