@@ -472,6 +472,18 @@ void DrawingML::WriteSolidFill( const ::Color nColor, const Sequence< PropertyVa
     mpFS->endElementNS(XML_a, XML_solidFill);
 }
 
+namespace
+{
+// ZETA: the kept srgbClr transformations can be written back only when their alpha agrees with
+// the current transparency (an alpha in the list is replaced by nAlpha, a missing one is not added)
+bool lcl_zetaSrgbAlphaFits(const Sequence<PropertyValue>& rTransformations, sal_Int32 nAlpha)
+{
+    bool bHasAlpha = std::any_of(rTransformations.begin(), rTransformations.end(),
+                                 [](const PropertyValue& r) { return r.Name == "alpha"; });
+    return bHasAlpha == (nAlpha < MAX_PERCENT);
+}
+}
+
 void DrawingML::WriteSolidFill( const Reference< XPropertySet >& rXPropSet )
 {
     // get fill color
@@ -483,6 +495,8 @@ void DrawingML::WriteSolidFill( const Reference< XPropertySet >& rXPropSet )
     OUString sColorFillScheme;
     sal_uInt32 nOriginalColor = 0;
     Sequence< PropertyValue > aStyleProperties, aTransformations;
+    ::Color nZetaSrgbBase;
+    Sequence< PropertyValue > aZetaSrgbTransformations;
     if ( GetProperty( rXPropSet, u"InteropGrabBag"_ustr ) )
     {
         Sequence< PropertyValue > aGrabBag;
@@ -497,6 +511,10 @@ void DrawingML::WriteSolidFill( const Reference< XPropertySet >& rXPropSet )
                 rProp.Value >>= aStyleProperties;
             else if( rProp.Name == "SpPrSolidFillSchemeClrTransformations" )
                 rProp.Value >>= aTransformations;
+            else if( rProp.Name == "ZetaSpPrSolidFillSrgbClr" )
+                rProp.Value >>= nZetaSrgbBase;
+            else if( rProp.Name == "ZetaSpPrSolidFillSrgbClrTransformations" )
+                rProp.Value >>= aZetaSrgbTransformations;
         }
     }
 
@@ -563,6 +581,11 @@ void DrawingML::WriteSolidFill( const Reference< XPropertySet >& rXPropSet )
     else
     {
         // the shape had a custom color and the user didn't change it
+        // ZETA: pptx writes back srgbClr + its transformations (tint, shade, satMod ...) as imported
+        if (GetDocumentType() == DOCUMENT_PPTX && aZetaSrgbTransformations.hasElements()
+            && lcl_zetaSrgbAlphaFits(aZetaSrgbTransformations, nAlpha))
+            WriteSolidFill(nZetaSrgbBase, aZetaSrgbTransformations, nAlpha);
+        else
         // tdf#124013
         WriteSolidFill( ::Color(ColorTransparency, nFillColor & 0xffffff), nAlpha );
     }
@@ -1006,6 +1029,8 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
 
     Sequence<PropertyValue> aStyleProperties;
     Sequence<PropertyValue> aTransformations;
+    ::Color nZetaSrgbBase;
+    Sequence<PropertyValue> aZetaSrgbTransformations;
 
     drawing::LineStyle aStyleLineStyle(drawing::LineStyle_NONE);
     drawing::LineJoint aStyleLineJoint(drawing::LineJoint_NONE);
@@ -1029,6 +1054,10 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
                 rProp.Value >>= aTransformations;
             else if( rProp.Name == "EmuLineWidth" )
                 rProp.Value >>= nEmuLineWidth;
+            else if( rProp.Name == "ZetaSpPrLnSolidFillSrgbClr" )
+                rProp.Value >>= nZetaSrgbBase;
+            else if( rProp.Name == "ZetaSpPrLnSolidFillSrgbClrTransformations" )
+                rProp.Value >>= aZetaSrgbTransformations;
         }
         for (const auto& rStyleProp : aStyleProperties)
         {
@@ -1131,6 +1160,12 @@ void DrawingML::WriteOutline( const Reference<XPropertySet>& rXPropSet, Referenc
                 WriteSolidFill(sColorFillScheme, aTransformations);
             else if (GetDocumentType() != DOCUMENT_PPTX || !WriteSchemeColor(u"LineComplexColor"_ustr, rXPropSet))
                 WriteSolidFill( aResolvedColorFillScheme, aTransformations );
+        }
+        else if (GetDocumentType() == DOCUMENT_PPTX && aZetaSrgbTransformations.hasElements()
+                 && lcl_zetaSrgbAlphaFits(aZetaSrgbTransformations, nColorAlpha))
+        {
+            // ZETA: the line had an srgbClr with transformations and the user didn't change it
+            WriteSolidFill(nZetaSrgbBase, aZetaSrgbTransformations, nColorAlpha);
         }
         else
         {
