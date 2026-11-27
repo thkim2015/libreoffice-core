@@ -100,7 +100,8 @@ SdrTextObj::SdrTextObj(SdrModel& rSdrModel, const tools::Rectangle& rRectangle, 
         mbNoShear = true;
     }
 
-    mbSupportTextIndentingOnLineWidthChange = true;
+    // ZETA: Office keeps the text insets when the outline width changes
+    mbSupportTextIndentingOnLineWidthChange = false;
 }
 
 SdrTextObj::SdrTextObj(SdrModel& rSdrModel, SdrTextObj const & rSource)
@@ -117,7 +118,8 @@ SdrTextObj::SdrTextObj(SdrModel& rSdrModel, SdrTextObj const & rSource)
     , mbInDownScale(false)
 {
     // #i25616#
-    mbSupportTextIndentingOnLineWidthChange = true;
+    // ZETA: Office keeps the text insets when the outline width changes
+    mbSupportTextIndentingOnLineWidthChange = false;
 
     maRectangle = rSource.maRectangle;
     maGeo = rSource.maGeo;
