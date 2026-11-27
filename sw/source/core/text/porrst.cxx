@@ -415,6 +415,17 @@ SwTwips SwTextFrame::EmptyHeight() const
         pFnt->SetFntChg( true );
         pFnt->ChgPhysFnt( pSh, *pOut );
         nRet = pFnt->GetHeight( pSh, *pOut );
+        // weboffice: an empty paragraph gets the same CJK line height adjustment as a formatted
+        // line (SwTextFormatter::CalcAscent, tdf#129808 - 130% measured in Word). Without it an
+        // empty Malgun Gothic 11pt paragraph or table row was 15.1pt while Word gives 19.25pt.
+        if (pIDSA->get(DocumentSettingId::MS_WORD_COMP_GRID_METRICS))
+        {
+            bool bSnap = false;
+            if (GetGridItem(FindPageFrame()))
+                bSnap = rTextNode.GetSwAttrSet().GetParaGrid().GetValue() && IsInDocBody();
+            if (!bSnap && pFnt->HasCJKCodePages(pSh, *pOut))
+                nRet = (nRet * 130) / 100;
+        }
     }
     return nRet;
 }
