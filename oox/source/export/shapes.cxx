@@ -1585,9 +1585,14 @@ void ShapeExport::WriteGraphicObjectShapePart( const Reference< XShape >& xShape
 
     sal_Int32 nShapeId = GetShapeID(xShape) == -1 ? GetNewShapeID(xShape) : GetTmpShapeID();
 
+    // ZETA: keep the alt-text title (cNvPr title) like other shapes
+    OUString sTitle;
+    if (GetProperty(xShapeProps, u"Title"_ustr))
+        mAny >>= sTitle;
     pFS->startElementNS(mnXmlNamespace, XML_cNvPr, XML_id, OString::number(nShapeId), XML_name,
                         GetShapeName(xShape), XML_descr,
-                        sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()), XML_hidden,
+                        sax_fastparser::UseIf(sDescr, !sDescr.isEmpty()), XML_title,
+                        sax_fastparser::UseIf(sTitle, !sTitle.isEmpty()), XML_hidden,
                         sax_fastparser::UseIf("1", !bVisible));
 
     if (eClickAction != presentation::ClickAction_NONE)
