@@ -8557,6 +8557,7 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
     {
         const SwNumRule* pRule = m_bExportingOutline ? m_rExport.m_rDoc.GetOutlineNumRule()
                                                      : m_pExportingNumRule;
+        bool bFromGrabBag = false;
         if (pRule)
         {
             uno::Any aAny;
@@ -8568,8 +8569,19 @@ void DocxAttributeOutput::NumberingLevel( sal_uInt8 nLevel,
                 uno::Sequence<OUString> aNumFmts;
                 if (rProp.Name == "OoxmlNumFmts" && (rProp.Value >>= aNumFmts)
                     && nLevel < aNumFmts.getLength() && !aNumFmts[nLevel].isEmpty())
+                {
                     aFormat = aNumFmts[nLevel].toUtf8();
+                    bFromGrabBag = true;
+                }
             }
+        }
+        // weboffice: 한국어 문서(기본 동아시아 언어 ko)에서 새로 만든 一·二·三 번호는
+        // 한국어 Word 다단계 목록 '제 一 장'처럼 japaneseCounting으로 쓴다(taiwaneseCountingThousand 아님)
+        if (!bFromGrabBag && aFormat == "taiwaneseCountingThousand")
+        {
+            const SvxLanguageItem& rDefLang = m_rExport.m_rDoc.GetDefault(RES_CHRATR_CJK_LANGUAGE);
+            if (rDefLang.GetLanguage().anyOf(LANGUAGE_KOREAN, LANGUAGE_KOREAN_JOHAB))
+                aFormat = "japaneseCounting"_ostr;
         }
     }
 
