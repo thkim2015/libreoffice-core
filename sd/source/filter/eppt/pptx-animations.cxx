@@ -26,6 +26,8 @@
 #include <sax/fshelper.hxx>
 #include <sal/log.hxx>
 #include <rtl/math.hxx>
+#include <rtl/character.hxx>
+#include <rtl/ustrbuf.hxx>
 #include <comphelper/sequenceashashmap.hxx>
 #include <unordered_set>
 
@@ -216,14 +218,48 @@ void WriteAnimateTo(const FSHelperPtr& pFS, const Any& rValue, const OUString& r
                            XML_to);
 }
 
+// ZETA: the import (oox convertMeasure) keeps tav formulas with bare x/y/width/height; PowerPoint
+// needs #ppt_x/#ppt_y/#ppt_w/#ppt_h, otherwise e.g. Spinner/Swivel paths use undefined variables
+static OUString lcl_zetaPptFormula(std::u16string_view s)
+{
+    OUStringBuffer aBuf;
+    size_t i = 0;
+    while (i < s.size())
+    {
+        if (rtl::isAsciiAlpha(s[i]) && (i == 0 || (s[i - 1] != '#' && s[i - 1] != '_' && !rtl::isAsciiDigit(s[i - 1]))))
+        {
+            size_t j = i;
+            while (j < s.size() && (rtl::isAsciiAlphanumeric(s[j]) || s[j] == '_'))
+                ++j;
+            std::u16string_view w = s.substr(i, j - i);
+            if (w == u"x")
+                aBuf.append("#ppt_x");
+            else if (w == u"y")
+                aBuf.append("#ppt_y");
+            else if (w == u"width")
+                aBuf.append("#ppt_w");
+            else if (w == u"height")
+                aBuf.append("#ppt_h");
+            else
+                aBuf.append(w);
+            i = j;
+        }
+        else
+            aBuf.append(s[i++]);
+    }
+    return aBuf.makeStringAndClear();
+}
+
 void WriteAnimateValues(const FSHelperPtr& pFS, const Reference<XAnimate>& rXAnimate)
 {
     const Sequence<double> aKeyTimes = rXAnimate->getKeyTimes();
     if (!aKeyTimes.hasElements())
         return;
     const Sequence<Any> aValues = rXAnimate->getValues();
-    const OUString sFormula = rXAnimate->getFormula();
+    const OUString sFormula = lcl_zetaPptFormula(rXAnimate->getFormula());
     const OUString sAttributeName = rXAnimate->getAttributeName();
+    // ZETA: the import takes the first tav formula for the whole animation - write it there only
+    bool bZetaFormulaDone = false;
 
     SAL_INFO("sd.eppt", "animate values, formula: " << sFormula.toUtf8());
 
@@ -240,8 +276,9 @@ void WriteAnimateValues(const FSHelperPtr& pFS, const Reference<XAnimate>& rXAni
             sal_uInt32 nTime = static_cast<sal_uInt32>(std::max(0.0, aKeyTimes[i] * 100000.0));
 
             pFS->startElementNS(XML_p, XML_tav, XML_fmla,
-                                sax_fastparser::UseIf(sFormula, !sFormula.isEmpty()), XML_tm,
+                                sax_fastparser::UseIf(sFormula, !sFormula.isEmpty() && !bZetaFormulaDone), XML_tm,
                                 sax_fastparser::UseIf(OString::number(nTime), nTime != 0));
+            bZetaFormulaDone = true;
             pFS->startElementNS(XML_p, XML_val);
             ValuePair aPair;
             if (aValues[i] >>= aPair)
