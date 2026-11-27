@@ -771,35 +771,35 @@ DefaultNumberingProvider::makeNumberingString( const Sequence<beans::PropertyVal
                 break;
           case NUMBER_LOWER_ZH:
                 // weboffice: WASM 빌드에는 libnumbertext 중국어 자료가 없어 NATNUM12가 'one'(영어)을 냈다 —
-                // 1~99999는 직접 一·二·十·百·千·万으로 센다(十一·二十·一百零一, NATNUM12 중국어 결과와 같은 꼴)
+                // 1~99999는 Word japaneseCounting처럼 직접 센다(.docx 내보내기가 한국어 문서의 이 종류를 japaneseCounting으로 쓴다):
+                // 十·百·千 앞 一은 빼고(千은 万 뒤에서 一千) 零은 쓰지 않는다 — 十一·百一·百十·千百十一·一万·一万百·一万一千(창 없는 Word 2021 실측)
                 if (number > 0 && number < 100000)
                 {
-                    static const sal_Unicode aDigits[] = { 0x96F6, 0x4E00, 0x4E8C, 0x4E09, 0x56DB, 0x4E94, 0x516D, 0x4E03, 0x516B, 0x4E5D };
-                    static const sal_Unicode aUnits[] = { 0, 0x5341, 0x767E, 0x5343, 0x4E07 };
+                    static const sal_Unicode aDigits[] = { 0, 0x4E00, 0x4E8C, 0x4E09, 0x56DB, 0x4E94, 0x516D, 0x4E03, 0x516B, 0x4E5D };
+                    static const sal_Unicode aUnits[] = { 0, 0x5341, 0x767E, 0x5343 };
                     OUStringBuffer aZh;
-                    const OUString aNum = OUString::number(number);
-                    const sal_Int32 nLen = aNum.getLength();
-                    bool bZero = false;
-                    for (sal_Int32 i = 0; i < nLen; ++i)
+                    auto lcl_group = [&](sal_Int32 nGroup)
                     {
-                        const int nDigit = aNum[i] - '0';
-                        const sal_Int32 nUnit = nLen - 1 - i;
-                        if (nDigit == 0)
+                        for (int nUnit = 3; nUnit >= 0; --nUnit)
                         {
-                            bZero = true;
-                            continue;
+                            static const sal_Int32 aPow[] = { 1, 10, 100, 1000 };
+                            const int nDigit = (nGroup / aPow[nUnit]) % 10;
+                            if (nDigit == 0)
+                                continue;
+                            // 千은 万 뒤에서만 一을 붙인다(一万一千 — 千·千百·一万百은 그대로)
+                            if (!(nDigit == 1 && nUnit > 0) || (nUnit == 3 && number >= 10000))
+                                aZh.append(aDigits[nDigit]);
+                            if (nUnit > 0)
+                                aZh.append(aUnits[nUnit]);
                         }
-                        if (bZero)
-                        {
-                            aZh.append(aDigits[0]);
-                            bZero = false;
-                        }
-                        // 10~19는 一十 대신 十
-                        if (!(nDigit == 1 && nUnit == 1 && i == 0))
-                            aZh.append(aDigits[nDigit]);
-                        if (nUnit > 0)
-                            aZh.append(aUnits[nUnit]);
+                    };
+                    const sal_Int32 nMan = number / 10000;
+                    if (nMan)
+                    {
+                        aZh.append(aDigits[nMan]);
+                        aZh.append(u'\x4E07');
                     }
+                    lcl_group(number % 10000);
                     result += aZh.makeStringAndClear();
                     break;
                 }
