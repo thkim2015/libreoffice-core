@@ -694,13 +694,42 @@ void ScDBData::MoveTo(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW n
     tools::Long nSortDif = bByRow ? nDifX : nDifY;
     tools::Long nSortEnd = bByRow ? static_cast<tools::Long>(nCol2) : static_cast<tools::Long>(nRow2);
 
+    // ZETA: columns deleted/inserted inside the range also move (or drop) the sort keys, like the
+    // filter criteria below (Excel keeps the other keys when a sorted column is deleted)
+    tools::Long nSortUpdate = (nUpdateCol != -1 && bByRow) ? static_cast<tools::Long>(nUpdateCol) + nDifX : -1;
+    tools::Long nSortDif2 = static_cast<tools::Long>(nCol2) - static_cast<tools::Long>(nEndCol);
     for (sal_uInt16 i=0; i<mpSortParam->GetSortKeyCount(); i++)
     {
         mpSortParam->maKeyState[i].nField += nSortDif;
+        if (nSortUpdate != -1 && mpSortParam->maKeyState[i].bDoSort)
+        {
+            if (mpSortParam->maKeyState[i].nField >= nSortUpdate)
+                mpSortParam->maKeyState[i].nField += nSortDif2;
+            else if (mpSortParam->maKeyState[i].nField >= nSortUpdate + nSortDif2)
+                mpSortParam->maKeyState[i].bDoSort = false;
+        }
         if (mpSortParam->maKeyState[i].nField > nSortEnd)
         {
             mpSortParam->maKeyState[i].nField = 0;
             mpSortParam->maKeyState[i].bDoSort = false;
+        }
+    }
+    if (nSortUpdate != -1)
+    {
+        // ZETA: keep the active keys first — sorting and the xlsx export stop at the first inactive key
+        std::vector<ScSortKeyState> aKeys;
+        for (sal_uInt16 i=0; i<mpSortParam->GetSortKeyCount(); i++)
+            if (mpSortParam->maKeyState[i].bDoSort)
+                aKeys.push_back(mpSortParam->maKeyState[i]);
+        for (sal_uInt16 i=0; i<mpSortParam->GetSortKeyCount(); i++)
+        {
+            if (i < aKeys.size())
+                mpSortParam->maKeyState[i] = aKeys[i];
+            else
+            {
+                mpSortParam->maKeyState[i].nField = 0;
+                mpSortParam->maKeyState[i].bDoSort = false;
+            }
         }
     }
 
@@ -727,6 +756,23 @@ void ScDBData::MoveTo(SCTAB nTab, SCCOL nCol1, SCROW nRow1, SCCOL nCol2, SCROW n
         {
             rEntry.nField = 0;
             rEntry.bDoQuery = false;
+        }
+    }
+    if (nUpdateCol != -1)
+    {
+        // ZETA: a criterion of a deleted column leaves a cleared entry in the middle; the filter and
+        // the xlsx AutoFilter export stop at the first unused entry, so every later criterion was
+        // lost (deleting column A of a filtered range removed all filters). Keep the used ones first.
+        std::vector<ScQueryEntry> aUsed;
+        for (SCSIZE i = 0; i < nCount; ++i)
+            if (mpQueryParam->GetEntry(i).bDoQuery)
+                aUsed.push_back(mpQueryParam->GetEntry(i));
+        for (SCSIZE i = 0; i < nCount; ++i)
+        {
+            if (i < aUsed.size())
+                mpQueryParam->GetEntry(i) = aUsed[i];
+            else
+                mpQueryParam->GetEntry(i).Clear();
         }
     }
     for (auto& group : mpSubTotal->aGroups)
