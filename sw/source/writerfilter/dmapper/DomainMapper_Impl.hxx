@@ -1221,6 +1221,8 @@ public:
 
     /// Page style name -> "chapStyle|chapSep" of w:pgNumType, written back by the DOCX export.
     std::map<OUString, OUString> m_aPageNumberChapters;
+    /// weboffice: page styles of right-to-left sections with vertical text (w:bidi + w:textDirection tbRl)
+    std::map<OUString, bool> m_aVerticalBidiPageStyles;
 
     /// Footnote/endnote numbering of each sectPr and the page style it ended up using.
     struct SectionNoteNumbering

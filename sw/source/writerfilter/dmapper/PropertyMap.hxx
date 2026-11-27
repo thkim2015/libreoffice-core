@@ -288,6 +288,7 @@ private:
     sal_Int16                                       m_nPageNumberType;
     // w:pgNumType chapStyle/chapSep, only kept for DOCX export (no layout).
     OUString                                        m_sPageNumberChapStyle;
+    bool                                            m_bVerticalBidi = false;
     OUString                                        m_sPageNumberChapSep;
     sal_Int32                                       m_nBreakType;
 
@@ -407,6 +408,8 @@ public:
     void SetPageNumber( sal_Int32 nSet )     { m_nPageNumber = nSet; }
     void SetPageNumberType( sal_Int32 nSet ) { m_nPageNumberType = nSet; }
     void SetPageNumberChapStyle(const OUString& rSet) { m_sPageNumberChapStyle = rSet; }
+    /// weboffice: w:bidi in a section with vertical text (Writer has no right-to-left vertical page)
+    void SetVerticalBidi(bool bSet) { m_bVerticalBidi = bSet; }
     void SetPageNumberChapSep(const OUString& rSet) { m_sPageNumberChapSep = rSet; }
 
     /// Numbering of w:footnotePr / w:endnotePr in this sectPr (-1: not set). Writer only has

@@ -544,6 +544,15 @@ DomainMapper::~DomainMapper()
                 *pChapters++ = comphelper::makePropertyValue(rStyle, rValue);
             aProperties[u"OoxmlPageNumberChapters"_ustr] <<= aChapters;
         }
+        // weboffice: w:bidi of vertical sections per page style, see DocxAttributeOutput::FormatFrameDirection()
+        if (!m_pImpl->m_aVerticalBidiPageStyles.empty())
+        {
+            uno::Sequence<beans::PropertyValue> aStyles(m_pImpl->m_aVerticalBidiPageStyles.size());
+            auto pStyles = aStyles.getArray();
+            for (const auto& [rStyle, bValue] : m_pImpl->m_aVerticalBidiPageStyles)
+                *pStyles++ = comphelper::makePropertyValue(rStyle, bValue);
+            aProperties[u"OoxmlVerticalBidiPageStyles"_ustr] <<= aStyles;
+        }
 
         if (m_pImpl->GetTextDocument())
         {
@@ -2562,6 +2571,17 @@ void DomainMapper::sprmWithProps( Sprm& rSprm, const PropertyMapPtr& rContext )
     case NS_ooxml::LN_EG_SectPrContents_bidi:
         if (pSectionContext != nullptr)
         {
+            // weboffice: Word keeps the vertical text of a right-to-left section (w:textDirection
+            // tbRl comes before w:bidi) - only remember the direction for the DOCX export
+            sal_Int16 nOldMode = text::WritingMode2::LR_TB;
+            if (std::optional<PropertyMap::Property> oMode = pSectionContext->getProperty(PROP_WRITING_MODE))
+                oMode->second >>= nOldMode;
+            if (nOldMode == text::WritingMode2::TB_RL || nOldMode == text::WritingMode2::TB_LR
+                || nOldMode == text::WritingMode2::BT_LR)
+            {
+                pSectionContext->SetVerticalBidi(nIntValue != 0);
+                break;
+            }
             const sal_Int16 writingMode = (nIntValue != 0) ? sal_Int16(text::WritingMode2::RL_TB) : sal_Int16(text::WritingMode2::LR_TB);
             pSectionContext->Insert(PROP_WRITING_MODE, uno::Any(writingMode));
         }

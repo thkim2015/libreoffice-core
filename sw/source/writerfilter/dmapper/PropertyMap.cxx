@@ -2249,6 +2249,9 @@ void SectionPropertyMap::CloseSectionGroup( DomainMapper_Impl& rDM_Impl )
             if (!m_sPageNumberChapStyle.isEmpty() || !m_sPageNumberChapSep.isEmpty())
                 rDM_Impl.m_aPageNumberChapters[m_sPageStyleName]
                     = m_sPageNumberChapStyle + "|" + m_sPageNumberChapSep;
+            // weboffice: right-to-left section with vertical text, see DocxAttributeOutput::FormatFrameDirection()
+            if (m_bVerticalBidi)
+                rDM_Impl.m_aVerticalBidiPageStyles[m_sPageStyleName] = true;
             if (bRecordNoteNumbering && !rDM_Impl.m_aSectionNoteNumberings.empty())
                 rDM_Impl.m_aSectionNoteNumberings.back().sPageStyle = m_sPageStyleName;
 

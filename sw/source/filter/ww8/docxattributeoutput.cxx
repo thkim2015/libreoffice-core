@@ -11513,6 +11513,9 @@ void DocxAttributeOutput::FormatLineNumbering( const SwFormatLineNumber& rNumber
         m_pSerializer->singleElementNS(XML_w, XML_suppressLineNumbers, FSNS(XML_w, XML_val), "0");
 }
 
+static bool lcl_GetPageStyleGrabBagValue(const MSWordExportBase& rExport, const OUString& rKey,
+                                         uno::Any& rValue);
+
 void DocxAttributeOutput::FormatFrameDirection( const SvxFrameDirectionItem& rDirection )
 {
     OString sTextFlow;
@@ -11549,6 +11552,11 @@ void DocxAttributeOutput::FormatFrameDirection( const SvxFrameDirectionItem& rDi
     if ( m_rExport.m_bOutPageDescs )
     {
         m_pSerializer->singleElementNS(XML_w, XML_textDirection, FSNS(XML_w, XML_val), sTextFlow);
+        // weboffice: w:bidi of a vertical section kept from the DOCX import
+        uno::Any aVerticalBidi;
+        if (!bBiDi && sTextFlow != "lrTb"
+            && lcl_GetPageStyleGrabBagValue(m_rExport, u"OoxmlVerticalBidiPageStyles"_ustr, aVerticalBidi))
+            aVerticalBidi >>= bBiDi;
         if ( bBiDi && !m_rExport.m_bSuppressBidi )
             m_pSerializer->singleElementNS(XML_w, XML_bidi);
     }
