@@ -4317,7 +4317,18 @@ void DocxAttributeOutput::RunText( const OUString& rText, rtl_TextEncoding /*eCh
         {
             case 0x09: // tab
                 impl_WriteRunText( m_pSerializer, nTextToken, pBegin, pIt );
-                m_pSerializer->singleElementNS(XML_w, XML_tab);
+                if (!m_rExport.m_aRunPTab[0].isEmpty())
+                {
+                    // weboffice: 가져온 <w:ptab>(맞춤 탭)을 그대로 되돌려 쓴다
+                    const OUString& rRel = m_rExport.m_aRunPTab[1];
+                    const OUString& rLeader = m_rExport.m_aRunPTab[2];
+                    m_pSerializer->singleElementNS(XML_w, XML_ptab,
+                        FSNS(XML_w, XML_relativeTo), rRel.isEmpty() ? u"margin"_ustr : rRel,
+                        FSNS(XML_w, XML_alignment), m_rExport.m_aRunPTab[0],
+                        FSNS(XML_w, XML_leader), rLeader.isEmpty() ? u"none"_ustr : rLeader);
+                }
+                else
+                    m_pSerializer->singleElementNS(XML_w, XML_tab);
                 prevUnicode = *pIt;
                 break;
             case 0x0b: // line break
@@ -11760,7 +11771,8 @@ void DocxAttributeOutput::CharGrabBag( const SfxGrabBagItem& rItem )
                 rGrabBagElement.first == "CharThemeFontNameEastAsia" ||
                 rGrabBagElement.first == "CharThemeOriginalColor" ||
                 rGrabBagElement.first == "CharKernMinSize" ||
-                rGrabBagElement.first == "CharFitTextId" )
+                rGrabBagElement.first == "CharFitTextId" ||
+                rGrabBagElement.first.startsWith("CharPTab") )
         {
             // just skip these, they were processed before
         }

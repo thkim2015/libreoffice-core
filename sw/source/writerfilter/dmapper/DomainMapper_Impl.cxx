@@ -5664,6 +5664,73 @@ void DomainMapper_Impl::HandlePTab(sal_Int32 nAlignment)
     xTextAppend->insertControlCharacter(xCursor, text::ControlCharacter::LINE_BREAK, true);
 }
 
+void DomainMapper_Impl::RememberPTab(Id nName, sal_Int32 nValue)
+{
+    OUString aKey;
+    OUString aVal;
+    switch (nName)
+    {
+        case NS_ooxml::LN_CT_PTab_alignment:
+            aKey = u"CharPTabAlignment"_ustr;
+            switch (nValue)
+            {
+                case NS_ooxml::LN_Value_ST_PTabAlignment_left: aVal = u"left"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabAlignment_center: aVal = u"center"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabAlignment_right: aVal = u"right"_ustr; break;
+            }
+            break;
+        case NS_ooxml::LN_CT_PTab_relativeTo:
+            aKey = u"CharPTabRelativeTo"_ustr;
+            switch (nValue)
+            {
+                case NS_ooxml::LN_Value_ST_PTabRelativeTo_margin: aVal = u"margin"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabRelativeTo_indent: aVal = u"indent"_ustr; break;
+            }
+            break;
+        case NS_ooxml::LN_CT_PTab_leader:
+            aKey = u"CharPTabLeader"_ustr;
+            switch (nValue)
+            {
+                case NS_ooxml::LN_Value_ST_PTabLeader_none: aVal = u"none"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabLeader_dot: aVal = u"dot"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabLeader_hyphen: aVal = u"hyphen"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabLeader_underscore: aVal = u"underscore"_ustr; break;
+                case NS_ooxml::LN_Value_ST_PTabLeader_middleDot: aVal = u"middleDot"_ustr; break;
+            }
+            break;
+    }
+    if (aKey.isEmpty() || aVal.isEmpty() || m_aTextAppendStack.empty())
+        return;
+    uno::Reference<text::XTextAppend> xTextAppend = m_aTextAppendStack.top().xTextAppend;
+    if (!xTextAppend.is())
+        return;
+    try
+    {
+        uno::Reference<css::text::XTextRange> xInsertPosition
+            = static_cast<text::XSentenceCursor*>(m_aTextAppendStack.top().xCursor.get());
+        if (!xInsertPosition.is())
+            xInsertPosition = xTextAppend->getEnd();
+        uno::Reference<text::XTextCursor> xCursor = xTextAppend->createTextCursorByRange(xInsertPosition);
+        // 방금 넣은 탭 글자만 고른다(왼쪽 맞춤 ptab이 줄 바꿈으로 바뀌었으면 그대로 둔다)
+        xCursor->goLeft(1, true);
+        if (xCursor->getString() != "\t")
+            return;
+        uno::Reference<beans::XPropertySet> xProps(xCursor, uno::UNO_QUERY_THROW);
+        uno::Sequence<beans::PropertyValue> aBag;
+        xProps->getPropertyValue(u"CharInteropGrabBag"_ustr) >>= aBag;
+        std::vector<beans::PropertyValue> aNew;
+        for (const beans::PropertyValue& rProp : aBag)
+            if (rProp.Name != aKey)
+                aNew.push_back(rProp);
+        aNew.push_back(comphelper::makePropertyValue(aKey, aVal));
+        xProps->setPropertyValue(u"CharInteropGrabBag"_ustr, uno::Any(comphelper::containerToSequence(aNew)));
+    }
+    catch (const uno::Exception&)
+    {
+        TOOLS_WARN_EXCEPTION("writerfilter", "DomainMapper_Impl::RememberPTab");
+    }
+}
+
 void DomainMapper_Impl::HandleLineBreakClear(sal_Int32 nClear)
 {
     switch (nClear)

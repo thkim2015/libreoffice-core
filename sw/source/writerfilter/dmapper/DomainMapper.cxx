@@ -1800,8 +1800,11 @@ void DomainMapper::lcl_attribute(Id nName, const Value & val)
             break;
         case NS_ooxml::LN_CT_PTab_leader:
         case NS_ooxml::LN_CT_PTab_relativeTo:
+            // weboffice: <w:ptab> 속성을 탭 글자 grab bag에 남겨 docx로 되돌려 쓴다
+            m_pImpl->RememberPTab(nName, nIntValue);
             break;
         case NS_ooxml::LN_CT_PTab_alignment:
+            m_pImpl->RememberPTab(nName, nIntValue);
             m_pImpl->HandlePTab(nIntValue);
             break;
         case NS_ooxml::LN_CT_Cnf_lastRowLastColumn:

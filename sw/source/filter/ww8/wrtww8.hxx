@@ -568,6 +568,8 @@ public:
     /// Is font size written already as part of the current character properties?
     bool m_bFontSizeWritten;
     bool m_bAddFootnoteTab;     // only one aesthetic spacing tab per footnote
+    /// weboffice: 지금 RunText로 쓰는 조각의 탭이 <w:ptab>이면 alignment/relativeTo/leader(아니면 빈 값)
+    OUString m_aRunPTab[3];
     bool m_bHasBailsMetaData;   // false if there is no urn:bails metadata in the document
 
     SwDoc& m_rDoc;

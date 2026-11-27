@@ -1327,6 +1327,8 @@ public:
 
     /// Handles <w:ptab>.
     void HandlePTab(sal_Int32 nAlignment);
+    /// weboffice: <w:ptab> 속성 하나를 방금 넣은 탭 글자의 CharInteropGrabBag(CharPTab*)에 둔다.
+    void RememberPTab(Id nName, sal_Int32 nValue);
 
     /// Handles <w:br w:clear="...">.
     void HandleLineBreakClear(sal_Int32 nClear);

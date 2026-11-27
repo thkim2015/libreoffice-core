@@ -2805,7 +2805,28 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
                 OUString aSymbolFont = lcl_GetSymbolFont(m_rDoc.GetAttrPool(), rNode, nCurrentPos + ofs,
                                                 nCurrentPos + ofs + nLen);
 
+                // weboffice: 탭 글자에 CharPTab* grab bag이 있으면 <w:ptab>로 쓴다(docx)
+                for (OUString& r : m_aRunPTab)
+                    r.clear();
+                if (aSnippet.indexOf('\t') >= 0 && nLen > 0)
+                {
+                    SfxItemSet aBagSet(SfxItemSet::makeFixedSfxItemSet<RES_CHRATR_GRABBAG, RES_CHRATR_GRABBAG>(m_rDoc.GetAttrPool()));
+                    if (rNode.GetParaAttr(aBagSet, nCurrentPos + ofs, nCurrentPos + ofs + nLen))
+                    {
+                        if (const SfxGrabBagItem* pBag = aBagSet.GetItemIfSet(RES_CHRATR_GRABBAG, false))
+                        {
+                            const auto& rMap = pBag->GetGrabBag();
+                            static constexpr OUString aKeys[3] = { u"CharPTabAlignment"_ustr, u"CharPTabRelativeTo"_ustr, u"CharPTabLeader"_ustr };
+                            for (int i = 0; i < 3; ++i)
+                                if (auto it = rMap.find(aKeys[i]); it != rMap.end())
+                                    it->second >>= m_aRunPTab[i];
+                        }
+                    }
+                }
+
                 AttrOutput().RunText( aSnippet, eChrSet, aSymbolFont );
+                for (OUString& r : m_aRunPTab)
+                    r.clear();
             }
 
             if ( aAttrIter.IsDropCap( nNextAttr ) )
