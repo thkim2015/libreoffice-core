@@ -163,10 +163,12 @@ void addAttributesToSparklineAttributes(sc::SparklineAttributes& rSparklineAttri
 
     rSparklineAttributes.setRightToLeft(rAttribs.getBool(XML_rightToLeft, false));
 
+    // weboffice: Excel writes minAxisType/maxAxisType="custom" without manualMin/manualMax when the
+    // custom value is 0 (the schema default); value() threw and the whole sparkline group was lost
     if (rSparklineAttributes.getMaxAxisType() == sc::AxisType::Custom)
-        rSparklineAttributes.setManualMax(oManualMax.value());
+        rSparklineAttributes.setManualMax(oManualMax.value_or(0.0));
     if (rSparklineAttributes.getMinAxisType() == sc::AxisType::Custom)
-        rSparklineAttributes.setManualMin(oManualMin.value());
+        rSparklineAttributes.setManualMin(oManualMin.value_or(0.0));
 }
 
 } // end anonymous namespace

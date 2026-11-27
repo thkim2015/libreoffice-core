@@ -4131,6 +4131,8 @@ void ScViewData::ReadUserDataSequence(const uno::Sequence <beans::PropertyValue>
             bPageMode = ScUnoHelpFunctions::GetBoolFromAny( rSetting.Value );
         else if ( sName == SC_UNO_SHOWZERO )
             maOptions.SetOption(sc::ViewOption::NULLVALS, ScUnoHelpFunctions::GetBoolFromAny(rSetting.Value));
+        else if ( sName == SC_UNO_SHOWFORM ) // ZETA: xlsx sheetView showFormulas(oox viewsettings PROP_ShowFormulas)
+            maOptions.SetOption(sc::ViewOption::FORMULAS, ScUnoHelpFunctions::GetBoolFromAny(rSetting.Value));
         else if ( sName == SC_UNO_SHOWNOTES )
             maOptions.SetOption(sc::ViewOption::NOTES, ScUnoHelpFunctions::GetBoolFromAny(rSetting.Value));
         else if ( sName == SC_UNO_SHOWNOTEAUTHOR )

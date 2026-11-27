@@ -3095,11 +3095,15 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
                                     SvxNumberFormat::LABEL_ALIGNMENT)
                         {
                             ::sw::ListLevelIndents const indents(rNode.AreListLevelIndentsApplicable());
-                            if (indents & ::sw::ListLevelIndents::FirstLine)
+                            // Only the paragraph-level values that override the list level
+                            // (i.e. list level indents NOT applicable) belong into the itemset;
+                            // writing them when the list level applies emits w:ind 0 and Word
+                            // then ignores the numbering indents.
+                            if (!(indents & ::sw::ListLevelIndents::FirstLine))
                             {
                                 oTmpSet->Put(firstLine);
                             }
-                            if (indents & ::sw::ListLevelIndents::LeftMargin)
+                            if (!(indents & ::sw::ListLevelIndents::LeftMargin))
                             {
                                 oTmpSet->Put(leftMargin);
                             }

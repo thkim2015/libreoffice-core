@@ -104,6 +104,10 @@ public:
     /** Converts the imported worksheet settings. */
     void                finalizeImport();
 
+    // ZETA: outline summary position (Excel puts the collapsed flag on the summary row/column)
+    bool                isSummaryBelow() const { return maSheetSettings.mbSummaryBelow; }
+    bool                isSummaryRight() const { return maSheetSettings.mbSummaryRight; }
+
 private:
     PhoneticSettings    maPhoneticSett;
     SheetSettingsModel  maSheetSettings;
