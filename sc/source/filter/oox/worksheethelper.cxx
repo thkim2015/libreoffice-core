@@ -1348,7 +1348,7 @@ void WorksheetGlobals::convertOutlines( OutlineLevelVec& orLevels,
 
     // ZETA: with summary rows above (summaryBelow="0") or summary columns left (summaryRight="0"),
     // Excel writes the collapsed flag on the row/column before the group, not after it
-    const bSummaryBefore = bRows ? !maSheetSett.isSummaryBelow() : !maSheetSett.isSummaryRight();
+    const bool bSummaryBefore = bRows ? !maSheetSett.isSummaryBelow() : !maSheetSett.isSummaryRight();
     ::std::vector< bool >& rCollapse = bRows ? maRowCollapse : maColCollapse;
     bool& rbPrevCollapsed = bRows ? mbPrevRowCollapsed : mbPrevColCollapsed;
     const bool bThisCollapsed = bCollapsed;
