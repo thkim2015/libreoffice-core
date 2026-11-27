@@ -39,6 +39,8 @@
 #include <unomid.h>
 #include <svx/svdoashp.hxx>
 #include <osl/diagnose.h>
+#include <o3tl/unit_conversion.hxx>
+#include <com/sun/star/beans/PropertyValue.hpp>
 
 using namespace ::com::sun::star;
 
@@ -659,6 +661,39 @@ namespace
     }
 }
 
+namespace
+{
+/// weboffice: sum of the DOCX effect extent (left + right, or top + bottom) in twips, 0 if none
+tools::Long lcl_EffectExtentTwips(const SdrObject* pObj, bool bHorizontal)
+{
+    uno::Any aGrabBag;
+    pObj->GetGrabBagItem(aGrabBag);
+    uno::Sequence<beans::PropertyValue> aProps;
+    if (!(aGrabBag >>= aProps))
+        return 0;
+    sal_Int64 nSum = 0;
+    for (const beans::PropertyValue& rProp : aProps)
+    {
+        if (rProp.Name != "CT_EffectExtent")
+            continue;
+        uno::Sequence<beans::PropertyValue> aExtent;
+        if (!(rProp.Value >>= aExtent))
+            break;
+        for (const beans::PropertyValue& rSide : aExtent)
+        {
+            sal_Int32 nValue = 0;
+            if (!(rSide.Value >>= nValue) || nValue <= 0)
+                continue;
+            if (bHorizontal ? (rSide.Name == "l" || rSide.Name == "r")
+                            : (rSide.Name == "t" || rSide.Name == "b"))
+                nSum += nValue;
+        }
+        break;
+    }
+    return o3tl::convert(nSum, o3tl::Length::emu, o3tl::Length::twip);
+}
+}
+
 // --> #i70122#
 SwRect SwAnchoredDrawObject::GetObjBoundRect() const
 {
@@ -710,6 +745,11 @@ SwRect SwAnchoredDrawObject::GetObjBoundRect() const
             else
                 nWidth = pPageFrame->GetBoundRect( pPageFrame->getRootFrame()->GetCurrShell()->GetOut() ).SVRect().GetWidth();
             nTargetWidth = nWidth * (*GetDrawObj( )->GetRelativeWidth());
+            // weboffice: Word measures a relative width as base * percent minus the left and
+            // right effect extent (wp:effectExtent, kept in the CT_EffectExtent grab bag) - a
+            // shadowed 53.8% text box is 3.2pt narrower than the percentage, so its text wraps
+            // into one more line.
+            nTargetWidth -= lcl_EffectExtentTwips(GetDrawObj(), true);
         }
 
         bool bCheck = GetDrawObj()->GetRelativeHeight();
@@ -747,6 +787,7 @@ SwRect SwAnchoredDrawObject::GetObjBoundRect() const
             else
                 nHeight = pPageFrame->GetBoundRect( pPageFrame->getRootFrame()->GetCurrShell()->GetOut() ).SVRect().GetHeight();
             nTargetHeight = nHeight * (*GetDrawObj()->GetRelativeHeight());
+            nTargetHeight -= lcl_EffectExtentTwips(GetDrawObj(), false); // weboffice: as the width
         }
 
         if ( (nTargetWidth != aCurrObjRect.GetWidth( ) || nTargetHeight != aCurrObjRect.GetHeight( ))
