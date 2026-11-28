@@ -2765,7 +2765,11 @@ void AttributeOutputBase::StartTOX( const SwSection& rSect )
                                 }
                             }
                         }
-                        if( MAXLEVEL != nNoPgStt )
+                        // Word writes a bare \n when no level shows page numbers
+                        // (Insert Table of Contents, Show page numbers off)
+                        if (1 == nNoPgStt && MAXLEVEL == nNoPgEnd)
+                            sStr += "\\n ";
+                        else if( MAXLEVEL != nNoPgStt )
                         {
                             if (WW8ListManager::nMaxLevel < nNoPgEnd)
                                 nNoPgEnd = WW8ListManager::nMaxLevel;
