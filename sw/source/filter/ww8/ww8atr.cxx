@@ -6449,6 +6449,27 @@ const SwRedlineData* AttributeOutputBase::GetParagraphMarkerRedline( const SwTex
     return nullptr;
 }
 
+// weboffice: Word bolds (formats) the paragraph marker too when the whole paragraph is selected and
+// records it in the same format change (w:pPr/w:rPr/w:rPrChange). Writer keeps such paragraph-wide
+// character formatting on the node and has no marker position for the redline, so take a format
+// redline that covers the whole paragraph text (up to the paragraph end) as covering the marker.
+const SwRedlineData* AttributeOutputBase::GetParagraphMarkerFormatRedline( const SwTextNode& rNode )
+{
+    const sal_Int32 nLen = rNode.GetText().getLength();
+    if (nLen == 0)
+        return nullptr;
+    const SwPosition aStart(rNode, 0);
+    const SwPosition aEnd(rNode, nLen);
+    for (SwRangeRedline* pRedl : GetExport().m_rDoc.getIDocumentRedlineAccess().GetRedlineTable())
+    {
+        if (pRedl->GetRedlineData().GetType() != RedlineType::Format)
+            continue;
+        if (*pRedl->Start() <= aStart && aEnd <= *pRedl->End())
+            return &pRedl->GetRedlineData();
+    }
+    return nullptr;
+}
+
 void AttributeOutputBase::CharBackgroundBase( const SvxBrushItem& rBrush )
 {
     bool bConvertToShading = !officecfg::Office::Common::Filter::Microsoft::Export::CharBackgroundToHighlighting::get();

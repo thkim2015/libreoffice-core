@@ -682,6 +682,13 @@ public:
 
     // Returns whether or not the 'SwTextNode' has a paragraph marker inserted \ deleted (using 'track changes')
     const SwRedlineData* GetParagraphMarkerRedline( const SwTextNode& rNode, RedlineType aRedlineType );
+
+    // weboffice: a tracked format change that covers the whole text of the paragraph, when the
+    // paragraph marker has character formatting too (Word records the marker as part of the change)
+    const SwRedlineData* GetParagraphMarkerFormatRedline( const SwTextNode& rNode );
+
+    // weboffice: set by the node output around EndParagraphProperties(), used by the DOCX export
+    const SwRedlineData* m_pParagraphMarkerFormatRedline = nullptr;
 };
 
 class WW8Ruby

@@ -3395,7 +3395,17 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
         const SwRedlineData* pRedlineParagraphMarkerDelete = AttrOutput().GetParagraphMarkerRedline( rNode, RedlineType::Delete );
         const SwRedlineData* pRedlineParagraphMarkerInsert = AttrOutput().GetParagraphMarkerRedline( rNode, RedlineType::Insert );
         const SwRedlineData* pParagraphRedlineData = aAttrIter.GetParagraphLevelRedline( );
+        // weboffice: format change of the paragraph marker. Only when the marker formatting is the
+        // paragraph-wide character formatting of the node (what Writer sets when the whole paragraph
+        // is formatted), not marker properties read from DOCX (RES_PARATR_LIST_AUTOFMT) or end hints:
+        // a Word file that changed only the runs of a paragraph keeps its marker untracked.
+        AttrOutput().m_pParagraphMarkerFormatRedline
+            = (!rListAutoFormat.GetStyleHandle() && bCharFormatOnly && rNode.GetpSwAttrSet()
+               && aParagraphMarkerProperties.Count())
+                  ? AttrOutput().GetParagraphMarkerFormatRedline(rNode)
+                  : nullptr;
         AttrOutput().EndParagraphProperties(aParagraphMarkerProperties, pParagraphRedlineData, pRedlineParagraphMarkerDelete, pRedlineParagraphMarkerInsert);
+        AttrOutput().m_pParagraphMarkerFormatRedline = nullptr;
 
         AttrOutput().EndParagraph( pTextNodeInfoInner );
     }while(*aBreakIt != rNode.GetText().getLength() && bNeedParaSplit );
