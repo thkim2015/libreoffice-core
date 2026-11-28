@@ -687,6 +687,10 @@ public:
     // paragraph marker has character formatting too (Word records the marker as part of the change)
     const SwRedlineData* GetParagraphMarkerFormatRedline( const SwTextNode& rNode );
 
+    // weboffice: a tracked format change that contains the paragraph marker and ends right after it
+    // (at the start of the next paragraph), e.g. imported from w:pPr/w:rPr/w:rPrChange
+    const SwRedlineData* GetParagraphMarkerOnlyFormatRedline( const SwTextNode& rNode );
+
     // weboffice: set by the node output around EndParagraphProperties(), used by the DOCX export
     const SwRedlineData* m_pParagraphMarkerFormatRedline = nullptr;
 };

@@ -6470,6 +6470,25 @@ const SwRedlineData* AttributeOutputBase::GetParagraphMarkerFormatRedline( const
     return nullptr;
 }
 
+// weboffice: Writer keeps a Word paragraph marker format change (w:pPr/w:rPr/w:rPrChange) as a format
+// redline over the paragraph end, from (node, len) up to (next node, 0); write it back on the marker.
+// Only redlines ending exactly at the start of the next node: a format change that continues into the
+// next paragraph text did not format this marker in Writer.
+const SwRedlineData* AttributeOutputBase::GetParagraphMarkerOnlyFormatRedline( const SwTextNode& rNode )
+{
+    const SwPosition aMarker(rNode, rNode.GetText().getLength());
+    for (SwRangeRedline* pRedl : GetExport().m_rDoc.getIDocumentRedlineAccess().GetRedlineTable())
+    {
+        if (pRedl->GetRedlineData().GetType() != RedlineType::Format)
+            continue;
+        const SwPosition* pEnd = pRedl->End();
+        if (*pRedl->Start() <= aMarker && pEnd->GetNodeIndex() == rNode.GetIndex() + 1
+            && pEnd->GetContentIndex() == 0)
+            return &pRedl->GetRedlineData();
+    }
+    return nullptr;
+}
+
 void AttributeOutputBase::CharBackgroundBase( const SvxBrushItem& rBrush )
 {
     bool bConvertToShading = !officecfg::Office::Common::Filter::Microsoft::Export::CharBackgroundToHighlighting::get();

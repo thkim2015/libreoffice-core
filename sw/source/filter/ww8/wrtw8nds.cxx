@@ -3404,6 +3404,10 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
                && aParagraphMarkerProperties.Count())
                   ? AttrOutput().GetParagraphMarkerFormatRedline(rNode)
                   : nullptr;
+        // weboffice: a format redline on the paragraph marker itself (read from a Word
+        // w:pPr/w:rPr/w:rPrChange, or a format change ending right after the marker)
+        if (!AttrOutput().m_pParagraphMarkerFormatRedline)
+            AttrOutput().m_pParagraphMarkerFormatRedline = AttrOutput().GetParagraphMarkerOnlyFormatRedline(rNode);
         AttrOutput().EndParagraphProperties(aParagraphMarkerProperties, pParagraphRedlineData, pRedlineParagraphMarkerDelete, pRedlineParagraphMarkerInsert);
         AttrOutput().m_pParagraphMarkerFormatRedline = nullptr;
 

@@ -10497,7 +10497,15 @@ void DomainMapper_Impl::AddNewRedline( sal_uInt32 sprmId )
             GetTopContextOfType( CONTEXT_CHARACTER )->Redlines().push_back( pNew );
         else if( sprmId == NS_ooxml::LN_CT_PPr_pPrChange )
             GetTopContextOfType( CONTEXT_PARAGRAPH )->Redlines().push_back( pNew );
-        else if( sprmId != NS_ooxml::LN_CT_ParaRPr_rPrChange )
+        else if( sprmId == NS_ooxml::LN_CT_ParaRPr_rPrChange )
+        {
+            // weboffice: <w:pPr><w:rPr><w:rPrChange> is a tracked format change of the paragraph
+            // marker; create it on the paragraph marker range like a marker insertion/deletion,
+            // unless the marker is already inserted/deleted (w:ins/w:del come before w:rPrChange).
+            if ( !m_pParaMarkerRedline )
+                m_pParaMarkerRedline = pNew;
+        }
+        else
             m_aRedlines.top().push_back( pNew );
     }
     else
