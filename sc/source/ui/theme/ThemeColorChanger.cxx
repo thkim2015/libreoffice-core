@@ -210,6 +210,14 @@ bool changeSheets(ScDocShell& rDocShell, ScTabViewShell* pViewShell, ScDrawLayer
 
                     rDocShell.GetUndoManager()->AddUndoAction(std::move(pUndo));
                 }
+                else if (bItemChanged)
+                {
+                    // ZetaOffice: without undo (theme gallery live preview) the new pattern
+                    // must still be applied, otherwise theme-colored cells keep the old color
+                    ScMarkData aMark(rDocument.GetSheetLimits());
+                    aMark.SetMarkArea(ScRange(nCol, nRow1, nTab, nCol, nRow2, nTab));
+                    rDocument.ApplySelectionPattern(aNewPattern, aMark);
+                }
             }
         }
 

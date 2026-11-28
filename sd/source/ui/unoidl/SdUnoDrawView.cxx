@@ -42,6 +42,7 @@
 #include <editeng/outliner.hxx>
 #include <comphelper/servicehelper.hxx>
 #include <com/sun/star/text/XTextCursor.hpp>
+#include <com/sun/star/table/XTable.hpp>
 #include <svx/sdr/table/tablecontroller.hxx>
 #include <svx/svdotable.hxx>
 #include <svx/unopage.hxx>
@@ -377,10 +378,24 @@ Any lcl_getTextEditCursor(::sd::View& rView)
     if (!pOLV || !pObj || !pOLV->GetWindow())
         return aRet;
     Reference<css::text::XText> xText(pObj->getUnoShape(), UNO_QUERY);
+    SdrText* pSdrText = nullptr;
+    // zeta: a table being edited gives the active cell's text (the table shape itself is no XText)
+    if (auto* pTableObj = dynamic_cast<sdr::table::SdrTableObj*>(pObj))
+    {
+        sdr::table::CellPos aPos;
+        pTableObj->getActiveCellPos(aPos);
+        Reference<css::table::XTable> xTable(pTableObj->getTable());
+        if (!xTable.is())
+            return aRet;
+        xText.set(xTable->getCellByPosition(aPos.mnCol, aPos.mnRow), UNO_QUERY);
+        pSdrText = pTableObj->getActiveText();
+        if (!pSdrText)
+            return aRet;
+    }
     SvxUnoTextBase* pText = comphelper::getFromUnoTunnel<SvxUnoTextBase>(xText);
     if (!pText)
         return aRet;
-    SvxTextEditSource aSource(*pObj, nullptr, rView, *pOLV->GetWindow()->GetOutDev());
+    SvxTextEditSource aSource(*pObj, pSdrText, rView, *pOLV->GetWindow()->GetOutDev());
     rtl::Reference<SvxUnoText> xViewText(new SvxUnoText(&aSource, pText->getPropertySet(), xText));
     aRet <<= xViewText->createTextCursorBySelection(pOLV->GetSelection());
     return aRet;
