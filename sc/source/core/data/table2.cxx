@@ -52,6 +52,7 @@
 #include <listenercontext.hxx>
 #include <compressedarray.hxx>
 #include <refdata.hxx>
+#include <token.hxx>
 #include <docsh.hxx>
 #include <dpobject.hxx>
 
