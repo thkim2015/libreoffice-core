@@ -1821,6 +1821,19 @@ void DocxAttributeOutput::EndParagraphProperties(const SfxItemSet& rParagraphMar
         EndRedline(pRedlineParagraphMarkerInserted, /*bParagraphProps=*/true);
     }
 
+    // weboffice: tracked format change of the paragraph marker (w:rPrChange is the last child of w:rPr);
+    // keep the collected run property lists of the marker out of the old properties
+    if (m_pParagraphMarkerFormatRedline)
+    {
+        auto pFontsAttrList_Marker(detachFrom(m_pFontsAttrList));
+        auto pEastAsianLayoutAttrList_Marker(detachFrom(m_pEastAsianLayoutAttrList));
+        auto pCharLangAttrList_Marker(detachFrom(m_pCharLangAttrList));
+        Redline(m_pParagraphMarkerFormatRedline);
+        m_pFontsAttrList = std::move(pFontsAttrList_Marker);
+        m_pEastAsianLayoutAttrList = std::move(pEastAsianLayoutAttrList_Marker);
+        m_pCharLangAttrList = std::move(pCharLangAttrList_Marker);
+    }
+
     // mergeTopMarks() after paragraph mark properties child elements.
     m_pSerializer->mergeTopMarks(Tag_InitCollectedRunProperties);
     m_pSerializer->endElementNS( XML_w, XML_rPr );

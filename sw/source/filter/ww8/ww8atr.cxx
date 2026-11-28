@@ -1123,7 +1123,7 @@ static OUString lcl_FieldStyleName(const SwDoc& rDoc, const MSWordStyles& rStyle
     return rStyles.GetStyleWWName(&rColl);
 }
 
-OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
+OUString MSWordExportBase::GetStyleRefName(const OUString& rName, bool bLevel)
 {
     SwTextFormatColls* pTextFormatColls = m_rDoc.GetTextFormatColls();
     SwTextFormatColl* pTextFormat = pTextFormatColls->FindFormatByName(UIName(rName));
@@ -1138,12 +1138,14 @@ OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
     const sal_uInt16 nHeading1 = static_cast<sal_uInt16>(SwPoolFormatId::COLL_HEADLINE1);
     if (nPoolId >= nHeading1 && nPoolId < nHeading1 + 9)
     {
+        const OUString sLevel = OUString::number(nPoolId - nHeading1 + 1);
+        if (bLevel)
+            return sLevel;
         if (const SwDocShell* pDocShell = m_rDoc.GetDocShell())
         {
             rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
             uno::Sequence<beans::PropertyValue> aGrabBag;
             uno::Sequence<OUString> aLevels;
-            const OUString sLevel = OUString::number(nPoolId - nHeading1 + 1);
             if (xProps.is() && (xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
                 && (comphelper::SequenceAsHashMap(aGrabBag).getValue(u"StyleRefLevels"_ustr) >>= aLevels)
                 && comphelper::findValue(aLevels, sLevel) != -1)
@@ -3514,8 +3516,10 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                            + GetExport().GetBookmarkName(nSubType, nullptr, rRField.GetSeqNo());
                     break;
                 case ReferencesSubtype::Style:
+                    // the chapter number part is Word's caption form STYLEREF 1 \s (by heading level)
                     sStr = FieldString(ww::eSTYLEREF)
-                           + GetExport().GetStyleRefName(pField->GetPar1());
+                           + GetExport().GetStyleRefName(pField->GetPar1(),
+                                                         rRField.GetFormat() == RefFieldFormat::Chapter);
                     eField = ww::eSTYLEREF;
                     break;
                 default: break; // ReferencesSubtype::Outline not handled ?
@@ -3557,8 +3561,12 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                         case RefFieldFormat::UpDown:
                             sStr += " \\p " + sExtraFlags;
                             break;
-                        case RefFieldFormat::NumberNoContext:
                         case RefFieldFormat::Chapter:
+                            // STYLEREF \s: the number of the heading (caption chapter number)
+                            sStr += (eField == ww::eSTYLEREF ? u" \\s "_ustr : u" \\n "_ustr)
+                                    + sExtraFlags;
+                            break;
+                        case RefFieldFormat::NumberNoContext:
                             sStr += " \\n " + sExtraFlags;
                             break;
                         default:
@@ -6445,6 +6453,46 @@ const SwRedlineData* AttributeOutputBase::GetParagraphMarkerRedline( const SwTex
 
         if( uStartNodeIndex <= uNodeIndex && uNodeIndex < uEndNodeIndex )
             return &( pRedl->GetRedlineData() );
+    }
+    return nullptr;
+}
+
+// weboffice: Word bolds (formats) the paragraph marker too when the whole paragraph is selected and
+// records it in the same format change (w:pPr/w:rPr/w:rPrChange). Writer keeps such paragraph-wide
+// character formatting on the node and has no marker position for the redline, so take a format
+// redline that covers the whole paragraph text (up to the paragraph end) as covering the marker.
+const SwRedlineData* AttributeOutputBase::GetParagraphMarkerFormatRedline( const SwTextNode& rNode )
+{
+    const sal_Int32 nLen = rNode.GetText().getLength();
+    if (nLen == 0)
+        return nullptr;
+    const SwPosition aStart(rNode, 0);
+    const SwPosition aEnd(rNode, nLen);
+    for (SwRangeRedline* pRedl : GetExport().m_rDoc.getIDocumentRedlineAccess().GetRedlineTable())
+    {
+        if (pRedl->GetRedlineData().GetType() != RedlineType::Format)
+            continue;
+        if (*pRedl->Start() <= aStart && aEnd <= *pRedl->End())
+            return &pRedl->GetRedlineData();
+    }
+    return nullptr;
+}
+
+// weboffice: Writer keeps a Word paragraph marker format change (w:pPr/w:rPr/w:rPrChange) as a format
+// redline over the paragraph end, from (node, len) up to (next node, 0); write it back on the marker.
+// Only redlines ending exactly at the start of the next node: a format change that continues into the
+// next paragraph text did not format this marker in Writer.
+const SwRedlineData* AttributeOutputBase::GetParagraphMarkerOnlyFormatRedline( const SwTextNode& rNode )
+{
+    const SwPosition aMarker(rNode, rNode.GetText().getLength());
+    for (SwRangeRedline* pRedl : GetExport().m_rDoc.getIDocumentRedlineAccess().GetRedlineTable())
+    {
+        if (pRedl->GetRedlineData().GetType() != RedlineType::Format)
+            continue;
+        const SwPosition* pEnd = pRedl->End();
+        if (*pRedl->Start() <= aMarker && pEnd->GetNodeIndex() == rNode.GetIndex() + 1
+            && pEnd->GetContentIndex() == 0)
+            return &pRedl->GetRedlineData();
     }
     return nullptr;
 }

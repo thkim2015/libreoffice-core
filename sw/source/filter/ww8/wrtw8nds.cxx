@@ -1653,8 +1653,14 @@ const SwRedlineData* SwWW8AttrIter::GetParagraphLevelRedline( )
 
 const SwRedlineData* SwWW8AttrIter::GetRunLevelRedline( sal_Int32 nPos )
 {
+    // weboffice: at the paragraph end a format redline only covers the paragraph marker (e.g. imported
+    // from w:pPr/w:rPr/w:rPrChange); it is written with the marker properties, not as a run property
+    // (otherwise w:rPrChange ended up after w:t of the last run)
+    const bool bAtParaEnd = nPos == m_rNode.GetText().getLength();
     if( m_pCurRedline )
     {
+        if (bAtParaEnd && m_pCurRedline->GetType() == RedlineType::Format)
+            return nullptr;
         const SwPosition* pEnd = m_pCurRedline->End();
         if (pEnd->GetNode() != m_rNode || pEnd->GetContentIndex() > nPos)
         {
@@ -1686,6 +1692,9 @@ const SwRedlineData* SwWW8AttrIter::GetRunLevelRedline( sal_Int32 nPos )
         {
             if( pStart->GetContentIndex() >= nPos )
             {
+                if (bAtParaEnd && pStart->GetContentIndex() == nPos && pRedl->GetType() == RedlineType::Format
+                    && pEnd->GetNode() != m_rNode)
+                    continue;
                 if( pStart->GetContentIndex() == nPos )
                 {
                         switch( pRedl->GetType() )
@@ -3395,7 +3404,21 @@ void MSWordExportBase::OutputTextNode( SwTextNode& rNode )
         const SwRedlineData* pRedlineParagraphMarkerDelete = AttrOutput().GetParagraphMarkerRedline( rNode, RedlineType::Delete );
         const SwRedlineData* pRedlineParagraphMarkerInsert = AttrOutput().GetParagraphMarkerRedline( rNode, RedlineType::Insert );
         const SwRedlineData* pParagraphRedlineData = aAttrIter.GetParagraphLevelRedline( );
+        // weboffice: format change of the paragraph marker. Only when the marker formatting is the
+        // paragraph-wide character formatting of the node (what Writer sets when the whole paragraph
+        // is formatted), not marker properties read from DOCX (RES_PARATR_LIST_AUTOFMT) or end hints:
+        // a Word file that changed only the runs of a paragraph keeps its marker untracked.
+        AttrOutput().m_pParagraphMarkerFormatRedline
+            = (!rListAutoFormat.GetStyleHandle() && bCharFormatOnly && rNode.GetpSwAttrSet()
+               && aParagraphMarkerProperties.Count())
+                  ? AttrOutput().GetParagraphMarkerFormatRedline(rNode)
+                  : nullptr;
+        // weboffice: a format redline on the paragraph marker itself (read from a Word
+        // w:pPr/w:rPr/w:rPrChange, or a format change ending right after the marker)
+        if (!AttrOutput().m_pParagraphMarkerFormatRedline)
+            AttrOutput().m_pParagraphMarkerFormatRedline = AttrOutput().GetParagraphMarkerOnlyFormatRedline(rNode);
         AttrOutput().EndParagraphProperties(aParagraphMarkerProperties, pParagraphRedlineData, pRedlineParagraphMarkerDelete, pRedlineParagraphMarkerInsert);
+        AttrOutput().m_pParagraphMarkerFormatRedline = nullptr;
 
         AttrOutput().EndParagraph( pTextNodeInfoInner );
     }while(*aBreakIt != rNode.GetText().getLength() && bNeedParaSplit );
