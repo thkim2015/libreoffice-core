@@ -8382,7 +8382,7 @@ void DomainMapper_Impl::CloseFieldCommand()
         }
         // Reference switches that the Writer fields below can not keep, the same way:
         // REF \p with \r, \n or \w (Word writes the number and "above"/"below"), REF with a
-        // case switch, STYLEREF \s.
+        // case switch. (STYLEREF \s, the caption chapter number, is the chapter number part.)
         else if (sType == "REF" || sType == "STYLEREF")
         {
             const OUString aCommand = pContext->GetCommand();
@@ -8398,8 +8398,6 @@ void DomainMapper_Impl::CloseFieldCommand()
                     if (aLower.indexOf(aSwitch) >= 0)
                         bEnclosedEq = true;
             }
-            else
-                bEnclosedEq = lcl_FindInCommand(aCommand, 's', aValue);
         }
         if (aIt != aFieldConversionMap.end() && !bEnclosedEq
             && (!m_bForceGenericFields
@@ -8980,7 +8978,12 @@ void DomainMapper_Impl::CloseFieldCommand()
 
                         sal_Int16 nFieldPart = (bPageRef ? text::ReferenceFieldPart::PAGE : text::ReferenceFieldPart::TEXT);
                         OUString sValue;
-                        if (!bPageRef && lcl_FindInCommand(pContext->GetCommand(), 'p', sValue))
+                        if (bStyleRef && lcl_FindInCommand(pContext->GetCommand(), 's', sValue))
+                        {
+                            // caption chapter number (Word: STYLEREF 1 \s): the heading number
+                            nFieldPart = text::ReferenceFieldPart::CHAPTER;
+                        }
+                        else if (!bPageRef && lcl_FindInCommand(pContext->GetCommand(), 'p', sValue))
                         {
                             //above-below
                             nFieldPart = text::ReferenceFieldPart::UP_DOWN;

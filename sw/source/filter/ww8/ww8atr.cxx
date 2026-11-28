@@ -1123,7 +1123,7 @@ static OUString lcl_FieldStyleName(const SwDoc& rDoc, const MSWordStyles& rStyle
     return rStyles.GetStyleWWName(&rColl);
 }
 
-OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
+OUString MSWordExportBase::GetStyleRefName(const OUString& rName, bool bLevel)
 {
     SwTextFormatColls* pTextFormatColls = m_rDoc.GetTextFormatColls();
     SwTextFormatColl* pTextFormat = pTextFormatColls->FindFormatByName(UIName(rName));
@@ -1138,12 +1138,14 @@ OUString MSWordExportBase::GetStyleRefName(const OUString& rName)
     const sal_uInt16 nHeading1 = static_cast<sal_uInt16>(SwPoolFormatId::COLL_HEADLINE1);
     if (nPoolId >= nHeading1 && nPoolId < nHeading1 + 9)
     {
+        const OUString sLevel = OUString::number(nPoolId - nHeading1 + 1);
+        if (bLevel)
+            return sLevel;
         if (const SwDocShell* pDocShell = m_rDoc.GetDocShell())
         {
             rtl::Reference<SwXTextDocument> xProps = pDocShell->GetBaseModel();
             uno::Sequence<beans::PropertyValue> aGrabBag;
             uno::Sequence<OUString> aLevels;
-            const OUString sLevel = OUString::number(nPoolId - nHeading1 + 1);
             if (xProps.is() && (xProps->getPropertyValue(u"InteropGrabBag"_ustr) >>= aGrabBag)
                 && (comphelper::SequenceAsHashMap(aGrabBag).getValue(u"StyleRefLevels"_ustr) >>= aLevels)
                 && comphelper::findValue(aLevels, sLevel) != -1)
@@ -3514,8 +3516,10 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                            + GetExport().GetBookmarkName(nSubType, nullptr, rRField.GetSeqNo());
                     break;
                 case ReferencesSubtype::Style:
+                    // the chapter number part is Word's caption form STYLEREF 1 \s (by heading level)
                     sStr = FieldString(ww::eSTYLEREF)
-                           + GetExport().GetStyleRefName(pField->GetPar1());
+                           + GetExport().GetStyleRefName(pField->GetPar1(),
+                                                         rRField.GetFormat() == RefFieldFormat::Chapter);
                     eField = ww::eSTYLEREF;
                     break;
                 default: break; // ReferencesSubtype::Outline not handled ?
@@ -3557,8 +3561,12 @@ void AttributeOutputBase::TextField( const SwFormatField& rField )
                         case RefFieldFormat::UpDown:
                             sStr += " \\p " + sExtraFlags;
                             break;
-                        case RefFieldFormat::NumberNoContext:
                         case RefFieldFormat::Chapter:
+                            // STYLEREF \s: the number of the heading (caption chapter number)
+                            sStr += (eField == ww::eSTYLEREF ? u" \\s "_ustr : u" \\n "_ustr)
+                                    + sExtraFlags;
+                            break;
+                        case RefFieldFormat::NumberNoContext:
                             sStr += " \\n " + sExtraFlags;
                             break;
                         default:

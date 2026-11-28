@@ -643,7 +643,8 @@ public:
     OUString GetBookmarkName( ReferencesSubtype nTyp, const OUString* pName, sal_uInt16 nSeqNo );
 
     /// Find out which style we should use in OOXML
-    OUString GetStyleRefName(const OUString& rName);
+    /// bLevel: write the heading level (STYLEREF 1) even without the imported StyleRefLevels
+    OUString GetStyleRefName(const OUString& rName, bool bLevel = false);
 
     /// Use OutputItem() on an item set according to the parameters.
     void OutputItemSet( const SfxItemSet& rSet, bool bPapFormat, bool bChpFormat, sal_uInt16 nScript, bool bExportParentItemSet );
