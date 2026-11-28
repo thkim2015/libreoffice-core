@@ -1089,6 +1089,12 @@ void DocumentFieldsManager::UpdateExpFieldsImpl(
 
                         const SwTextNode* pOutlNd = pSeqNd->
                                 FindOutlineNodeOfLevel(nLvl, pLayout);
+                        // Word SEQ \s N counts from the start of the document until the first
+                        // heading: no chapter (FindOutlineNodeOfLevel takes a later heading on
+                        // the same page)
+                        if (pOutlNd && pSFieldTyp->IsWordRestartOnly()
+                            && pSeqNd->GetIndex() < pOutlNd->GetIndex())
+                            pOutlNd = nullptr;
                         auto const iter(SetExpOutlineNodeMap.find(pSFieldTyp));
                         if (iter == SetExpOutlineNodeMap.end()
                             || iter->second != pOutlNd)
