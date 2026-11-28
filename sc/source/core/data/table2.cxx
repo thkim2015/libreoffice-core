@@ -52,6 +52,7 @@
 #include <listenercontext.hxx>
 #include <compressedarray.hxx>
 #include <refdata.hxx>
+#include <token.hxx>
 #include <docsh.hxx>
 #include <dpobject.hxx>
 
@@ -4080,6 +4081,79 @@ static short DiffSign( T a, T b )
 
 namespace {
 
+// ZETA: Excel auto outline rule (Excel 2021 Range.AutoOutline, measured 2026-11-28).
+// A formula is a summary of the rows (columns) it references when every reference lies in the formula's own
+// column (row) on one side of it and covers at least two rows. A referenced row that is itself the summary row of an
+// existing group brings that group's detail rows along (=A3+A6 where A3/A6 summarise 1-2/4-5 -> rows 1-6).
+// The union must be contiguous; the group then runs up to the row next to the formula
+// (=SUM(A1:A2) in A4 groups rows 1-3). A single referenced cell or scattered cells make no group.
+bool lcl_ZetaExcelOutlineRange( ScDocument& rDoc, const ScFormulaCell& rCell, SCTAB nTab, bool bRows,
+                                SCCOLROW nPos, SCCOLROW nLine, const ScOutlineArray& rArray,
+                                SCCOLROW& rStart, SCCOLROW& rEnd )
+{
+    formula::FormulaTokenArrayPlainIterator aIter(*rCell.GetCode());
+    std::vector<std::pair<SCCOLROW, SCCOLROW>> aSpans;
+    std::vector<SCCOLROW> aRefPos;
+    short nSide = 0;
+    for (formula::FormulaToken* p = aIter.GetNextReferenceRPN(); p; p = aIter.GetNextReferenceRPN())
+    {
+        if (p->GetType() != formula::svSingleRef && p->GetType() != formula::svDoubleRef)
+            return false;
+        SingleDoubleRefProvider aProv(*p);
+        ScRange aRef(aProv.Ref1.toAbs(rDoc, rCell.aPos), aProv.Ref2.toAbs(rDoc, rCell.aPos));
+        aRef.PutInOrder();
+        if (aRef.aStart.Tab() != nTab || aRef.aEnd.Tab() != nTab)
+            return false;
+        SCCOLROW nL1 = bRows ? aRef.aStart.Col() : aRef.aStart.Row();
+        SCCOLROW nL2 = bRows ? aRef.aEnd.Col() : aRef.aEnd.Row();
+        SCCOLROW nP1 = bRows ? aRef.aStart.Row() : aRef.aStart.Col();
+        SCCOLROW nP2 = bRows ? aRef.aEnd.Row() : aRef.aEnd.Col();
+        if (nL1 != nLine || nL2 != nLine)
+            return false;
+        short nThis = (nP2 < nPos) ? -1 : (nP1 > nPos) ? 1 : 0;
+        if (nThis == 0 || (nSide != 0 && nThis != nSide))
+            return false;
+        nSide = nThis;
+        aSpans.emplace_back(nP1, nP2);
+        for (SCCOLROW n = nP1; n <= nP2 && aRefPos.size() < 3; ++n)
+            if (std::find(aRefPos.begin(), aRefPos.end(), n) == aRefPos.end())
+                aRefPos.push_back(n);
+    }
+    if (aRefPos.size() < 2)
+        return false;
+    // referenced summary rows bring their detail rows (summary below the group when the formula is below)
+    size_t nSpans = aSpans.size();
+    for (size_t i = 0; i < nSpans; ++i)
+    {
+        for (SCCOLROW n = aSpans[i].first; n <= aSpans[i].second; ++n)
+        {
+            for (size_t nLevel = 0; nLevel < rArray.GetDepth(); ++nLevel)
+            {
+                for (size_t nIdx = 0; nIdx < rArray.GetCount(nLevel); ++nIdx)
+                {
+                    const ScOutlineEntry* pEntry = rArray.GetEntry(nLevel, nIdx);
+                    if (!pEntry)
+                        continue;
+                    if ((nSide < 0 && pEntry->GetEnd() + 1 == n) || (nSide > 0 && pEntry->GetStart() - 1 == n))
+                        aSpans.emplace_back(pEntry->GetStart(), pEntry->GetEnd());
+                }
+            }
+        }
+    }
+    std::sort(aSpans.begin(), aSpans.end());
+    SCCOLROW nLo = aSpans.front().first;
+    SCCOLROW nHi = aSpans.front().second;
+    for (const auto& [nA, nB] : aSpans)
+    {
+        if (nA > nHi + 1)
+            return false;
+        nHi = std::max(nHi, nB);
+    }
+    if (nSide < 0) { rStart = nLo; rEnd = nPos - 1; }
+    else { rStart = nPos + 1; rEnd = nHi; }
+    return rStart <= rEnd;
+}
+
 class OutlineArrayFinder
 {
     ScRange maRef;
@@ -4097,17 +4171,13 @@ public:
     {
         SCROW nRow2 = static_cast<SCROW>(nRow);
 
-        if (!pCell->HasRefListExpressibleAsOneReference(maRef))
+        (void)maRef;
+        // ZETA: Excel rule (lcl_ZetaExcelOutlineRange) instead of HasRefListExpressibleAsOneReference
+        SCCOLROW nStart = 0, nEnd = 0;
+        if (!lcl_ZetaExcelOutlineRange(pCell->GetDocument(), *pCell, mnTab, false, mnCol, nRow2, *mpArray, nStart, nEnd))
             return false;
 
-        if (maRef.aStart.Row() != nRow2 || maRef.aEnd.Row() != nRow2 ||
-            maRef.aStart.Tab() != mnTab || maRef.aEnd.Tab() != mnTab)
-            return false;
-
-        if (DiffSign(maRef.aStart.Col(), mnCol) != DiffSign(maRef.aEnd.Col(), mnCol))
-            return false;
-
-        return mpArray->Insert(maRef.aStart.Col(), maRef.aEnd.Col(), mbSizeChanged);
+        return mpArray->Insert(nStart, nEnd, mbSizeChanged);
     }
 };
 
@@ -4155,18 +4225,14 @@ void ScTable::DoAutoOutline( SCCOL nStartCol, SCROW nStartRow, SCCOL nEndCol, SC
             if (aCell.getType() != CELLTYPE_FORMULA)
                 continue;
 
-            if (!aCell.getFormula()->HasRefListExpressibleAsOneReference(aRef))
+            // ZETA: Excel rule (lcl_ZetaExcelOutlineRange) instead of HasRefListExpressibleAsOneReference
+            SCCOLROW nStart = 0, nEnd = 0;
+            if (!lcl_ZetaExcelOutlineRange(rDocument, *aCell.getFormula(), nTab, true, nRow, nCol, rRowArray, nStart, nEnd))
                 continue;
 
-            if ( aRef.aStart.Col() == nCol && aRef.aEnd.Col() == nCol &&
-                 aRef.aStart.Tab() == nTab && aRef.aEnd.Tab() == nTab &&
-                 DiffSign( aRef.aStart.Row(), nRow ) ==
-                    DiffSign( aRef.aEnd.Row(), nRow ) )
+            if (rRowArray.Insert( nStart, nEnd, bSizeChanged ))
             {
-                if (rRowArray.Insert( aRef.aStart.Row(), aRef.aEnd.Row(), bSizeChanged ))
-                {
-                    bFound = true;
-                }
+                bFound = true;
             }
         }
     }
