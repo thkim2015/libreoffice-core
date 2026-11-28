@@ -1653,8 +1653,14 @@ const SwRedlineData* SwWW8AttrIter::GetParagraphLevelRedline( )
 
 const SwRedlineData* SwWW8AttrIter::GetRunLevelRedline( sal_Int32 nPos )
 {
+    // weboffice: at the paragraph end a format redline only covers the paragraph marker (e.g. imported
+    // from w:pPr/w:rPr/w:rPrChange); it is written with the marker properties, not as a run property
+    // (otherwise w:rPrChange ended up after w:t of the last run)
+    const bool bAtParaEnd = nPos == m_rNode.GetText().getLength();
     if( m_pCurRedline )
     {
+        if (bAtParaEnd && m_pCurRedline->GetType() == RedlineType::Format)
+            return nullptr;
         const SwPosition* pEnd = m_pCurRedline->End();
         if (pEnd->GetNode() != m_rNode || pEnd->GetContentIndex() > nPos)
         {
@@ -1686,6 +1692,9 @@ const SwRedlineData* SwWW8AttrIter::GetRunLevelRedline( sal_Int32 nPos )
         {
             if( pStart->GetContentIndex() >= nPos )
             {
+                if (bAtParaEnd && pStart->GetContentIndex() == nPos && pRedl->GetType() == RedlineType::Format
+                    && pEnd->GetNode() != m_rNode)
+                    continue;
                 if( pStart->GetContentIndex() == nPos )
                 {
                         switch( pRedl->GetType() )
